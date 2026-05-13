@@ -283,7 +283,7 @@ def render_index(questions, type_groups, recency_sorted):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpenAI 面试题准备 · Hello Interview 整理</title>
 <meta name="description" content="OpenAI 全岗位 44 道面试题 · 题面 + 中文思路解析 · Python 解法 · System Design 架构思路">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v={CSS_HASH}">
 </head>
 <body>
 <header class="site-header">
@@ -406,7 +406,7 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(title)} · OpenAI 面试题</title>
-<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/style.css?v={CSS_HASH}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -478,9 +478,14 @@ def main():
     (PUBLIC_DIR / "questions").mkdir(parents=True, exist_ok=True)
     (PUBLIC_DIR / "assets").mkdir(parents=True, exist_ok=True)
 
-    # Copy CSS
-    import shutil
-    shutil.copy(SITE / "assets" / "style.css", PUBLIC_DIR / "assets" / "style.css")
+    # Copy CSS + compute content hash for cache busting
+    import shutil, hashlib
+    css_src = SITE / "assets" / "style.css"
+    css_bytes = css_src.read_bytes()
+    css_hash = hashlib.md5(css_bytes).hexdigest()[:8]
+    shutil.copy(css_src, PUBLIC_DIR / "assets" / "style.css")
+    # Expose for templates
+    globals()['CSS_HASH'] = css_hash
 
     # Write index
     idx_html = render_index(questions, type_groups, recency_sorted)
