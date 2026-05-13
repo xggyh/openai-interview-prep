@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Rate Limiter · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Rate Limiter</div>
+  <h1>Design a Rate Limiter</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior, Senior Manager</span>
+    <span>📋 3 人报告</span>
+    <span>🕒 最近：Early November, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/distributed-rate-limiter/cm6i9mhd800nz41cd0xx20r8p" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a rate limiting system that can control and throttle API requests to prevent system overload and ensure fair resource allocation. The system should be able to handle distributed scenarios, track requests across multiple servers, and enforce limits per user/client or between internal services to prevent abuse and maintain system performance.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Rate Limiter</strong>：控制 API 请求速率，防止系统过载 + 公平资源分配。支持分布式（跨多台服务器追踪）、per-user / per-client / per-endpoint。</p>
+<p>经典 SD 题。考点：<strong>算法选择（token bucket / leaky bucket / sliding window） + 分布式协同（Redis）</strong>。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>按 (key, action) 限速：key = user_id / API key / IP，action = endpoint</li><li>多维度：per-second / per-minute / per-day quota</li><li>超限返回 429 + Retry-After header</li><li>用户可看自己的 quota usage</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>100k+ QPS 总流量</li><li>限流决策延迟 &lt; 1ms（不能阻塞 hot path）</li><li>99.99% 可用 (rate limiter 挂了不能拖垮上游)</li></ul>
+<h3>限流算法选择</h3>
+<h4>1. Token Bucket（推荐 ⭐）</h4>
+<p>桶容量 capacity，每秒补充 refill_rate 个 token。请求来到消耗一个 token；桶空了拒绝。</p>
+<pre class="language-python"><code class="language-python">class TokenBucket:
+    def __init__(self, capacity, refill_per_sec):
+        self.capacity = capacity
+        self.refill = refill_per_sec
+        self.tokens = capacity
+        self.last_refill = time.time()
+
+    def allow(self) -&gt; bool:
+        now = time.time()
+        # 累积补充
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill)
+        self.last_refill = now
+        if self.tokens &gt;= 1:
+            self.tokens -= 1
+            return True
+        return False</code></pre>
+<p><strong>优点</strong>：允许 burst（桶满时），平均速率 = refill_rate。</p>
+<h4>2. Leaky Bucket</h4>
+<p>桶里的请求按固定 leak rate 流出。请求来到塞进桶，桶满拒绝。</p>
+<p><strong>优点</strong>：output rate 完全 smooth；<strong>缺点</strong>：不允许 burst。</p>
+<h4>3. Fixed Window</h4>
+<p>每分钟（或秒）一个 counter，到了重置。请求来 +1，超过 limit 拒绝。</p>
+<p><strong>问题</strong>：window 边界 burst —— 用户在 0:59.9 + 1:00.1 内可发 2 * limit 个请求。</p>
+<h4>4. Sliding Window Log</h4>
+<p>存储每个请求的 timestamp，查询窗口内总数。准确但内存大（百万请求每条 timestamp）。</p>
+<h4>5. Sliding Window Counter（推荐 ⭐）</h4>
+<p>固定窗口 + 加权前一窗口。例：当前分钟过了 30 秒 → count = current_minute_count + previous_minute_count * 30/60。</p>
+<p><strong>优点</strong>：解决 fixed window burst 问题，内存 O(1)。</p>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   API request
+       │
+       ▼
+   ┌──────────────┐
+   │  API Gateway │  ← 第一道防线
+   │  (Envoy /    │     in-memory bucket
+   │   nginx)     │
+   └──────┬───────┘
+          │ allow / 429
+          ▼
+   ┌──────────────┐
+   │  Backend     │  ← 第二道（精细业务限流）
+   │  Service     │     调用 Distributed Rate Limiter
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────────┐
+   │  Rate Limiter    │  Redis-backed token bucket
+   │  Service         │
+   │ (or in-proc lib  │
+   │  with Redis)     │
+   └──────────────────┘</div>
+<h3>分布式实现（Redis 共享 state）</h3>
+<p>多台 server 共享 quota → 状态存 Redis。</p>
+<h4>Lua 脚本原子计算（推荐）</h4>
+<pre class="language-lua"><code class="language-lua">-- token_bucket.lua
+-- KEYS[1] = bucket key, e.g. "rl:user:123:api:search"
+-- ARGV = {capacity, refill_rate, now_ms, requested}
+local key      = KEYS[1]
+local cap      = tonumber(ARGV[1])
+local refill   = tonumber(ARGV[2])
+local now_ms   = tonumber(ARGV[3])
+local req      = tonumber(ARGV[4])
+
+local state    = redis.call('HMGET', key, 'tokens', 'last_ms')
+local tokens   = tonumber(state[1]) or cap
+local last_ms  = tonumber(state[2]) or now_ms
+
+-- refill
+local delta    = (now_ms - last_ms) / 1000 * refill
+tokens         = math.min(cap, tokens + delta)
+
+if tokens &gt;= req then
+  tokens = tokens - req
+  redis.call('HMSET', key, 'tokens', tokens, 'last_ms', now_ms)
+  redis.call('EXPIRE', key, 3600)
+  return {1, tokens}      -- allowed, remaining
+else
+  redis.call('HMSET', key, 'tokens', tokens, 'last_ms', now_ms)
+  redis.call('EXPIRE', key, 3600)
+  return {0, tokens}      -- denied
+end</code></pre>
+<p>Python 调用：</p>
+<pre class="language-python"><code class="language-python">script = redis.register_script(LUA_SCRIPT)
+def allow(user_id, endpoint, capacity=100, refill=10, requested=1):
+    key = f"rl:{user_id}:{endpoint}"
+    now_ms = int(time.time() * 1000)
+    allowed, remaining = script(keys=[key], args=[capacity, refill, now_ms, requested])
+    return bool(allowed), remaining</code></pre>
+<p><strong>关键</strong>：Lua 脚本在 Redis 单线程里原子执行，没有 race condition。</p>
+<h4>替代：固定窗口计数（最简单）</h4>
+<pre class="language-python"><code class="language-python">def allow(user_id, endpoint, limit=100, window=60):
+    bucket = int(time.time()) // window
+    key = f"rl:{user_id}:{endpoint}:{bucket}"
+    count = redis.incr(key)
+    if count == 1:
+        redis.expire(key, window + 5)
+    return count &lt;= limit</code></pre>
+<p>简单但有 window 边界 burst 问题。</p>
+<h3>多层防御策略</h3>
+<p>| 层 | 算法 | 目的 | |---|---|---| | L1：edge (CDN) | IP-based fixed window | 防 DDoS | | L2：API GW | Token bucket per-user/key | 业务 quota | | L3：service-internal | Concurrency limit (semaphore) | 防慢调用拖垮 | | L4：DB / 下游 | Connection pool + circuit breaker | 防雪崩 |</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | 算法 | Sliding window 或 Token bucket | Fixed window：边界问题 | | 状态 | Redis 共享 | Local：跨 server 不一致 | | 原子性 | Lua script | Pipeline + WATCH：复杂 | | 失效行为 | Fail open（Redis 挂了允许通过）+ alert | Fail closed：DoS 自己 |</p>
+<h3>关键技术细节</h3>
+<h4>1. Sliding Window Counter 实现</h4>
+<pre class="language-python"><code class="language-python">def sliding_window_allow(user_id, endpoint, limit=100, window_sec=60):
+    now = time.time()
+    cur_bucket = int(now // window_sec)
+    prev_bucket = cur_bucket - 1
+    cur_key = f"rl:{user_id}:{endpoint}:{cur_bucket}"
+    prev_key = f"rl:{user_id}:{endpoint}:{prev_bucket}"
+    
+    pipe = redis.pipeline()
+    pipe.incr(cur_key)
+    pipe.expire(cur_key, window_sec * 2)
+    pipe.get(prev_key)
+    cur_count, _, prev_count = pipe.execute()
+    prev_count = int(prev_count or 0)
+    
+    # 加权前一窗口
+    elapsed_in_cur = now - cur_bucket * window_sec
+    weight = (window_sec - elapsed_in_cur) / window_sec
+    estimated = prev_count * weight + cur_count
+    return estimated &lt;= limit</code></pre>
+<h4>2. Multi-dimensional Quota</h4>
+<pre class="language-python"><code class="language-python"># 用户级 + 端点级 + IP 级同时检查
+checks = [
+    ('user', user_id, 1000, 60),       # 1000/min per user
+    ('ip',   ip,      500,  60),       # 500/min per IP
+    ('end',  f'{user_id}:{endpoint}', 100, 60),  # 100/min per user-endpoint
+]
+for kind, key, limit, window in checks:
+    if not allow(kind, key, limit, window):
+        return 429</code></pre>
+<h4>3. 429 Response</h4>
+<pre class="language-http"><code class="language-http">HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1700000000</code></pre>
+<p>让 client SDK 知道何时重试。</p>
+<h4>4. Whitelist / Premium 用户</h4>
+<p>用户表里存 <code>rate_tier</code>，limiter 配置按 tier 取值。</p>
+<h3>容量估算</h3>
+<ul><li>100k QPS → 100k Redis 调用/s（限流决策）</li><li>Redis 单实例可 100k+ ops/s；高峰用 cluster 模式分片</li><li>Lua 脚本每次 ~0.5ms → 决策延迟可控</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Token bucket / Sliding window</strong> 比 fixed window 更准确；(2) <strong>Lua script</strong> 原子操作避免 race；(3) <strong>Multi-layer 防御</strong>（CDN/GW/service/DB），rate limiter 不是唯一防线。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Local in-memory bucket 在分布式系统 —— quota 数 N 倍； ❌ Fixed window 不考虑边界 —— 用户可在 2 秒内打 2 倍 limit； ❌ Redis 不用 Lua 而是 <code>GET → INCR</code> 两步 —— race condition； ❌ Redis 挂了 fail-closed → 自己 DoS 自己； ❌ 没有 Retry-After header —— 客户端疯狂 retry。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 graceful degrade Redis 挂掉？" → 降级到 local in-memory（不完美但比 fail-closed 好）；"如何动态调整 limit？" → 配置中心 push，rate limiter 周期读；"如何 cost-based limit？" → 不只是请求数，按 estimated cost 扣 token (e.g. LLM API 按 prompt+completion tokens)。</p></div>
+  </section>
+
+  
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6i9kl1h00px6jlds6pn1hi5.html">← Design a Webhook Callback System</a>
+    <a href="cm6wu2x3y0000356pl299toa0.html">Design YouTube →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

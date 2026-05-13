@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Spreadsheet with Formulas · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Design Spreadsheet with Formulas</div>
+  <h1>Design Spreadsheet with Formulas</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Mid December, 2024</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/spreadsheet-formulas-graph/cmbsl1b4r004x07ad388lxwci" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a spreadsheet API where cells can contain values or formulas that reference other cells, automatically handling updates when dependencies change. Implement dependency graph tracking to manage cell relationships, cycle detection to prevent infinite loops from circular references, and memoization to cache computed values for efficient recalculation.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现一个 <strong>Spreadsheet with formulas</strong>：cell 可以包含静态值或公式（含对其他 cell 的引用），公式所依赖的 cell 变化时<strong>自动重算</strong>。</p>
+<p>OpenAI Senior 级 1 人报告。考点：<strong>依赖图 + 拓扑排序 + 循环引用检测 + memoization</strong>。</p>
+<h3>题目语义</h3>
+<pre class="language-python"><code class="language-python">sheet = Spreadsheet()
+sheet.set("A1", "10")
+sheet.set("A2", "20")
+sheet.set("B1", "=A1 + A2")            # 公式
+sheet.set("B2", "=B1 * 2")             # 引用其他公式
+print(sheet.get("B1"))                 # 30
+print(sheet.get("B2"))                 # 60
+
+sheet.set("A1", "100")                 # 修改源
+print(sheet.get("B2"))                 # (100+20)*2 = 240   ← 自动重算
+
+sheet.set("A1", "=B1")                 # 循环引用
+# raises CycleError</code></pre>
+<h3>解题思路</h3>
+<ol><li><strong>公式解析</strong>：<code>=A1 + A2 * 3</code> → AST 或 token list；找出依赖 cells</li><li><strong>依赖图</strong>：cell → set of cells it depends on (reverse: cell → cells that depend on it)</li><li><strong>修改源 cell</strong> → 遍历 dependents BFS/DFS 重算（用 memoization 避免重复）</li><li><strong>循环检测</strong>：set 公式时模拟更新 graph，DFS 找环</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import re
+from collections import defaultdict
+from typing import Optional
+
+class CycleError(Exception):
+    pass
+
+# ----- 公式解析 -----
+CELL_RE = re.compile(r'[A-Z]+\d+')
+
+def extract_refs(expr: str) -&gt; set[str]:
+    """从公式表达式中找出所有 cell 引用"""
+    return set(CELL_RE.findall(expr))
+
+def eval_expr(expr: str, get_value) -&gt; float:
+    """求值：先 substitute 引用，再 eval。
+    生产环境用专门的 expression parser，这里简化用 eval (危险) 并 sanitize"""
+    def replace_cell(m):
+        cell = m.group(0)
+        v = get_value(cell)
+        return str(v) if v is not None else '0'
+    safe = CELL_RE.sub(replace_cell, expr)
+    # 只允许数字 + 运算符 + 括号
+    if not re.fullmatch(r'[\d\s\+\-\*\/\(\)\.]+', safe):
+        raise ValueError(f"invalid expression: {expr}")
+    return eval(safe)
+
+# ----- Spreadsheet -----
+class Spreadsheet:
+    def __init__(self):
+        # cell -&gt; formula string (含 '=' 前缀) 或 plain value string
+        self._raw: dict[str, str] = {}
+        # cell -&gt; cached numeric value（None 表示需重算）
+        self._value: dict[str, Optional[float]] = {}
+        # forward dep: cell -&gt; cells it depends on
+        self._deps: dict[str, set[str]] = defaultdict(set)
+        # reverse dep: cell -&gt; cells that depend on it
+        self._dependents: dict[str, set[str]] = defaultdict(set)
+
+    def set(self, cell: str, raw: str) -&gt; None:
+        # 解析新依赖
+        new_deps = extract_refs(raw[1:]) if raw.startswith('=') else set()
+        # 循环检测：从 cell 出发 follow new_deps，看能否回到 cell
+        if self._would_create_cycle(cell, new_deps):
+            raise CycleError(f"setting {cell} = {raw} creates a cycle")
+
+        # 移除旧 dependency 在 reverse map 里
+        for old_dep in self._deps[cell]:
+            self._dependents[old_dep].discard(cell)
+        # 安装新依赖
+        self._deps[cell] = new_deps
+        for d in new_deps:
+            self._dependents[d].add(cell)
+
+        self._raw[cell] = raw
+        self._invalidate(cell)
+
+    def get(self, cell: str) -&gt; Optional[float]:
+        return self._compute(cell)
+
+    def _compute(self, cell: str) -&gt; Optional[float]:
+        if cell not in self._raw:
+            return None
+        if self._value.get(cell) is not None:
+            return self._value[cell]
+        raw = self._raw[cell]
+        if raw.startswith('='):
+            value = eval_expr(raw[1:], get_value=lambda c: self._compute(c))
+        else:
+            try:
+                value = float(raw)
+            except ValueError:
+                value = 0  # 或当字符串
+        self._value[cell] = value
+        return value
+
+    def _invalidate(self, cell: str) -&gt; None:
+        """BFS 清除该 cell 及其所有下游 cell 的缓存"""
+        from collections import deque
+        q = deque([cell])
+        seen = set()
+        while q:
+            c = q.popleft()
+            if c in seen:
+                continue
+            seen.add(c)
+            self._value[c] = None
+            for d in self._dependents[c]:
+                q.append(d)
+
+    def _would_create_cycle(self, cell: str, new_deps: set[str]) -&gt; bool:
+        """从 new_deps 各自出发 DFS，看能否到 cell"""
+        for start in new_deps:
+            stack = [start]
+            seen = set()
+            while stack:
+                cur = stack.pop()
+                if cur == cell:
+                    return True
+                if cur in seen:
+                    continue
+                seen.add(cur)
+                stack.extend(self._deps[cur])
+        return False</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>set(cell, ...)</code>: 循环检测 DFS O(N + E)；invalidate O(下游 size)</li><li><code>get(cell)</code>: 第一次 O(子树 size)；缓存命中 O(1)</li><li>总开销：每次值变 → 仅下游被重算 = O(affected cells)</li></ul>
+<h3>关键设计点</h3>
+<h4>1. 拓扑排序自动重算 vs Lazy 求值</h4>
+<p>两种策略：</p>
+<p><strong>A. Lazy（推荐）</strong>：set 时只 invalidate cache；get 时按需 recompute。</p>
+<ul><li>优点：set 快，多次连续 set 不浪费重算</li><li>缺点：第一次 get 慢</li></ul>
+<p><strong>B. Eager</strong>：set 时 BFS/DFS 拓扑排序所有 affected cells 重算。</p>
+<ul><li>优点：get 永远 O(1)</li><li>缺点：set 慢；连续 set 浪费</li></ul>
+<p>通常 <strong>A 更好</strong>（用户改了输入立即看结果，但不是每次中间改都看）。</p>
+<h4>2. 循环检测时机</h4>
+<p>不是等求值时发现 stack overflow，而是 <strong>set 时立即检测</strong>：从新 dependency 出发 DFS，看能否回到 cell 自己。</p>
+<h4>3. Cache invalidation</h4>
+<p>修改 A1 → B1 (depends on A1) cache 失效 → C1 (depends on B1) 也失效 → 用 reverse-dep graph BFS。</p>
+<h4>4. 公式语法</h4>
+<p>简化版：只支持 <code>+ - * /</code> 和 cell 引用。生产应该有 lexer + parser，支持 <code>SUM(A1:A10)</code>, <code>IF(...)</code>, 字符串 concat 等。</p>
+<pre class="language-python"><code class="language-python"># 更完整的 parser 用 shunting-yard 算法
+class FormulaLexer: ...
+class FormulaParser:
+    def parse(self, tokens) -&gt; AST: ...
+class FormulaEvaluator:
+    def eval(self, ast, env) -&gt; Value: ...</code></pre>
+<h4>5. 范围引用 SUM(A1:A10)</h4>
+<p>把 range expand 成 list of cells；公式 dep 集合包含所有 cell。<code>SUM</code> / <code>AVG</code> 等函数 eval 时收集所有 cell value。</p>
+<h3>替代：直接拓扑排序</h3>
+<p>按依赖拓扑序求值，一次性把所有 cell 算完：</p>
+<pre class="language-python"><code class="language-python">def recompute_all(self):
+    # Kahn's algorithm
+    indeg = {c: len(self._deps[c]) for c in self._raw}
+    q = deque([c for c, d in indeg.items() if d == 0])
+    while q:
+        c = q.popleft()
+        self._value[c] = self._compute_no_cache(c)
+        for dep in self._dependents[c]:
+            indeg[dep] -= 1
+            if indeg[dep] == 0:
+                q.append(dep)</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 公式 eval 用 <code>eval(raw)</code> 不 sanitize —— 任意 code execution； ❌ 循环检测放到求值时（递归栈溢出才发现）—— 应该 set 时检测； ❌ Cache invalidation 不传递下游 —— stale value； ❌ 修改 cell 时不更新 reverse-dep map —— 后续 invalidation 漏； ❌ 公式里有空格 (<code>=A1 + A2</code>) 解析失败 —— 用 regex 容忍空白。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>依赖图（forward + reverse）</strong>；(2) <strong>set 时检测 cycle，invalidate cache</strong>；(3) <strong>lazy compute + memoization</strong> —— 避免重复算。这套也适用于 Excel、Google Sheets、Notion DB、reactive UI 框架（Vue/MobX）的依赖追踪。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 functions (SUM, IF)？" → 加 lexer + parser，eval 时 dispatch 函数名；"如何 collaborative editing？" → CRDT on cell content + 同步公式图；"性能：1M cells？" → 不能每次扫整图，按 dep 局部更新 (这就是 Excel 的 dirty cell propagation)。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Senior</strong> · OpenAI</div>
+  <div>Design a spreadsheet API where cells can contain values or formulas that reference other cells, automatically handling updates when dependencies change. Implement dependency graph tracking to manage cell relationships, cycle detection to prevent infinite loops from circular references, and memoization to cache computed values for efficient recalculation. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">The problem statement says "updating A1 should automatically trigger recalculation of C1" but the solution here uses lazy evaluation.</div><div class="comment">Also I'm not seeing how the functions are actually evaluated? I.e. where is evaluate_formula()?</div><div class="comment">Reply F FunctionalIndigoPanda935 • 6个月前</div><div class="comment">Leetcode 631 specifies that there will be no cycles.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6ffpfij00043b6pben6f0r8.html">← What are the signals you're looking for if an engineer is ready for a promo</a>
+    <a href="cm717jaa200danzcu8goffalw.html">Design a Foursquare-like App →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

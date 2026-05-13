@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2408. Design SQL · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2408. Design SQL</div>
+  <h1>Leetcode 2408. Design SQL</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+    <span>📋 4 人报告</span>
+    <span>🕒 最近：Late August, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/design-sql-2408/cm5eguhah03va838ozuanzsde" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given one or more relational tables and a target result set, write a SQL query that produces the specified output—typically requiring joins, grouping/aggregation, conditional logic, and often window functions for per-group ordering or selection. Pay attention to edge cases such as NULLs, duplicates, and efficient use of subqueries or indexes.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2408 Design SQL</strong>：实现一个简化版关系数据库的 SQL 操作 —— <code>insertRow</code>、<code>deleteRow</code>、<code>selectCell</code>。<strong>这道 LC 题相对简单</strong>（只考增、删、单元格查询，没有 SELECT/WHERE/JOIN），但 OpenAI 报告这题 4 次提到，可能问的是<strong>它的扩展版</strong>：写 SQL 查询产生指定结果集，含 JOIN / GROUP BY / 窗口函数 / 子查询。</p>
+<p>我把两个角度都覆盖。</p>
+<h3>Part A：LC 2408 标准题</h3>
+<pre class="language-plaintext"><code class="language-plaintext">SQL 类:
+  __init__(names: list[str], columns: list[int])
+    names[i] 是表名，columns[i] 是该表的列数
+  insertRow(name, row): 向表追加一行，自动分配 rowId（1-based）
+  deleteRow(name, rowId): 标记删除该 row（rowId 不复用）
+  selectCell(name, rowId, columnId): 返回单元格值</code></pre>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">class SQL:
+    def __init__(self, names: list[str], columns: list[int]):
+        # name -&gt; dict of rowId -&gt; list (values)
+        self._tables: dict[str, dict[int, list[str]]] = {n: {} for n in names}
+        # name -&gt; next rowId
+        self._next_id: dict[str, int] = {n: 1 for n in names}
+
+    def insertRow(self, name: str, row: list[str]) -&gt; None:
+        rid = self._next_id[name]
+        self._tables[name][rid] = row
+        self._next_id[name] += 1
+
+    def deleteRow(self, name: str, rowId: int) -&gt; None:
+        self._tables[name].pop(rowId, None)
+
+    def selectCell(self, name: str, rowId: int, columnId: int) -&gt; str:
+        row = self._tables[name].get(rowId)
+        if row is None:
+            return ""  # 或抛错
+        return row[columnId - 1]   # 1-based</code></pre>
+<p><strong>复杂度</strong>：所有操作 O(1)（dict get/set）。</p>
+<p><strong>关键点</strong>：</p>
+<ul><li>rowId 自增不复用 —— 不能用 list（删除后 idx 错位）；用 dict by rowId</li><li>删了的 rowId 之后查会返回 None / ""</li><li>columnId 1-based</li></ul>
+<h3>Part B：扩展 - 真 SQL Query 设计</h3>
+<p>OpenAI 报告里描述：</p>
+<blockquote><p>"Given one or more relational tables and a target result set, write a SQL query... typically requiring joins, grouping/aggregation, conditional logic, and often window functions for per-group ordering or selection."</p></blockquote>
+<p>这变成了一道 <strong>SQL 写题</strong>，类似 LeetCode SQL 50。考的是你能不能 deconstruct 需求并写正确 SQL。</p>
+<h4>写 SQL 的通用框架</h4>
+<ol><li><strong>理解目标 schema</strong>：先把 expected output 的列名 + 几行 sample 看清</li><li><strong>确定主表</strong>：从哪张表"开始"join</li><li><strong>逐列倒推</strong>：每个 output 列来自哪张表，哪个聚合</li><li><strong>加 WHERE / GROUP BY / ORDER BY</strong></li></ol>
+<h4>典型范型 1：Top-N per group（窗口函数必用）</h4>
+<blockquote><p>"为每个部门找薪水最高的 3 个人"</p></blockquote>
+<pre class="language-sql"><code class="language-sql">SELECT department, name, salary
+FROM (
+    SELECT
+        department,
+        name,
+        salary,
+        ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) AS rn
+    FROM employees
+) t
+WHERE rn &lt;= 3;</code></pre>
+<p>关键：<code>ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)</code> 在每组内按规则排序打号；外层 WHERE 取前 N。</p>
+<h4>典型范型 2：连续/累计</h4>
+<blockquote><p>"每个用户的最长连续登录天数"</p></blockquote>
+<pre class="language-sql"><code class="language-sql">WITH date_rn AS (
+    SELECT
+        user_id,
+        login_date,
+        DATE_SUB(login_date, INTERVAL ROW_NUMBER() OVER (
+            PARTITION BY user_id ORDER BY login_date
+        ) DAY) AS grp
+    FROM logins
+)
+SELECT user_id, MAX(consec) AS longest_streak
+FROM (
+    SELECT user_id, grp, COUNT(*) AS consec
+    FROM date_rn
+    GROUP BY user_id, grp
+) g
+GROUP BY user_id;</code></pre>
+<p><strong>Trick</strong>：连续日期减去其在用户内的 row_number 得到的 group key 对<strong>同一连续段</strong>相同。</p>
+<h4>典型范型 3：自 JOIN（找前一行 / 同事关系）</h4>
+<blockquote><p>"找出每个员工的 manager 名字"</p></blockquote>
+<pre class="language-sql"><code class="language-sql">SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;</code></pre>
+<h4>典型范型 4：聚合 + HAVING 过滤组</h4>
+<blockquote><p>"找出有超过 5 个员工的部门"</p></blockquote>
+<pre class="language-sql"><code class="language-sql">SELECT department, COUNT(*) AS cnt
+FROM employees
+GROUP BY department
+HAVING COUNT(*) &gt; 5;</code></pre>
+<h4>典型范型 5：Pivot</h4>
+<blockquote><p>"把行式数据 (year, metric, value) 透视成列"</p></blockquote>
+<pre class="language-sql"><code class="language-sql">SELECT year,
+       SUM(CASE WHEN metric = 'revenue' THEN value END) AS revenue,
+       SUM(CASE WHEN metric = 'cost' THEN value END) AS cost
+FROM data
+GROUP BY year;</code></pre>
+<h3>写 SQL 题的检查清单</h3>
+<p>| 检查点 | 错过的常见后果 | |---|---| | NULL 处理 | <code>WHERE col != 'X'</code> 会过滤 NULL；用 <code>IS NOT NULL</code> 显式 | | Distinct vs not | <code>COUNT(*)</code> vs <code>COUNT(DISTINCT x)</code> 完全不同 | | Group by 列匹配 | SELECT 非聚合列必须在 GROUP BY 里 | | 窗口函数 vs 聚合 | <code>MAX(x) OVER ()</code> 跟 <code>MAX(x) GROUP BY ...</code> 行为不同 | | 自 JOIN 别名 | <code>FROM emp e1 JOIN emp e2</code> 必须用 e1/e2 区分 | | INNER vs LEFT | 期待 outer 时用了 inner 会漏行 | | ORDER BY 在 UNION | ORDER BY 只能在最外层 |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ LC 2408 用 list 存 rows —— 删除后 rowId 失效； ❌ SQL 查询直接 SELECT TOP 3 期待 per-group —— 实际是 global top 3；必须窗口函数； ❌ NULL 比较用 <code>=</code> —— NULL 不等于任何值，包括 NULL 自己； ❌ JOIN 没有 ON 条件 —— 笛卡尔积，几行变几亿； ❌ GROUP BY 写漏列 —— MySQL 早期会随便返回某行值，严格模式直接报错。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>SQL 题不是考你"记不记得语法"，是考<strong>你能不能把需求拆解成 SQL 算子序列</strong>。窗口函数（ROW_NUMBER / RANK / LAG / LEAD / SUM OVER）是中级 SQL 必杀技 —— 80% 的"per-group X" 都靠它。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 explain query plan？" → 加 EXPLAIN 看 join 顺序、用了哪个索引；"如何防止 N+1 query？" → 用 JOIN 而非循环单查；"如何处理 1B 行表？" → 索引设计 + 分区 + materialized view 提前聚合。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2024 · <strong>Staff</strong> · OpenAI</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (5 条)</h2>
+  <div class="comment">Reply R RomanticAquamarineUrial103 Premium • 2个月前</div><div class="comment">Could you please correct this mistake? I expect better quality given the amount I pay for access to this service. Furthermore, it is unclear to me whether a software engineering coding question can turn into an SQL question.</div><div class="comment">Reply F FollowingPlumJellyfish731 Premium • 5个月前</div><div class="comment">This mismatches LeetCode 2408.  My understanding is the question asked n the interview would be closer to what is on Leetcode 2408 (which is a OOP and data structures problem) than this.</div><div class="comment">The input includes an English sentence like "Task: Find highest-paid employee per department"? But the solution doesn't process such a natural language sentence? idgi</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmbskxz3y004n07adimbogre1.html">← Unix Cd Command with Symbolic Link Resolution</a>
+    <a href="cm6ffodsw00013b6pt5izxwps.html">Tell me about your job and role →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

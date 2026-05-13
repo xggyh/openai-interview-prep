@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a URL Shortener · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a URL Shortener</div>
+  <h1>Design a URL Shortener</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff, Senior Manager</span>
+    <span>📋 6 人报告</span>
+    <span>🕒 最近：Early February, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/url-shortener-design/cm5svnaco01dqxszbok7e1lk1" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a URL shortening service similar to TinyURL that allows users to convert long URLs into short, shareable links and manage their shortened URLs.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>URL Shortener</strong>（TinyURL / bit.ly）：长 URL → 短 alias；用户访问短 URL → 301/302 重定向到长 URL。规模：100M URL / 月 + 1B redirect / 月。</p>
+<p>经典 SD 入门题。OpenAI 报告 6 次，Senior-Staff / Manager 都问。考点：<strong>ID 生成策略 + KV 存储设计 + 缓存 + 分析</strong>。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>提交长 URL → 返回短 URL（如 <code>t.ly/abc123</code>）</li><li>访问短 URL → 重定向</li><li>自定义 alias（vanity URL）</li><li>过期时间（可选）</li><li>简单分析（click count / geography / referrer）</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>100M 新 URL / 月 = ~38 写 QPS（平均），峰值 5x = ~200 QPS</li><li>1B redirect / 月 = ~400 读 QPS，峰值 5x = ~2000 QPS</li><li>redirect 延迟 &lt; 50ms</li><li>99.99% 可用</li></ul>
+<p><strong>容量估算：</strong></p>
+<ul><li>5 年存 100M × 12 × 5 = 6B URL</li><li>每 record ~500 B (long URL + meta) → 3 TB</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">       User
+         │  GET /abc123
+         ▼
+   ┌──────────────┐
+   │   CDN        │  ← cache hot redirects edge-cached
+   └──────┬───────┘
+          │ miss
+          ▼
+   ┌──────────────┐
+   │  Edge LB     │  geo-routed
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │  API Service │  stateless
+   └──┬─────┬─────┘
+      │     │
+      ▼     ▼
+ ┌────────┐  ┌──────────────┐
+ │ Cache  │  │ ID Gen       │  Snowflake / KGS
+ │ (Redis)│  │ Service      │
+ └────┬───┘  └──────┬───────┘
+      │             │
+      ▼             ▼
+   ┌──────────────────────┐
+   │   URL Store          │
+   │   (sharded NoSQL,    │
+   │    DynamoDB / Cass)  │
+   └──────────┬───────────┘
+              │
+              ▼ (async)
+       ┌──────────────┐
+       │ Click Logger │  → Kafka → Analytics
+       └──────────────┘</div>
+<h3>核心组件设计</h3>
+<h4>1. 短 URL ID 生成（最关键）</h4>
+<p>三种方案：</p>
+<p><strong>A. Base62(auto-increment ID)</strong> —— 简单：DB 自增 ID 转 base62（[0-9a-zA-Z]）。6 位可表示 62^6 ≈ 568 亿。</p>
+<ul><li>优点：紧凑、有序、易实现</li><li>缺点：可枚举（攻击者爬全表）</li></ul>
+<p><strong>B. Hash(long URL) 截断</strong> —— MD5/SHA → 取前 6 位 base62。</p>
+<ul><li>缺点：碰撞处理麻烦（rehash 或 linear probe）；同 URL 两次提交得同短码（也可能是优点）</li></ul>
+<p><strong>C. KGS (Key Generation Service) 预生成</strong> —— 离线生成 1000 万个唯一短码池，API 来取。</p>
+<ul><li>优点：无碰撞，预分配的 key 不可猜</li><li>实现：generator service 把池写 Redis / DB；API 取一个就标 used</li></ul>
+<p><strong>推荐 C</strong> 用于生产 + <strong>A</strong> 作为备选 fallback。</p>
+<pre class="language-python"><code class="language-python">import base64
+import random
+import string
+CHARSET = string.ascii_letters + string.digits  # 62 chars
+
+def encode_id(n: int) -&gt; str:
+    """64-bit ID → 11-char base62"""
+    if n == 0: return CHARSET[0]
+    s = []
+    while n:
+        n, r = divmod(n, 62)
+        s.append(CHARSET[r])
+    return ''.join(reversed(s))
+
+class KeyGenService:
+    def __init__(self):
+        self.pool: set[str] = set()
+        self._refill(10000)
+    def _refill(self, n):
+        while len(self.pool) &lt; n:
+            self.pool.add(''.join(random.choices(CHARSET, k=7)))
+    def take(self) -&gt; str:
+        if not self.pool: self._refill(10000)
+        return self.pool.pop()</code></pre>
+<h4>2. 数据模型</h4>
+<pre class="language-python"><code class="language-python"># DynamoDB / Cassandra
+class UrlRecord:
+    short_code: str   # PK
+    long_url: str
+    user_id: str | None
+    created_at: datetime
+    expires_at: datetime | None
+    click_count: int  # eventually consistent counter</code></pre>
+<p>按 <code>short_code</code> hash 分 partition；写入 / 读取都 O(1) by PK。</p>
+<h4>3. 缓存策略</h4>
+<ul><li><strong>CDN 边缘缓存</strong>：热门短 URL 的 301 在 CDN 缓存（TTL 24h），最快路径</li><li><strong>Redis</strong> 内存：API 查 Redis 命中直接返回；miss 查 DB 后回填</li><li><strong>DB 是 source of truth</strong></li></ul>
+<p>热门 80/20：top 20% URL 占 80% 流量，Redis hit rate 可以做到 95%+。</p>
+<h4>4. Redirect 301 vs 302</h4>
+<ul><li><strong>301 (permanent)</strong>：浏览器缓存，下次直接跳，<strong>不再发请求</strong> → click count 不准</li><li><strong>302 (temporary)</strong>：每次都发请求 → click count 准</li><li>平衡：<strong>302 + cache-control: max-age=3600</strong> —— 短时间缓存，但仍有上报机会</li></ul>
+<h4>5. 自定义 alias</h4>
+<p>用户请求 <code>t.ly/mybrand</code> → 先检查是否已存在 → 不存在直接 insert；存在返回 conflict。</p>
+<p>校验：长度 5-30、字符只允许 <code>[a-zA-Z0-9_-]</code>、不能撞内置 reserved path（<code>/api</code>, <code>/login</code> 等）。</p>
+<h4>6. 分析（点击统计）</h4>
+<p>每次 redirect：API 异步写 <code>Kafka: click.{short_code, ts, ip, ua}</code> → 后端 worker 聚合到 Spark / ClickHouse → 出报表。</p>
+<p><strong>不要同步更新 click_count</strong>（DB 写热点）；异步聚合写入足够。</p>
+<h4>7. 过期清理</h4>
+<p>后台 cron job 扫 <code>expires_at &lt; now</code> 标记 deleted；硬删除可以延后到月底 GC 减小写放大。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | ID 生成 | KGS（不可猜） | Auto-increment：可枚举 | | Redirect | 302 + cache-control | 301：click count 不准 | | 存储 | DynamoDB / Cassandra | Postgres：sharding 麻烦 | | Click count | Kafka 聚合 | DB 同步：写热点 | | 缓存 | CDN + Redis 双层 | 单层：miss 走 DB 太多 |</p>
+<h3>关键技术点</h3>
+<h4>写路径</h4>
+<pre class="language-plaintext"><code class="language-plaintext">POST /shorten { long_url, custom_alias? }
+  ↓ 校验 long_url 格式
+  ↓ 取 short_code (KGS 或 custom)
+  ↓ PUT UrlRecord 到 DynamoDB（条件写：if not exists）
+  ↓ 回填 Redis
+  ↓ 返回短 URL</code></pre>
+<h4>读路径</h4>
+<pre class="language-plaintext"><code class="language-plaintext">GET /abc123
+  ↓ CDN 命中？返回 301/302
+  ↓ Redis 命中？返回 302 + 异步 click 上报
+  ↓ DynamoDB 查 → 回填 Redis → 返回 302 + 异步 click
+  ↓ 不存在？404</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) KGS 预生成 ID 避免碰撞 + 不可枚举；(2) 双层缓存（CDN + Redis）做 redirect 加速；(3) Click 统计异步上报，绝不同步写 DB counter。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 hash(long_url) 取前 6 字节做 short_code —— 碰撞概率随规模增大； ❌ Redirect 301（不发请求）+ 要 click count —— 自相矛盾； ❌ Click count 直接 <code>UPDATE counter</code> —— 写热点，热门链接压爆 DB； ❌ Custom alias 不校验 reserved path —— 用户可注册 <code>/api</code>、<code>/login</code> 制造钓鱼； ❌ Long URL 不校验 —— 用户写 <code>javascript:</code> / <code>data:</code> URL 引入 XSS。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何防 spam（机器人批量造垃圾短 URL）？" → IP rate limit + captcha + 白名单域名（长 URL host 必须可达）。"如何 multi-region 同步？" → DynamoDB Global Tables / Cassandra multi-DC，最终一致足够（短 URL 创建后到生效几秒延迟用户不感知）。"如何审核非法长 URL？" → 提交时调 Google Safe Browsing / 内部 ML 过滤 + 用户举报。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (53 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2026 · <strong>PayPal</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>B</strong> · BuildOps</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>N</strong> · Nielsen</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>PayPal</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>P</strong> · Parloa</div>
+  <div>Principal</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Anduril</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>JPMorgan Chase</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>PayPal</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>JPMorgan Chase</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>PayPal</strong> · Manager</div>
+  <div>VTS company</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>N</strong> · Nielsen</div>
+  <div>Mid-level</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>PayPal</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>PayPal</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>L</strong> · lloyds</div>
+  <div>Junior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior Manager</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>PayPal</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Oracle</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Okta</strong> · Staff</div>
+  <div>They gave an options between · 1. URL Shortener · 2. News Feed · 3. 3rd one was something specific, where you might need to know their APIs or something.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Netflix</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Zscaler</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>PayPal</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Design a URL shortener service that will be used within your organization. · User should only be able to fetch short url for a particular long url and vice versa. · There should be a search service that takes in a long URL and returns the list of short URLs.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>PayPal</strong> · Mid-level</div>
+  <div>design a url shortner as well as why we use base enc 62 not 64 -&gt; that was a new question i got rest was the same</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Netflix</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Microsoft</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Apple</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>ServiceTitan</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Asked at Amazon. Exact same question. But I didn't had much time, since some portion of the interview was LP.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Macquarie Group</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Design a shortlink service that allows shortlinks per organization</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Netflix</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Design a social feed with some Amazon twists</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Whoop</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Design service similar to tinyurl.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2024 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2022 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2021 · <strong>PayPal</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmlod4ttu0pa608ad89vm8qkj.html">← Authentication Manager</a>
+    <a href="cmfc459e4046608adgfjpzzio.html">N- ary tree →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

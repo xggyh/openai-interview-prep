@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Chatbot with Multiple Threads · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Mobile System Design / Design a Chatbot with Multiple Threads</div>
+  <h1>Design a Chatbot with Multiple Threads</h1>
+  <div class="header-meta">
+    <span class="tag tag-mobile-system-design">Mobile System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Early March, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/chatbot-thread-management/cmac1dd1s0049ad08o29ajxbs" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Create a design for a chatbot system that can handle multiple conversation threads simultaneously. Consider aspects such as user interaction, thread management, and scalability.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计一个支持<strong>多 conversation thread</strong> 的 mobile chatbot。重点是<strong>移动端架构</strong> —— offline support、消息持久化、跨设备同步、UI 响应性。</p>
+<p>OpenAI Staff 级（Mobile System Design），1 人报告。考点：<strong>mobile-first 的 chat app 架构</strong>，区别于 server-side SD。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>用户与 AI bot 对话；多个 conversation thread 切换</li><li>移动端 UI：消息列表 + 输入框 + thread switcher</li><li>离线发送：网络断时输入消息，恢复后发送</li><li>多设备：手机 / 平板 / web 端看同一份历史</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>单 thread 历史 ≤ 10k 消息</li><li>启动 &lt; 1s 显示最近 thread</li><li>流式响应（token streaming）</li><li>离线不丢消息</li></ul>
+<h3>移动端架构</h3>
+<div class="ascii-diagram">       ┌────────────────────────┐
+       │     Mobile App         │
+       │                        │
+       │  ┌──────────────────┐  │
+       │  │  UI Layer        │  │  React Native / SwiftUI / Compose
+       │  │  (chat list +    │  │
+       │  │   thread view)   │  │
+       │  └──────┬───────────┘  │
+       │         │              │
+       │         ▼              │
+       │  ┌──────────────────┐  │
+       │  │  ViewModel       │  │  state mgmt (MVI / Redux)
+       │  │  (per thread)    │  │
+       │  └──────┬───────────┘  │
+       │         │              │
+       │         ▼              │
+       │  ┌──────────────────┐  │
+       │  │ Repository       │  │
+       │  │  - local: SQLite │  │
+       │  │  - remote: HTTP  │  │
+       │  └──────┬───────────┘  │
+       │         │              │
+       │  ┌──────▼───────────┐  │
+       │  │ Sync Engine      │  │  offline queue + reconnect
+       │  └──────┬───────────┘  │
+       │         │              │
+       └─────────┼──────────────┘
+                 │  HTTP/WS
+                 ▼
+          ┌─────────────────────┐
+          │   Backend API       │
+          │   - threads CRUD    │
+          │   - messages CRUD   │
+          │   - LLM proxy (SSE) │
+          └──────┬──────────────┘
+                 │
+                 ▼
+          ┌─────────────────────┐
+          │  Storage            │
+          │  - threads/msgs PG  │
+          │  - object S3        │
+          └─────────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. 本地优先（offline-first）</h4>
+<p><strong>所有读 / 写先走 SQLite</strong>，UI 立即响应；后台 sync engine 异步推到 server。</p>
+<pre class="language-kotlin"><code class="language-kotlin">// Pseudocode (Compose)
+fun sendMessage(threadId: String, body: String) {
+    val msg = Message(
+        id = UUID.randomUUID().toString(),     // 客户端生成 ID
+        threadId = threadId,
+        body = body,
+        sender = "user",
+        ts = System.currentTimeMillis(),
+        status = "pending",                    // 本地状态
+    )
+    db.messages.insert(msg)                    // 本地立即可见
+    syncEngine.enqueue(msg)                    // 异步推 server
+}</code></pre>
+<p>UI subscribe local DB（Room/SQLDelight），插入立即触发 UI 更新。</p>
+<h4>2. Sync Engine</h4>
+<pre class="language-kotlin"><code class="language-kotlin">class SyncEngine(val db, val api) {
+    val outbound = Channel&lt;Message&gt;()    // pending 队列
+
+    fun enqueue(msg: Message) {
+        outbound.send(msg)
+    }
+
+    suspend fun start() {
+        for (msg in outbound) {
+            try {
+                val res = api.sendMessage(msg)   // 包含 idempotency key = msg.id
+                db.messages.updateStatus(msg.id, "sent")
+                // 流式接收 assistant reply
+                api.streamReply(res.threadId).collect { token -&gt;
+                    db.messages.appendToLastAssistant(threadId, token)
+                }
+                db.messages.markComplete(threadId)
+            } catch (e: Exception) {
+                // 重新入队 with backoff
+                delay(backoff)
+                outbound.send(msg)
+            }
+        }
+    }
+}</code></pre>
+<p><strong>关键</strong>：</p>
+<ul><li><code>idempotency_key = msg.id</code> 让 server 去重（同一消息 retry 不会创建两条）</li><li>失败重试用 exponential backoff</li><li>流式响应 token 也写本地 DB，UI 自然 update</li></ul>
+<h4>3. Thread 切换</h4>
+<ul><li>用户点 thread → ViewModel 加载该 thread 的 messages（DB query LIMIT 50 by ts DESC）</li><li>滚动到顶时 lazy load older（按 ts 分页）</li></ul>
+<pre class="language-kotlin"><code class="language-kotlin">class ThreadViewModel(threadId: String) {
+    val messages: StateFlow&lt;List&lt;Message&gt;&gt; = db.messages
+        .observeByThread(threadId)
+        .map { it.sortedByDescending { it.ts }.take(50) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+}</code></pre>
+<h4>4. 多设备同步</h4>
+<p>每条消息有 server <code>seq</code> 字段；客户端记 <code>last_synced_seq</code>：</p>
+<pre class="language-plaintext"><code class="language-plaintext">On reconnect:
+    GET /sync?since={last_synced_seq}&amp;thread_id={thread_id}
+    → 返回新消息
+    → 本地 upsert
+    → last_synced_seq = max(seq)</code></pre>
+<p>冲突：客户端 pending 消息 + server 已有同 id → 用 server 版本（server wins for sent；本地 wins for pending）。</p>
+<h4>5. LLM 流式响应</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Mobile → POST /threads/{id}/messages { body, idempotency_key }
+        ← 200 OK + SSE stream
+        ← event: token data: {"t":"hi"}
+        ← event: token data: {"t":" there"}
+        ← event: done
+
+App 收到 token：
+    db.appendAssistantToken(threadId, token)
+    UI flow 触发刷新</code></pre>
+<p>App 后台时：保留下载的 part response，但暂停渲染。前台时继续。</p>
+<h4>6. 持久化 / 加密</h4>
+<ul><li>SQLite 加密：SQLCipher（用户密码 / KeyStore 派生 key）</li><li>备份：iCloud Documents / Android backup（如果用户允许）</li><li>服务端可选 E2EE：消息在客户端加密，server 只见密文</li></ul>
+<h4>7. Push Notification</h4>
+<p>App 后台 / 关闭时：server FCM/APN push 新消息。Tap 推送 → 跳到对应 thread。</p>
+<h3>移动端特有的取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | 数据本地化 | SQLite（强 offline） | 仅内存：app kill 后丢 | | 状态管理 | MVI / Redux | imperative：难维护 | | 网络 | HTTP + SSE | WebSocket：穿透差，电池耗 | | Sync 时机 | App 前台 + 后台 limited（iOS background fetch） | 实时长连：电池 / 数据流量耗 | | 加密 | 客户端 + 服务器透明 | E2EE：服务端不能做内容审核 |</p>
+<h3>关键技术细节</h3>
+<ul><li><strong>打字延迟</strong>：用户输入到 UI 显示必须 &lt; 16ms（一帧）。本地 DB 写要异步，不阻塞 UI 线程</li><li><strong>历史滚动性能</strong>：LazyColumn / RecyclerView 虚拟化，只渲染可见 + buffer</li><li><strong>图片</strong>：使用 Coil/Glide 缓存，避免重复下载</li><li><strong>Backstack</strong>：thread 切换走 Navigation，记住每 thread 滚动位置</li><li><strong>数据流量节省</strong>：消息列表 GZIP；图片低分辨率预览，点 enlarge 再下载原图</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>核心是 <strong>offline-first</strong> —— 所有 UI 都读本地 DB，sync engine 在后台处理网络。这样：(1) 启动快（本地数据立即显示）；(2) 离线可用；(3) UI 永远响应快。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ UI 直接调网络 —— 弱网 / 离线时白屏； ❌ ID 服务端生成 —— 离线无法乐观显示；客户端用 UUID + idempotency key； ❌ Sync 不做幂等 —— 重试时消息重复； ❌ SSE 不在后台保留 —— iOS 后台 5 分钟就 kill connection； ❌ 加密用户密码不用 KeyStore —— OS 重装后丢； ❌ Thread 滚动位置不记 —— 用户切回老 thread 跳回顶。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 E2EE 还能 server-side 内容审核？" → 客户端审核 + zero-knowledge proof（前沿）；"如何降低 LLM 调用成本？" → 客户端 cache 常用问答；"如何支持百万 thread？" → 客户端 paginated list；删除久未用 thread 的本地副本（保留 server 拷贝）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Chatbot with multiple threads</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Is this a coding question for 60 mins? Or more system design?</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmbsl2nhd005107adsfu8ohme.html">← Multithreaded Web Crawler</a>
+    <a href="cm6ffp48000033b6prbe7nexz.html">Tell me a time you helped an engineer promote →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

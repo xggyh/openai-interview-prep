@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resumable Iterator · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Resumable Iterator</div>
+  <h1>Resumable Iterator</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span>📋 2 人报告</span>
+    <span>🕒 最近：Early October, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/resumable-iterator/cmbskz7ck004r07ad6f1jxlni" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an iterator that can pause and resume its execution state through get_state and set_state methods, extending support to handle multiple files and asynchronous operations. The implementation involves managing composite iterators that can run concurrently while maintaining their individual states. Handle asynchronous iteration using coroutines to enable non-blocking operations across multiple data sources.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Resumable Iterator</strong>：实现一个可暂停/恢复的迭代器，支持 <code>get_state</code> / <code>set_state</code> 序列化状态。扩展：支持<strong>多文件</strong>和<strong>异步操作</strong>；用 <strong>coroutine</strong> 实现并发迭代多数据源。</p>
+<p>OpenAI 报告 Mid-Senior，2 人。考点：<strong>迭代器协议 + 状态持久化 + asyncio</strong>。</p>
+<h3>题目语义</h3>
+<pre class="language-python"><code class="language-python"># Basic
+it = ResumableIterator([1, 2, 3, 4, 5])
+print(next(it))                 # 1
+print(next(it))                 # 2
+state = it.get_state()          # {'pos': 2} 或类似
+# 进程退出，重启
+it2 = ResumableIterator([1, 2, 3, 4, 5])
+it2.set_state(state)
+print(next(it2))                # 3
+
+# Multi-file
+it = ResumableIterator.from_files(['a.txt', 'b.txt', 'c.txt'])
+# 顺序读 a.txt 全部行 → b.txt → c.txt；可 pause/resume
+
+# Async
+async for line in async_resumable(['a.txt', 'b.txt'], concurrency=2):
+    ...</code></pre>
+<h3>基础同步实现</h3>
+<pre class="language-python"><code class="language-python">from typing import Iterable, Iterator, Any
+import json, pickle
+
+class ResumableIterator:
+    """支持 get_state / set_state 的可恢复迭代器。"""
+
+    def __init__(self, items: list):
+        self._items = items
+        self._pos = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._pos &gt;= len(self._items):
+            raise StopIteration
+        item = self._items[self._pos]
+        self._pos += 1
+        return item
+
+    def get_state(self) -&gt; dict:
+        return {'pos': self._pos}
+
+    def set_state(self, state: dict):
+        self._pos = state.get('pos', 0)</code></pre>
+<h3>多文件版本</h3>
+<pre class="language-python"><code class="language-python">import os
+
+class FileResumableIterator:
+    """顺序遍历多个文件的行；状态含当前 file index + byte offset"""
+
+    def __init__(self, paths: list[str]):
+        self._paths = paths
+        self._file_idx = 0
+        self._byte_offset = 0
+        self._fh = None
+        self._open_current()
+
+    def _open_current(self):
+        if self._fh:
+            self._fh.close()
+            self._fh = None
+        if self._file_idx &gt;= len(self._paths):
+            return
+        self._fh = open(self._paths[self._file_idx], 'rb')
+        self._fh.seek(self._byte_offset)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -&gt; bytes:
+        while self._file_idx &lt; len(self._paths):
+            line = self._fh.readline()
+            if line:
+                self._byte_offset = self._fh.tell()
+                return line.rstrip(b'\n')
+            # EOF of current file, advance
+            self._fh.close()
+            self._fh = None
+            self._file_idx += 1
+            self._byte_offset = 0
+            if self._file_idx &lt; len(self._paths):
+                self._open_current()
+        raise StopIteration
+
+    def get_state(self) -&gt; dict:
+        return {
+            'file_idx': self._file_idx,
+            'byte_offset': self._byte_offset,
+        }
+
+    def set_state(self, state: dict):
+        self._file_idx = state['file_idx']
+        self._byte_offset = state['byte_offset']
+        self._open_current()
+
+    def __del__(self):
+        if self._fh:
+            self._fh.close()</code></pre>
+<p><strong>关键设计</strong>：用 byte offset 而非 line number 表示位置 —— 这样 set_state 后 <code>f.seek(offset)</code> O(1)，不必重数行数。</p>
+<h3>Async 多源并发版本</h3>
+<pre class="language-python"><code class="language-python">import asyncio
+from typing import AsyncIterator
+import aiofiles
+
+class AsyncResumableIterator:
+    """并发读多文件，按文件顺序产出行。
+    Coroutine 让 IO 等待时切换到别的 file。"""
+
+    def __init__(self, paths: list[str], concurrency: int = 4):
+        self._paths = paths
+        self._concurrency = concurrency
+        self._states: dict[str, int] = {p: 0 for p in paths}
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=concurrency * 10)
+        self._tasks: list[asyncio.Task] = []
+        self._done = False
+
+    async def _worker(self, path: str, sem: asyncio.Semaphore):
+        async with sem:
+            async with aiofiles.open(path, 'rb') as fh:
+                await fh.seek(self._states[path])
+                while True:
+                    line = await fh.readline()
+                    if not line:
+                        break
+                    await self._queue.put((path, line.rstrip(b'\n')))
+                    self._states[path] = await fh.tell()
+
+    async def __aenter__(self):
+        sem = asyncio.Semaphore(self._concurrency)
+        self._tasks = [asyncio.create_task(self._worker(p, sem)) for p in self._paths]
+        # 等所有 workers 完成后 mark done
+        asyncio.create_task(self._mark_done_when_all_finish())
+        return self
+
+    async def _mark_done_when_all_finish(self):
+        await asyncio.gather(*self._tasks)
+        self._done = True
+        # sentinel
+        await self._queue.put(None)
+
+    async def __aexit__(self, *args):
+        for t in self._tasks:
+            t.cancel()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._done and self._queue.empty():
+            raise StopAsyncIteration
+        item = await self._queue.get()
+        if item is None:
+            raise StopAsyncIteration
+        return item   # (path, line)
+
+    def get_state(self) -&gt; dict:
+        return dict(self._states)
+
+    def set_state(self, state: dict):
+        self._states.update(state)
+
+
+# Usage
+async def main():
+    async with AsyncResumableIterator(['a.txt', 'b.txt', 'c.txt'], concurrency=2) as it:
+        async for path, line in it:
+            print(path, line)
+        state = it.get_state()   # 保存
+        # 重启后
+        async with AsyncResumableIterator(['a.txt', 'b.txt', 'c.txt']) as it2:
+            it2.set_state(state)
+            async for path, line in it2:
+                ...</code></pre>
+<h3>关键设计点</h3>
+<h4>1. State 包含什么？</h4>
+<p>最小化：能让"重启后接着读"的所有信息。对文件来说就是 <code>(file_index, byte_offset)</code>；对内存 list 是 <code>index</code>。</p>
+<p><strong>不能</strong>简单存"已读 N 条" + 重新打开 + skip N 条 —— skip 是 O(N) 而非 O(1)。</p>
+<h4>2. State 可序列化</h4>
+<p>JSON / pickle 都行。优先 JSON（人类可读 + 跨语言）。</p>
+<pre class="language-python"><code class="language-python">def save_state(it, path):
+    with open(path, 'w') as f:
+        json.dump(it.get_state(), f)
+
+def load_state(it, path):
+    with open(path) as f:
+        it.set_state(json.load(f))</code></pre>
+<h4>3. Multi-source 并发的细节</h4>
+<p>asyncio + aiofiles：每个 file 一个 coroutine，IO 等待时让出。Semaphore 限制并发 file 数。<strong>所有 worker 把行塞进同一个 queue</strong>，main 消费 queue。</p>
+<p><code>get_state</code> 返回每个 file 当前 offset（dict）→ resume 时分别 seek。</p>
+<p><strong>注意</strong>：order 不保证 —— 多文件并发读，行交错出现。如果题面要求保持文件顺序，每个 file 单独 finish 完再下一个（退化为同步）。</p>
+<h4>4. 容错</h4>
+<ul><li>文件读 EOF → 自然结束</li><li>文件不存在 → <code>set_state</code> 时检查并 raise / skip</li><li>文件大小改了（resume 之后被外部追加）→ offset 仍可用，会读到新内容</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ State 用"已读行数"而非 byte offset —— resume 时要重数 N 行； ❌ Multi-file 共用一个 file handle —— 不能并发；每个 file 独立 fh； ❌ Async 实现忘了 await readline() —— 阻塞 event loop； ❌ Worker exception 不捕获 —— gather 抛出 cancels 所有 worker； ❌ Resume 时不重新打开 file —— file handle 失效。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>设计原则：<strong>状态最小化 + O(1) 恢复</strong>。文件用 byte offset；DB cursor 用 last_id；网络 stream 用 sequence number。Coroutine + queue 模式是多源并发标准结构。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果 source 是 Kafka topic？" → state 是 <code>(topic, partition, offset)</code>，resume 时 <code>consumer.seek(...)</code>；"如何在 source 改变时 invalidate state？" → state 加 source hash，set_state 时检查；"如果要保持 order across sources？" → 主从模式，主 source 完才下一个，不并发。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Senior</strong> · OpenAI</div>
+  <div>Design an iterator that can pause and resume its execution state through get_state and set_state methods, extending support to handle multiple files and asynchronous operations. The implementation involves managing composite iterators that can run concurrently while maintaining their individual states. Handle asynchronous iteration using coroutines to enable non-blocking operations across multiple data sources. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (35 条)</h2>
+  <div class="comment">Seriously, what's the expectation here - to come up and code this entire solution in 45 minutes? Seems implausible for someone looking at this for the first time.</div><div class="comment">I'm a bit confused - what are you iterating through? lines of files?</div><div class="comment">Think of it as the iterator is reading the file word by word, So we have to store and get the state so that the iterator can pause or resume reading the file. We have updated the problem description and solution to make it more intuitive.</div><div class="comment">The problem description says lines, not words. Which is it?</div><div class="comment">Reply P PersistentMoccasinTortoise870 Premium • 4个月前</div><div class="comment">Each next() call is still blocking though?</div><div class="comment">Reply S SpecificCoralMole519 Premium • 4个月前</div><div class="comment">With round-robin multiplexing, is this truly concurrent? I assumed "multiple data sources concurrently" to mean that all files would iterate concurrently with no guaranteed ordering of items being fetched.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02rn838o3ttrkt0w.html">← Leetcode 981. Time Based Key-Value Store</a>
+    <a href="cmbskxz3y004n07adimbogre1.html">Unix Cd Command with Symbolic Link Resolution →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

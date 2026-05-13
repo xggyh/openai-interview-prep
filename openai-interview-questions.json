@@ -1,0 +1,442 @@
+[
+  {
+    "title": "Design Online Chess",
+    "slug": "/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "url": "https://www.hellointerview.com/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "type": "System Design",
+    "level": "Mid-level-Staff, Manager-Senior Manager",
+    "reportedUsers": 58,
+    "lastAsked": "Mid May, 2026",
+    "description": "Design a real-time chess platform similar to Chess.com that supports gameplay across multiple devices, move validation, matchmaking, leaderboards, and key features like move undo functionality."
+  },
+  {
+    "title": "Design a Payment System",
+    "slug": "/community/questions/payment-batch-processing/cmavpegdk0067ad08ujhdbrjk",
+    "url": "https://www.hellointerview.com/community/questions/payment-batch-processing/cmavpegdk0067ad08ujhdbrjk",
+    "type": "System Design",
+    "level": "Junior-Staff, Manager-Senior Manager",
+    "reportedUsers": 53,
+    "lastAsked": "Mid May, 2026",
+    "description": "Design a payment system that processes transactions through an external payment service for approval/denial, holds approved amounts, and batches all transactions daily for final processing while handling 10,000 transactions per second."
+  },
+  {
+    "title": "Design a devbox system",
+    "slug": "/community/questions/devbox-cloud-containers/cmlmzqhv503px08adrpjczqzc",
+    "url": "https://www.hellointerview.com/community/questions/devbox-cloud-containers/cmlmzqhv503px08adrpjczqzc",
+    "type": "System Design",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 12,
+    "lastAsked": "Mid May, 2026",
+    "description": "Design a cloud-based development environment system that allows developers to create, configure, and manage isolated development containers with pre-installed tools and dependencies."
+  },
+  {
+    "title": "Disease Spread in Flower Grid",
+    "slug": "/community/questions/flower-disease-spread/cmhykoavb02w108adtuubkyzp",
+    "url": "https://www.hellointerview.com/community/questions/flower-disease-spread/cmhykoavb02w108adtuubkyzp",
+    "type": "Coding",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 12,
+    "lastAsked": "Early May, 2026",
+    "description": "Implement algorithms to simulate and analyze the spread of disease through flowers arranged in a grid structure. Solve multiple related problems involving infection patterns, timing, and containment strategies."
+  },
+  {
+    "title": "KV Store Serialize/Deserialize",
+    "slug": "/community/questions/kv-serialize-deserialize/cm6xw6unw00003b6qz67bpfaj",
+    "url": "https://www.hellointerview.com/community/questions/kv-serialize-deserialize/cm6xw6unw00003b6qz67bpfaj",
+    "type": "Coding",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 34,
+    "lastAsked": "Early May, 2026",
+    "description": "Code a simple KV with serialize/deserialize functions, where key/value are strings and can contain any character."
+  },
+  {
+    "title": "Design ChatGPT",
+    "slug": "/community/questions/chatbot-design/cmg6up3jj030x08adrb73umuk",
+    "url": "https://www.hellointerview.com/community/questions/chatbot-design/cmg6up3jj030x08adrb73umuk",
+    "type": "System Design",
+    "level": "Mid-level-Staff, Manager-Senior Manager",
+    "reportedUsers": 24,
+    "lastAsked": "Early May, 2026",
+    "description": "Design a conversational AI system similar to ChatGPT that allows users to have natural language conversations and receive intelligent responses. Focus on a simple version that can handle basic chat functionality for a limited number of users."
+  },
+  {
+    "title": "Design a credit tracking service for user token balances",
+    "slug": "/community/questions/token-balance-tracking/cmlod3rnm0pj107adhum3e477",
+    "url": "https://www.hellointerview.com/community/questions/token-balance-tracking/cmlod3rnm0pj107adhum3e477",
+    "type": "Coding",
+    "level": "Senior-Staff",
+    "reportedUsers": 11,
+    "lastAsked": "Early May, 2026",
+    "description": "Design a system that tracks user token credits and can efficiently query the number of tokens a user has at any given timestamp. The service should handle credit additions, deductions, and historical balance lookups."
+  },
+  {
+    "title": "Design a crossword puzzle service",
+    "slug": "/community/questions/crossword-solver-service/cmlod05pd0p4z08adovgk5l1h",
+    "url": "https://www.hellointerview.com/community/questions/crossword-solver-service/cmlod05pd0p4z08adovgk5l1h",
+    "type": "System Design",
+    "level": "Senior-Staff",
+    "reportedUsers": 6,
+    "lastAsked": "Early May, 2026",
+    "description": "Design a crossword puzzle solving service that can efficiently solve large crossword puzzles at scale, handling multiple puzzle requests simultaneously."
+  },
+  {
+    "title": "Design a Ci/Cd Pipeline",
+    "slug": "/community/questions/pipeline-tasks-stages/cmazmemqc00013b6wnvg3uz1y",
+    "url": "https://www.hellointerview.com/community/questions/pipeline-tasks-stages/cmazmemqc00013b6wnvg3uz1y",
+    "type": "System Design",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 5,
+    "lastAsked": "Early May, 2026",
+    "description": "Design a CI/CD pipeline system that can execute variable-length tasks organized in stages, where each deployment event triggers a sequence of tasks that must be processed through the pipeline stages."
+  },
+  {
+    "title": "Design a Chat/Messaging System",
+    "slug": "/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "url": "https://www.hellointerview.com/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "type": "System Design",
+    "level": "Senior-Staff",
+    "reportedUsers": 4,
+    "lastAsked": "Late April, 2026",
+    "description": "Design a real-time messaging system like WhatsApp or Facebook Messenger that supports 1:1 and group conversations, message delivery status tracking, user presence features, conversation history, and can scale to handle millions of users."
+  },
+  {
+    "title": "Leetcode 994. Rotting Oranges",
+    "slug": "/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "url": "https://www.hellointerview.com/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Late April, 2026",
+    "description": "Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges."
+  },
+  {
+    "title": "Monster Fight",
+    "slug": "/community/questions/monster-battle-simulator/cmkq1t9uu0fij07adqaw1gapu",
+    "url": "https://www.hellointerview.com/community/questions/monster-battle-simulator/cmkq1t9uu0fij07adqaw1gapu",
+    "type": "Coding",
+    "level": "Senior-Staff",
+    "reportedUsers": 4,
+    "lastAsked": "Mid April, 2026",
+    "description": "Implement a system to simulate combat between monsters with different attributes and abilities. Design the logic to handle turn-based fighting mechanics and determine the winner."
+  },
+  {
+    "title": "Design Slack",
+    "slug": "/community/questions/group-chat-threads/cm6ffodsw00003b6paxwmrf57",
+    "url": "https://www.hellointerview.com/community/questions/group-chat-threads/cm6ffodsw00003b6paxwmrf57",
+    "type": "System Design",
+    "level": "Mid-level-Senior Manager",
+    "reportedUsers": 52,
+    "lastAsked": "Late March, 2026",
+    "description": "Design a messaging platform like Slack that supports real-time messaging through direct messages and channels (public/private), message threads, new message indicators, and persistent message storage."
+  },
+  {
+    "title": "Design Github Actions",
+    "slug": "/community/questions/github-cicd-workflow/cmc7x7xjb00023b6fihsk8apf",
+    "url": "https://www.hellointerview.com/community/questions/github-cicd-workflow/cmc7x7xjb00023b6fihsk8apf",
+    "type": "System Design",
+    "level": "Mid-level-Staff, Manager",
+    "reportedUsers": 63,
+    "lastAsked": "Late March, 2026",
+    "description": "Design a CI/CD platform like GitHub Actions that automatically triggers workflow execution when code is pushed to repositories, with real-time monitoring and observability features. The system should handle 10 million repositories with 10 pushes per second on average, including burst traffic scenarios."
+  },
+  {
+    "title": "In-Memory Database: Implement SQL-Like Operations",
+    "slug": "/community/questions/memory-database-sql/cmbsl00wk004v07adwuorveqo",
+    "url": "https://www.hellointerview.com/community/questions/memory-database-sql/cmbsl00wk004v07adwuorveqo",
+    "type": "Coding",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 11,
+    "lastAsked": "Late March, 2026",
+    "description": "Build an in-memory database that supports basic SQL-like operations including insert, query with WHERE clauses, and ORDER BY functionality. Implement efficient data storage structures, query parsing for condition evaluation, and inverted indexes to optimize search performance."
+  },
+  {
+    "title": "Leetcode 271. Encode and Decode Strings",
+    "slug": "/community/questions/encode-decode-strings/cm5eh7nrh04uj838od5a18zxf",
+    "url": "https://www.hellointerview.com/community/questions/encode-decode-strings/cm5eh7nrh04uj838od5a18zxf",
+    "type": "Coding",
+    "level": "Intern, Mid-level-Senior",
+    "reportedUsers": 3,
+    "lastAsked": "Late March, 2026",
+    "description": "Design a pair of functions to serialize a list of strings into a single string and deserialize it back losslessly, handling arbitrary characters and empty strings so decoding always reproduces the original list. The solution should be stateless, robust to delimiter collisions, and efficient in time/space."
+  },
+  {
+    "title": "IPv4 Address Iterator",
+    "slug": "/community/questions/ipv4-address-iterator/cmg8pwhzz00hh08adsezwfgvw",
+    "url": "https://www.hellointerview.com/community/questions/ipv4-address-iterator/cmg8pwhzz00hh08adsezwfgvw",
+    "type": "Coding",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 4,
+    "lastAsked": "Early March, 2026",
+    "description": "Implement an iterator that traverses IPv4 addresses starting from a given address, supporting forward iteration, reverse iteration, and CIDR block iteration."
+  },
+  {
+    "title": "Design a prompt playground",
+    "slug": "/community/questions/prompt-playground/cmjd4xmkg04nf08adwd3m0bvs",
+    "url": "https://www.hellointerview.com/community/questions/prompt-playground/cmjd4xmkg04nf08adwd3m0bvs",
+    "type": "System Design",
+    "level": "Senior",
+    "reportedUsers": 2,
+    "lastAsked": "Early March, 2026",
+    "description": "Design a prompt playground platform that allows users to create, test, and iterate on AI prompts with different models and parameters."
+  },
+  {
+    "title": "What's your biggest failure",
+    "slug": "/community/questions/biggest-failure/cm6ffozaw00023b6pwf95drvs",
+    "url": "https://www.hellointerview.com/community/questions/biggest-failure/cm6ffozaw00023b6pwf95drvs",
+    "type": "People Management",
+    "level": "Mid-level-Senior, Manager",
+    "reportedUsers": 5,
+    "lastAsked": "Early March, 2026",
+    "description": ""
+  },
+  {
+    "title": "Design CoderPad",
+    "slug": "/community/questions/coding-interview-platform/cmhi1hhbh05wt08ad2knqdyh2",
+    "url": "https://www.hellointerview.com/community/questions/coding-interview-platform/cmhi1hhbh05wt08ad2knqdyh2",
+    "type": "System Design",
+    "level": "Senior-Staff",
+    "reportedUsers": 4,
+    "lastAsked": "Mid February, 2026",
+    "description": "Design a collaborative coding platform similar to CoderPad that allows users to write, edit, and execute code in real-time with features like syntax highlighting, multiple language support, and live collaboration for technical interviews."
+  },
+  {
+    "title": "Leetcode 1797. Design Authentication Manager",
+    "slug": "/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4",
+    "url": "https://www.hellointerview.com/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4",
+    "type": "Coding",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid February, 2026",
+    "description": "Manage tokens that expire timeToLive seconds after creation/renewal, supporting generate, renew (only if the token is still unexpired), and countUnexpiredTokens (with expirations at time t processed before actions at t). The core challenge is efficiently tracking and removing expired tokens — typically handled with a token->expiry map plus a min-heap/queue for lazy expiration cleanup."
+  },
+  {
+    "title": "Authentication Manager",
+    "slug": "/community/questions/authentication-session/cmlod4ttu0pa608ad89vm8qkj",
+    "url": "https://www.hellointerview.com/community/questions/authentication-session/cmlod4ttu0pa608ad89vm8qkj",
+    "type": "Coding",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid February, 2026",
+    "description": "Design and implement an authentication manager system that can handle user login, logout, and session management operations. The system should validate credentials and maintain active user sessions with appropriate security measures."
+  },
+  {
+    "title": "Design a URL Shortener",
+    "slug": "/community/questions/url-shortener-design/cm5svnaco01dqxszbok7e1lk1",
+    "url": "https://www.hellointerview.com/community/questions/url-shortener-design/cm5svnaco01dqxszbok7e1lk1",
+    "type": "System Design",
+    "level": "Senior-Staff, Senior Manager",
+    "reportedUsers": 6,
+    "lastAsked": "Early February, 2026",
+    "description": "Design a URL shortening service similar to TinyURL that allows users to convert long URLs into short, shareable links and manage their shortened URLs."
+  },
+  {
+    "title": "N- ary tree",
+    "slug": "/community/questions/cluster-node-count/cmfc459e4046608adgfjpzzio",
+    "url": "https://www.hellointerview.com/community/questions/cluster-node-count/cmfc459e4046608adgfjpzzio",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 2,
+    "lastAsked": "Early February, 2026",
+    "description": "Each node of the tree represents a real machine in a cluster. Each machine in the cluster can only communicate with its parent and child nodes through \"nodeld\" using the following two methods: sendAsyncRequest(toNodeId. message) and receiveRequest(fromNodeId, message) . When a request reaches a machine, the receiveRequest method of that machine will be triggered automatically. Suppose root machine (node 1 in the above tree) needs to have the ability to count and print out the total number of machines in the cluster, can you implement the node/machine class and its receiveRequest(fromNodeId, message) method to handle this case? There's no need to implement sendAsyncRequest (toNodeId, message), but you can call this method when needed."
+  },
+  {
+    "title": "Why do you want to work at OpenAI?",
+    "slug": "/community/questions/openai-work-motivation/cmhf5kjws00vx08ad4b1e37z2",
+    "url": "https://www.hellointerview.com/community/questions/openai-work-motivation/cmhf5kjws00vx08ad4b1e37z2",
+    "type": "Behavioral",
+    "level": "Mid-level-Senior, Principal",
+    "reportedUsers": 6,
+    "lastAsked": "Late January, 2026",
+    "description": ""
+  },
+  {
+    "title": "Monster Game",
+    "slug": "/community/questions/monster-game-system/cmkq1swdr0fh807adwlyp760o",
+    "url": "https://www.hellointerview.com/community/questions/monster-game-system/cmkq1swdr0fh807adwlyp760o",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Late January, 2026",
+    "description": "Design and implement a monster game system with appropriate data structures and game mechanics. Focus on object-oriented design principles and efficient algorithms for game state management."
+  },
+  {
+    "title": "Advent of Code Day 7 Variation",
+    "slug": "/community/questions/advent-code-day7/cmjrr2k5v07zc08ado2pqgd2l",
+    "url": "https://www.hellointerview.com/community/questions/advent-code-day7/cmjrr2k5v07zc08ado2pqgd2l",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Late December, 2025",
+    "description": "Solve a modified version of Advent of Code Day 7 problem. Implement an algorithm to handle the specific requirements and constraints of this coding challenge."
+  },
+  {
+    "title": "Design a Metrics Aggregator",
+    "slug": "/community/questions/metrics-aggregator/cm78h7tyk02kgl7b16admv2nz",
+    "url": "https://www.hellointerview.com/community/questions/metrics-aggregator/cm78h7tyk02kgl7b16admv2nz",
+    "type": "System Design",
+    "level": "Senior",
+    "reportedUsers": 2,
+    "lastAsked": "Late December, 2025",
+    "description": "Design a metrics aggregation system that collects count-based metrics (like user signups, system errors, ad clicks) from services via a client library and displays them as histogram data on a dashboard. The system should support querying aggregated metrics within specific time frames for monitoring and analytics purposes."
+  },
+  {
+    "title": "Design a Webhook Callback System",
+    "slug": "/community/questions/webhook-callbacks/cm6i9kl1h00px6jlds6pn1hi5",
+    "url": "https://www.hellointerview.com/community/questions/webhook-callbacks/cm6i9kl1h00px6jlds6pn1hi5",
+    "type": "System Design",
+    "level": "Mid-level-Staff",
+    "reportedUsers": 10,
+    "lastAsked": "Mid December, 2025",
+    "description": "Design a webhook system that allows applications to register callback URLs and automatically receive HTTP POST notifications when specific events occur in other applications."
+  },
+  {
+    "title": "Design a Rate Limiter",
+    "slug": "/community/questions/distributed-rate-limiter/cm6i9mhd800nz41cd0xx20r8p",
+    "url": "https://www.hellointerview.com/community/questions/distributed-rate-limiter/cm6i9mhd800nz41cd0xx20r8p",
+    "type": "System Design",
+    "level": "Senior, Senior Manager",
+    "reportedUsers": 3,
+    "lastAsked": "Early November, 2025",
+    "description": "Design a rate limiting system that can control and throttle API requests to prevent system overload and ensure fair resource allocation. The system should be able to handle distributed scenarios, track requests across multiple servers, and enforce limits per user/client or between internal services to prevent abuse and maintain system performance."
+  },
+  {
+    "title": "Design YouTube",
+    "slug": "/community/questions/creator-viewer-paths/cm6wu2x3y0000356pl299toa0",
+    "url": "https://www.hellointerview.com/community/questions/creator-viewer-paths/cm6wu2x3y0000356pl299toa0",
+    "type": "System Design",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Late October, 2025",
+    "description": "Design a video streaming platform like YouTube where creators can upload and share videos, viewers can stream content on-demand, and users receive personalized recommendations based on their viewing history and preferences."
+  },
+  {
+    "title": "Leetcode 981. Time Based Key-Value Store",
+    "slug": "/community/questions/time-key-value-store/cm5eguhad02rn838o3ttrkt0w",
+    "url": "https://www.hellointerview.com/community/questions/time-key-value-store/cm5eguhad02rn838o3ttrkt0w",
+    "type": "Coding",
+    "level": "Junior, Senior-Staff",
+    "reportedUsers": 3,
+    "lastAsked": "Mid October, 2025",
+    "description": "Design a time-based key-value store that records multiple values per key with timestamps and returns the value whose timestamp is the largest <= the queried timestamp. With timestamps per key strictly increasing and up to 2e5 operations, the typical solution uses per-key ordered timestamp/value lists and binary search to find the floor timestamp efficiently."
+  },
+  {
+    "title": "Resumable Iterator",
+    "slug": "/community/questions/resumable-iterator/cmbskz7ck004r07ad6f1jxlni",
+    "url": "https://www.hellointerview.com/community/questions/resumable-iterator/cmbskz7ck004r07ad6f1jxlni",
+    "type": "Coding",
+    "level": "Mid-level-Senior",
+    "reportedUsers": 2,
+    "lastAsked": "Early October, 2025",
+    "description": "Design an iterator that can pause and resume its execution state through get_state and set_state methods, extending support to handle multiple files and asynchronous operations. The implementation involves managing composite iterators that can run concurrently while maintaining their individual states. Handle asynchronous iteration using coroutines to enable non-blocking operations across multiple data sources."
+  },
+  {
+    "title": "Unix Cd Command with Symbolic Link Resolution",
+    "slug": "/community/questions/unix-cd-resolution/cmbskxz3y004n07adimbogre1",
+    "url": "https://www.hellointerview.com/community/questions/unix-cd-resolution/cmbskxz3y004n07adimbogre1",
+    "type": "Coding",
+    "level": "Senior-Staff",
+    "reportedUsers": 2,
+    "lastAsked": "Late September, 2025",
+    "description": "Simulate the Unix cd command by implementing path resolution for relative paths ('.' and '..'), absolute paths, and symbolic links while detecting potential cycles. Use stack-based directory traversal for path management and depth-first search to handle symbolic link mappings and cycle detection. Handle edge cases including redundant slashes and invalid path references."
+  },
+  {
+    "title": "Leetcode 2408. Design SQL",
+    "slug": "/community/questions/design-sql-2408/cm5eguhah03va838ozuanzsde",
+    "url": "https://www.hellointerview.com/community/questions/design-sql-2408/cm5eguhah03va838ozuanzsde",
+    "type": "Coding",
+    "level": "Senior-Staff",
+    "reportedUsers": 4,
+    "lastAsked": "Late August, 2025",
+    "description": "Given one or more relational tables and a target result set, write a SQL query that produces the specified output—typically requiring joins, grouping/aggregation, conditional logic, and often window functions for per-group ordering or selection. Pay attention to edge cases such as NULLs, duplicates, and efficient use of subqueries or indexes."
+  },
+  {
+    "title": "Tell me about your job and role",
+    "slug": "/community/questions/describe-job-role/cm6ffodsw00013b6pt5izxwps",
+    "url": "https://www.hellointerview.com/community/questions/describe-job-role/cm6ffodsw00013b6pt5izxwps",
+    "type": "People Management",
+    "level": "Manager",
+    "reportedUsers": 2,
+    "lastAsked": "Late August, 2025",
+    "description": ""
+  },
+  {
+    "title": "Design Yelp",
+    "slug": "/community/questions/review-platform/cm5oehnrb0002436gh9b3uzx3",
+    "url": "https://www.hellointerview.com/community/questions/review-platform/cm5oehnrb0002436gh9b3uzx3",
+    "type": "System Design",
+    "level": "Senior-Staff, Manager",
+    "reportedUsers": 6,
+    "lastAsked": "Early August, 2025",
+    "description": "Design a location-based service like Yelp that allows users to search for nearby businesses using latitude/longitude coordinates, with support for global scale and high query volumes."
+  },
+  {
+    "title": "Leetcode 253. Meeting Rooms II",
+    "slug": "/community/questions/meeting-rooms-2/cm5eh7nrh04u1838orn6jicpz",
+    "url": "https://www.hellointerview.com/community/questions/meeting-rooms-2/cm5eh7nrh04u1838orn6jicpz",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Early June, 2025",
+    "description": "Given a list of meeting time intervals, determine the minimum number of conference rooms required so that no meetings overlap. The core challenge is computing the maximum number of concurrent intervals (e.g., via sorting with a min-heap of end times or a sweep-line of start/end events)."
+  },
+  {
+    "title": "Multithreaded Web Crawler",
+    "slug": "/community/questions/multithreaded-web-crawler/cmbsl2nhd005107adsfu8ohme",
+    "url": "https://www.hellointerview.com/community/questions/multithreaded-web-crawler/cmbsl2nhd005107adsfu8ohme",
+    "type": "Coding",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid April, 2025",
+    "description": "Create a web crawler that starts from a given URL and crawls all reachable URLs within the same domain using breadth-first search traversal. Implement multithreading to fetch URLs concurrently for improved efficiency while ensuring thread safety when accessing shared resources like the URL queue and visited set."
+  },
+  {
+    "title": "Design a Chatbot with Multiple Threads",
+    "slug": "/community/questions/chatbot-thread-management/cmac1dd1s0049ad08o29ajxbs",
+    "url": "https://www.hellointerview.com/community/questions/chatbot-thread-management/cmac1dd1s0049ad08o29ajxbs",
+    "type": "Mobile System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Early March, 2025",
+    "description": "Create a design for a chatbot system that can handle multiple conversation threads simultaneously. Consider aspects such as user interaction, thread management, and scalability."
+  },
+  {
+    "title": "Tell me a time you helped an engineer promote",
+    "slug": "/community/questions/engineer-promotion-story/cm6ffp48000033b6prbe7nexz",
+    "url": "https://www.hellointerview.com/community/questions/engineer-promotion-story/cm6ffp48000033b6prbe7nexz",
+    "type": "People Management",
+    "level": "Manager",
+    "reportedUsers": 1,
+    "lastAsked": "Early January, 2025",
+    "description": ""
+  },
+  {
+    "title": "What are the signals you're looking for if an engineer is ready for a promo",
+    "slug": "/community/questions/engineer-promo-signals/cm6ffpfij00043b6pben6f0r8",
+    "url": "https://www.hellointerview.com/community/questions/engineer-promo-signals/cm6ffpfij00043b6pben6f0r8",
+    "type": "People Management",
+    "level": "Manager",
+    "reportedUsers": 1,
+    "lastAsked": "Early January, 2025",
+    "description": ""
+  },
+  {
+    "title": "Design Spreadsheet with Formulas",
+    "slug": "/community/questions/spreadsheet-formulas-graph/cmbsl1b4r004x07ad388lxwci",
+    "url": "https://www.hellointerview.com/community/questions/spreadsheet-formulas-graph/cmbsl1b4r004x07ad388lxwci",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Mid December, 2024",
+    "description": "Design a spreadsheet API where cells can contain values or formulas that reference other cells, automatically handling updates when dependencies change. Implement dependency graph tracking to manage cell relationships, cycle detection to prevent infinite loops from circular references, and memoization to cache computed values for efficient recalculation."
+  },
+  {
+    "title": "Design a Foursquare-like App",
+    "slug": "/community/questions/nearest-pois-api/cm717jaa200danzcu8goffalw",
+    "url": "https://www.hellointerview.com/community/questions/nearest-pois-api/cm717jaa200danzcu8goffalw",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid August, 2024",
+    "description": "Design a location-based mobile app similar to Foursquare that allows users to discover nearby Points of Interest (POIs) by submitting their coordinates and receiving a list of the nearest locations."
+  }
+]

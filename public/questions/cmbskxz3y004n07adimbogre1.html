@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unix Cd Command with Symbolic Link Resolution · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Unix Cd Command with Symbolic Link Resolution</div>
+  <h1>Unix Cd Command with Symbolic Link Resolution</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+    <span>📋 2 人报告</span>
+    <span>🕒 最近：Late September, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/unix-cd-resolution/cmbskxz3y004n07adimbogre1" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Simulate the Unix cd command by implementing path resolution for relative paths ('.' and '..'), absolute paths, and symbolic links while detecting potential cycles. Use stack-based directory traversal for path management and depth-first search to handle symbolic link mappings and cycle detection. Handle edge cases including redundant slashes and invalid path references.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现 Unix <code>cd</code> 命令的路径解析：支持<strong>相对路径</strong>（<code>.</code>、<code>..</code>）、<strong>绝对路径</strong>（<code>/foo/bar</code>）、<strong>符号链接（symlink）</strong>，并检测循环（symlink loop）。</p>
+<p>经典系统编程题。OpenAI Senior-Staff 级。考点：<strong>栈 + DFS + 状态管理</strong>。</p>
+<h3>题目语义</h3>
+<pre class="language-python"><code class="language-python">fs = FileSystem({
+    '/home/user': ['docs', 'projects'],
+    '/home/user/docs': [],
+    '/var/log': [],
+})
+fs.create_symlink('/home/user/projects/code', '/var/log')
+fs.create_symlink('/a', '/b')
+fs.create_symlink('/b', '/a')   # cycle
+
+cd = CDCommand(fs)
+print(cd.resolve('/home/user/'))                     # '/home/user'
+print(cd.resolve('/home/user/./../user/docs/'))      # '/home/user/docs'
+print(cd.resolve('/home/user/projects/code'))        # '/var/log' (symlink resolved)
+cd.resolve('/a')   # raises CycleError</code></pre>
+<h3>解题思路</h3>
+<ol><li><strong>绝对 vs 相对</strong>：以 <code>/</code> 开头是绝对（从 root 开始）；否则相对当前目录</li><li><strong>栈处理 <code>.</code> / <code>..</code></strong>：把路径按 <code>/</code> 切，逐段处理 —— <code>.</code> 跳过；<code>..</code> pop 栈顶；普通名 push</li><li><strong>Symlink</strong>：解析过程中遇到 symlink 就递归 resolve 其 target</li><li><strong>循环检测</strong>：每次 resolve 一个 symlink 时把它加入 <code>visited</code> set；resolve 完成移除（DFS 标准做法）</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from dataclasses import dataclass, field
+
+class CycleError(Exception):
+    pass
+
+@dataclass
+class FileSystem:
+    """简化 FS：dirs 是 (path -&gt; children) ，symlinks 是 (path -&gt; target)"""
+    dirs: dict[str, list[str]] = field(default_factory=dict)
+    symlinks: dict[str, str] = field(default_factory=dict)
+
+    def create_dir(self, path: str):
+        self.dirs[path] = self.dirs.get(path, [])
+        # 也保证父目录里登记 child name
+        parent, _, name = path.rpartition('/')
+        parent = parent or '/'
+        if parent in self.dirs and name not in self.dirs[parent]:
+            self.dirs[parent].append(name)
+
+    def create_symlink(self, link_path: str, target_path: str):
+        self.symlinks[link_path] = target_path
+
+    def is_dir(self, path: str) -&gt; bool:
+        return path in self.dirs
+
+    def is_symlink(self, path: str) -&gt; bool:
+        return path in self.symlinks
+
+
+class CDCommand:
+    """实现 cd 路径解析，含 symlink + cycle detection"""
+
+    MAX_SYMLINK_DEPTH = 40   # POSIX 标准
+
+    def __init__(self, fs: FileSystem, cwd: str = '/'):
+        self.fs = fs
+        self.cwd = cwd
+
+    def resolve(self, path: str) -&gt; str:
+        """返回解析后的绝对路径"""
+        return self._resolve_path(path, depth=0, visited=set())
+
+    def _resolve_path(self, path: str, depth: int, visited: set) -&gt; str:
+        if depth &gt; self.MAX_SYMLINK_DEPTH:
+            raise CycleError(f"too many levels of symbolic links: {path}")
+
+        # 1. 转绝对路径
+        if path.startswith('/'):
+            abs_path = path
+        else:
+            abs_path = self.cwd.rstrip('/') + '/' + path
+
+        # 2. 切段处理 . / ..
+        parts = abs_path.split('/')
+        stack: list[str] = []   # final path components
+        for part in parts:
+            if part == '' or part == '.':
+                continue
+            if part == '..':
+                if stack:
+                    stack.pop()
+                continue
+            # 普通名字
+            stack.append(part)
+            # 检查这一级是否是 symlink
+            so_far = '/' + '/'.join(stack)
+            if self.fs.is_symlink(so_far):
+                if so_far in visited:
+                    raise CycleError(f"symlink cycle at {so_far}")
+                target = self.fs.symlinks[so_far]
+                visited.add(so_far)
+                resolved_target = self._resolve_path(target, depth + 1, visited)
+                visited.discard(so_far)
+                # 用 resolved target 替换栈
+                stack = resolved_target.strip('/').split('/') if resolved_target != '/' else []
+
+        result = '/' + '/'.join(stack) if stack else '/'
+        return result
+
+    def cd(self, path: str) -&gt; None:
+        new = self.resolve(path)
+        if not self.fs.is_dir(new):
+            raise FileNotFoundError(f"no such directory: {new}")
+        self.cwd = new</code></pre>
+<h3>复杂度</h3>
+<ul><li>每段路径 O(1) push/pop 栈</li><li>Symlink resolve 递归深度 ≤ MAX_SYMLINK_DEPTH</li><li>总时间 <strong>O(P + L)</strong>，P = 总路径段数，L = 总 symlink resolve 次数（深度不超 40）</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 栈处理 <code>.</code> / <code>..</code></h4>
+<p><code>.</code> 跳过；<code>..</code> pop；普通 push。<strong>注意 root 上 <code>..</code> 不要 pop 到负</strong>（保持空栈，意味着仍在 <code>/</code>）。</p>
+<h4>2. Symlink 解析时机</h4>
+<p>每 push 一段后立即检查"当前累积路径是否 symlink"。这跟"路径最后再统一替换" 不同 —— 一个 symlink 在路径中间也要展开。</p>
+<p>例：<code>/foo/bar/baz</code>，如果 <code>/foo</code> 是 symlink 指向 <code>/x/y</code>，那应该展开成 <code>/x/y/bar/baz</code> 再继续 resolve。</p>
+<h4>3. Cycle Detection</h4>
+<p>DFS 模式：进入一个 symlink 时加 visited，出来时移除。这跟"图 DFS 检环"完全一致。</p>
+<p><strong>还有一种更宽松</strong>：用 depth counter，超 40 抛错（POSIX 标准）。两者结合最稳。</p>
+<h4>4. Symlink target 也可以是相对路径</h4>
+<p><code>ln -s ../foo bar</code> —— target 是 <code>../foo</code>。我代码里 <code>_resolve_path(target, ...)</code> 递归 resolve target，target 也走完整解析（含 .. 处理）。</p>
+<h4>5. Symlink 的当前目录</h4>
+<p>按 POSIX 语义，symlink target 的相对路径<strong>基于 symlink 所在目录</strong>，不是 cwd。例：<code>/x/link → ../foo</code>，等于 <code>/x/../foo</code> = <code>/foo</code>。</p>
+<p>更精确实现：</p>
+<pre class="language-python"><code class="language-python">target = self.fs.symlinks[so_far]
+if not target.startswith('/'):
+    # 相对 symlink 所在目录
+    parent = '/' + '/'.join(stack[:-1])
+    target = parent + '/' + target</code></pre>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">cd = CDCommand(fs)
+assert cd.resolve('/') == '/'
+assert cd.resolve('//foo//bar') == '/foo/bar'     # 多 slash
+assert cd.resolve('/foo/.././bar/..') == '/'      # 全 cancel
+assert cd.resolve('..') == '/'                    # 在 root cd ..
+fs.create_symlink('/sl', '/foo/bar')
+assert cd.resolve('/sl') == '/foo/bar'
+fs.create_symlink('/sl2', '/sl/baz')
+assert cd.resolve('/sl2') == '/foo/bar/baz'
+fs.create_symlink('/loop1', '/loop2')
+fs.create_symlink('/loop2', '/loop1')
+try:
+    cd.resolve('/loop1')
+except CycleError:
+    pass  # expected</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 路径 split 不过滤空串 —— 多 slash 时出错； ❌ <code>..</code> 在 root pop 到负 —— 应保持空栈； ❌ 只在最后整路径完毕才查 symlink —— 中间段是 symlink 不展开； ❌ Symlink target 当绝对路径 —— 应判断 startswith('/')； ❌ Cycle detection 用全局 visited 不移除 —— 二次访问被误判 cycle；正确做法 DFS visited add/remove； ❌ 没 depth 上限 —— 复杂 chain 可能 stack overflow。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三个核心：(1) <strong>栈处理 path normalization</strong>；(2) <strong>DFS visited add/remove 检测 cycle</strong>；(3) <strong>每段都查 symlink（不是只看末段）</strong>。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 <code>~</code>（home 目录）？" → 在 split 前 expand。"如何处理大小写不敏感？" → 比较时 lower()。"如何并发安全？" → fs 操作加 RWLock。"如何处理 hard link？" → 不需要特殊处理，hard link 在 inode 层；cd 层面看到的 path 各自独立。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (12 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>Simplified version of this</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  <div>I was was asked this. I didn't have enough time to get to the cycle detection part 🥲</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Given the present working directory and the cd path, return the final path · e.g. · pwd: /foo/bar cd: boo -&gt; /foo/bar/boo · pwd: /foo/bar cd: /boo -&gt; /boo · pwd: /foo/bar cd: ../boo -&gt; /foo/boo · pwd: /foo/bar cd: boo/././doe -&gt; /foo/bar/boo/doe</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Simulate the Unix cd command by implementing path resolution for relative paths (. and ..), absolute paths, and symbolic links while detecting potential cycles. The solution uses stack-based directory traversal for path management and depth-first search to handle symbolic link mappings and cycle detection. Handle edge cases including redundant slashes and invalid path references. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (22 条)</h2>
+  <div class="comment">I think we should check if resolvedPath is symlink or not inside the for loop. In that way, we check if each component matches to symlink and start from there accordingly.</div><div class="comment">Reply S SevenEight9 Premium • 3个月前</div><div class="comment">Yeah. This is also how the unix cd command works. This would make the solution O((n + m)^2) right?</div><div class="comment">Reply Ben Makusha Premium • 2个月前 • edited 2个月前</div><div class="comment">Got this question today and this is how I went about it:</div><div class="comment">public class Solution { public String resolvePath(String cwd, String cd) { Deque&lt;String&gt; stack = new ArrayDeque&lt;&gt;();</div><div class="comment">for (String s : cwd.split("/")) if (!s.isEmpty()) stack.push(s);</div><div class="comment">for (String s : cd.split("/")) { if (s.equals("..")) { if (!stack.isEmpty()) stack.pop(); } else if (!s.isEmpty() &amp;&amp; !s.equals(".")) { stack.push(s); } }</div>
+</section>
+  <section class="section"><h2>外部链接</h2><ul><li><a href="https://leetcode.com/problems/simplify-path/" target="_blank" rel="noopener">https://leetcode.com/problems/simplify-path/</a></li></ul></section>
+
+  <div class="nav-footer">
+    <a href="cmbskz7ck004r07ad6f1jxlni.html">← Resumable Iterator</a>
+    <a href="cm5eguhah03va838ozuanzsde.html">Leetcode 2408. Design SQL →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

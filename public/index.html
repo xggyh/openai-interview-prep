@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenAI 面试题准备 · Hello Interview 整理</title>
+<meta name="description" content="OpenAI 全岗位 44 道面试题 · 题面 + 中文思路解析 · Python 解法 · System Design 架构思路">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta">来源：hellointerview.com · 44 题</div>
+  </div>
+</header>
+<main class="container">
+  <div class="intro">
+    <h2>OpenAI 全岗位面试题（共 44 题）</h2>
+    <p>题目来自 hellointerview.com 社区的真实候选人报告，按最近问询时间倒序排列。每题包含原始题面、中文思路解析、System Design 思路 / Python 解法、易错点。</p>
+    <div class="stats"><span class="stat"><strong>20</strong> Coding</span> <span class="stat"><strong>18</strong> System Design</span> <span class="stat"><strong>4</strong> People Management</span> <span class="stat"><strong>1</strong> Behavioral</span> <span class="stat"><strong>1</strong> Mobile System Design</span></div>
+  </div>
+
+  <div class="filter-bar">
+    <span class="filter-label">按类型筛选：</span>
+    <button class="active" data-filter="all">全部 (44)</button><button data-filter="Coding">Coding (20)</button><button data-filter="System Design">System Design (18)</button><button data-filter="People Management">People Management (4)</button><button data-filter="Behavioral">Behavioral (1)</button><button data-filter="Mobile System Design">Mobile System Design (1)</button>
+  </div>
+
+  <div class="q-grid" id="q-grid">
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff, Manager-Senior Manager">
+  <a class="q-title" href="questions/cm4szywgj003ivszmblm3pmoa.html">Design Online Chess</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff, Manager-Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 58 人报告 · 🕒 Mid May, 2026</div>
+  <div class="q-desc">Design a real-time chess platform similar to Chess.com that supports gameplay across multiple devices, move validation, matchmaking, leaderboards, and key features like move undo…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Junior-Staff, Manager-Senior Manager">
+  <a class="q-title" href="questions/cmavpegdk0067ad08ujhdbrjk.html">Design a Payment System</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Junior-Staff, Manager-Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 53 人报告 · 🕒 Mid May, 2026</div>
+  <div class="q-desc">Design a payment system that processes transactions through an external payment service for approval/denial, holds approved amounts, and batches all transactions daily for final…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cmlmzqhv503px08adrpjczqzc.html">Design a devbox system</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 12 人报告 · 🕒 Mid May, 2026</div>
+  <div class="q-desc">Design a cloud-based development environment system that allows developers to create, configure, and manage isolated development containers with pre-installed tools and…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cmhykoavb02w108adtuubkyzp.html">Disease Spread in Flower Grid</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 12 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Implement algorithms to simulate and analyze the spread of disease through flowers arranged in a grid structure. Solve multiple related problems involving infection patterns,…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cm6xw6unw00003b6qz67bpfaj.html">KV Store Serialize/Deserialize</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 34 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Code a simple KV with serialize/deserialize functions, where key/value are strings and can contain any character.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff, Manager-Senior Manager">
+  <a class="q-title" href="questions/cmg6up3jj030x08adrb73umuk.html">Design ChatGPT</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff, Manager-Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 24 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Design a conversational AI system similar to ChatGPT that allows users to have natural language conversations and receive intelligent responses. Focus on a simple version that can…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cmlod3rnm0pj107adhum3e477.html">Design a credit tracking service for user token balances</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 11 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Design a system that tracks user token credits and can efficiently query the number of tokens a user has at any given timestamp. The service should handle credit additions,…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cmlod05pd0p4z08adovgk5l1h.html">Design a crossword puzzle service</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 6 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Design a crossword puzzle solving service that can efficiently solve large crossword puzzles at scale, handling multiple puzzle requests simultaneously.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cmazmemqc00013b6wnvg3uz1y.html">Design a Ci/Cd Pipeline</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 5 人报告 · 🕒 Early May, 2026</div>
+  <div class="q-desc">Design a CI/CD pipeline system that can execute variable-length tasks organized in stages, where each deployment event triggers a sequence of tasks that must be processed through…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cm4szunov00303g2e2gomqo2j.html">Design a Chat/Messaging System</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 4 人报告 · 🕒 Late April, 2026</div>
+  <div class="q-desc">Design a real-time messaging system like WhatsApp or Facebook Messenger that supports 1:1 and group conversations, message delivery status tracking, user presence features,…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cm5eguhad02s0838ouei0wtvs.html">Leetcode 994. Rotting Oranges</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Late April, 2026</div>
+  <div class="q-desc">Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute,…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cmkq1t9uu0fij07adqaw1gapu.html">Monster Fight</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 4 人报告 · 🕒 Mid April, 2026</div>
+  <div class="q-desc">Implement a system to simulate combat between monsters with different attributes and abilities. Design the logic to handle turn-based fighting mechanics and determine the winner.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Senior Manager">
+  <a class="q-title" href="questions/cm6ffodsw00003b6paxwmrf57.html">Design Slack</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 52 人报告 · 🕒 Late March, 2026</div>
+  <div class="q-desc">Design a messaging platform like Slack that supports real-time messaging through direct messages and channels (public/private), message threads, new message indicators, and…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff, Manager">
+  <a class="q-title" href="questions/cmc7x7xjb00023b6fihsk8apf.html">Design Github Actions</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff, Manager</span>
+  </div>
+  <div class="q-meta">📋 63 人报告 · 🕒 Late March, 2026</div>
+  <div class="q-desc">Design a CI/CD platform like GitHub Actions that automatically triggers workflow execution when code is pushed to repositories, with real-time monitoring and observability…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cmbsl00wk004v07adwuorveqo.html">In-Memory Database: Implement SQL-Like Operations</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 11 人报告 · 🕒 Late March, 2026</div>
+  <div class="q-desc">Build an in-memory database that supports basic SQL-like operations including insert, query with WHERE clauses, and ORDER BY functionality. Implement efficient data storage…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Intern, Mid-level-Senior">
+  <a class="q-title" href="questions/cm5eh7nrh04uj838od5a18zxf.html">Leetcode 271. Encode and Decode Strings</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Intern, Mid-level-Senior</span>
+  </div>
+  <div class="q-meta">📋 3 人报告 · 🕒 Late March, 2026</div>
+  <div class="q-desc">Design a pair of functions to serialize a list of strings into a single string and deserialize it back losslessly, handling arbitrary characters and empty strings so decoding…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cmg8pwhzz00hh08adsezwfgvw.html">IPv4 Address Iterator</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 4 人报告 · 🕒 Early March, 2026</div>
+  <div class="q-desc">Implement an iterator that traverses IPv4 addresses starting from a given address, supporting forward iteration, reverse iteration, and CIDR block iteration.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior">
+  <a class="q-title" href="questions/cmjd4xmkg04nf08adwd3m0bvs.html">Design a prompt playground</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Early March, 2026</div>
+  <div class="q-desc">Design a prompt playground platform that allows users to create, test, and iterate on AI prompts with different models and parameters.</div>
+</div>
+<div class="q-card" data-type="People Management" data-level="Mid-level-Senior, Manager">
+  <a class="q-title" href="questions/cm6ffozaw00023b6pwf95drvs.html">What's your biggest failure</a>
+  <div class="q-tags">
+    <span class="tag tag-people-management">People Management</span>
+    <span class="tag tag-level">Mid-level-Senior, Manager</span>
+  </div>
+  <div class="q-meta">📋 5 人报告 · 🕒 Early March, 2026</div>
+  <div class="q-desc"></div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cmhi1hhbh05wt08ad2knqdyh2.html">Design CoderPad</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 4 人报告 · 🕒 Mid February, 2026</div>
+  <div class="q-desc">Design a collaborative coding platform similar to CoderPad that allows users to write, edit, and execute code in real-time with features like syntax highlighting, multiple…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Staff">
+  <a class="q-title" href="questions/cm5eguhaf03eb838o3e9x2gu4.html">Leetcode 1797. Design Authentication Manager</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Mid February, 2026</div>
+  <div class="q-desc">Manage tokens that expire timeToLive seconds after creation/renewal, supporting generate, renew (only if the token is still unexpired), and countUnexpiredTokens (with expirations…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Staff">
+  <a class="q-title" href="questions/cmlod4ttu0pa608ad89vm8qkj.html">Authentication Manager</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Mid February, 2026</div>
+  <div class="q-desc">Design and implement an authentication manager system that can handle user login, logout, and session management operations. The system should validate credentials and maintain…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior-Staff, Senior Manager">
+  <a class="q-title" href="questions/cm5svnaco01dqxszbok7e1lk1.html">Design a URL Shortener</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff, Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 6 人报告 · 🕒 Early February, 2026</div>
+  <div class="q-desc">Design a URL shortening service similar to TinyURL that allows users to convert long URLs into short, shareable links and manage their shortened URLs.</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cmfc459e4046608adgfjpzzio.html">N- ary tree</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Early February, 2026</div>
+  <div class="q-desc">Each node of the tree represents a real machine in a cluster. Each machine in the cluster can only communicate with its parent and child nodes through "nodeld" using the following…</div>
+</div>
+<div class="q-card" data-type="Behavioral" data-level="Mid-level-Senior, Principal">
+  <a class="q-title" href="questions/cmhf5kjws00vx08ad4b1e37z2.html">Why do you want to work at OpenAI?</a>
+  <div class="q-tags">
+    <span class="tag tag-behavioral">Behavioral</span>
+    <span class="tag tag-level">Mid-level-Senior, Principal</span>
+  </div>
+  <div class="q-meta">📋 6 人报告 · 🕒 Late January, 2026</div>
+  <div class="q-desc"></div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cmkq1swdr0fh807adwlyp760o.html">Monster Game</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Late January, 2026</div>
+  <div class="q-desc">Design and implement a monster game system with appropriate data structures and game mechanics. Focus on object-oriented design principles and efficient algorithms for game state…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cmjrr2k5v07zc08ado2pqgd2l.html">Advent of Code Day 7 Variation</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Late December, 2025</div>
+  <div class="q-desc">Solve a modified version of Advent of Code Day 7 problem. Implement an algorithm to handle the specific requirements and constraints of this coding challenge.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior">
+  <a class="q-title" href="questions/cm78h7tyk02kgl7b16admv2nz.html">Design a Metrics Aggregator</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Late December, 2025</div>
+  <div class="q-desc">Design a metrics aggregation system that collects count-based metrics (like user signups, system errors, ad clicks) from services via a client library and displays them as…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Mid-level-Staff">
+  <a class="q-title" href="questions/cm6i9kl1h00px6jlds6pn1hi5.html">Design a Webhook Callback System</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+  </div>
+  <div class="q-meta">📋 10 人报告 · 🕒 Mid December, 2025</div>
+  <div class="q-desc">Design a webhook system that allows applications to register callback URLs and automatically receive HTTP POST notifications when specific events occur in other applications.</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior, Senior Manager">
+  <a class="q-title" href="questions/cm6i9mhd800nz41cd0xx20r8p.html">Design a Rate Limiter</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior, Senior Manager</span>
+  </div>
+  <div class="q-meta">📋 3 人报告 · 🕒 Early November, 2025</div>
+  <div class="q-desc">Design a rate limiting system that can control and throttle API requests to prevent system overload and ensure fair resource allocation. The system should be able to handle…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior">
+  <a class="q-title" href="questions/cm6wu2x3y0000356pl299toa0.html">Design YouTube</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Late October, 2025</div>
+  <div class="q-desc">Design a video streaming platform like YouTube where creators can upload and share videos, viewers can stream content on-demand, and users receive personalized recommendations…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Junior, Senior-Staff">
+  <a class="q-title" href="questions/cm5eguhad02rn838o3ttrkt0w.html">Leetcode 981. Time Based Key-Value Store</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior, Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 3 人报告 · 🕒 Mid October, 2025</div>
+  <div class="q-desc">Design a time-based key-value store that records multiple values per key with timestamps and returns the value whose timestamp is the largest &lt;= the queried timestamp. With…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Mid-level-Senior">
+  <a class="q-title" href="questions/cmbskz7ck004r07ad6f1jxlni.html">Resumable Iterator</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Early October, 2025</div>
+  <div class="q-desc">Design an iterator that can pause and resume its execution state through get_state and set_state methods, extending support to handle multiple files and asynchronous operations.…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cmbskxz3y004n07adimbogre1.html">Unix Cd Command with Symbolic Link Resolution</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Late September, 2025</div>
+  <div class="q-desc">Simulate the Unix cd command by implementing path resolution for relative paths ('.' and '..'), absolute paths, and symbolic links while detecting potential cycles. Use…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior-Staff">
+  <a class="q-title" href="questions/cm5eguhah03va838ozuanzsde.html">Leetcode 2408. Design SQL</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+  </div>
+  <div class="q-meta">📋 4 人报告 · 🕒 Late August, 2025</div>
+  <div class="q-desc">Given one or more relational tables and a target result set, write a SQL query that produces the specified output—typically requiring joins, grouping/aggregation, conditional…</div>
+</div>
+<div class="q-card" data-type="People Management" data-level="Manager">
+  <a class="q-title" href="questions/cm6ffodsw00013b6pt5izxwps.html">Tell me about your job and role</a>
+  <div class="q-tags">
+    <span class="tag tag-people-management">People Management</span>
+    <span class="tag tag-level">Manager</span>
+  </div>
+  <div class="q-meta">📋 2 人报告 · 🕒 Late August, 2025</div>
+  <div class="q-desc"></div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Senior-Staff, Manager">
+  <a class="q-title" href="questions/cm5oehnrb0002436gh9b3uzx3.html">Design Yelp</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff, Manager</span>
+  </div>
+  <div class="q-meta">📋 6 人报告 · 🕒 Early August, 2025</div>
+  <div class="q-desc">Design a location-based service like Yelp that allows users to search for nearby businesses using latitude/longitude coordinates, with support for global scale and high query…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cm5eh7nrh04u1838orn6jicpz.html">Leetcode 253. Meeting Rooms II</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Early June, 2025</div>
+  <div class="q-desc">Given a list of meeting time intervals, determine the minimum number of conference rooms required so that no meetings overlap. The core challenge is computing the maximum number…</div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Staff">
+  <a class="q-title" href="questions/cmbsl2nhd005107adsfu8ohme.html">Multithreaded Web Crawler</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Mid April, 2025</div>
+  <div class="q-desc">Create a web crawler that starts from a given URL and crawls all reachable URLs within the same domain using breadth-first search traversal. Implement multithreading to fetch URLs…</div>
+</div>
+<div class="q-card" data-type="Mobile System Design" data-level="Staff">
+  <a class="q-title" href="questions/cmac1dd1s0049ad08o29ajxbs.html">Design a Chatbot with Multiple Threads</a>
+  <div class="q-tags">
+    <span class="tag tag-mobile-system-design">Mobile System Design</span>
+    <span class="tag tag-level">Staff</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Early March, 2025</div>
+  <div class="q-desc">Create a design for a chatbot system that can handle multiple conversation threads simultaneously. Consider aspects such as user interaction, thread management, and scalability.</div>
+</div>
+<div class="q-card" data-type="People Management" data-level="Manager">
+  <a class="q-title" href="questions/cm6ffp48000033b6prbe7nexz.html">Tell me a time you helped an engineer promote</a>
+  <div class="q-tags">
+    <span class="tag tag-people-management">People Management</span>
+    <span class="tag tag-level">Manager</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Early January, 2025</div>
+  <div class="q-desc"></div>
+</div>
+<div class="q-card" data-type="People Management" data-level="Manager">
+  <a class="q-title" href="questions/cm6ffpfij00043b6pben6f0r8.html">What are the signals you're looking for if an engineer is ready for a promo</a>
+  <div class="q-tags">
+    <span class="tag tag-people-management">People Management</span>
+    <span class="tag tag-level">Manager</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Early January, 2025</div>
+  <div class="q-desc"></div>
+</div>
+<div class="q-card" data-type="Coding" data-level="Senior">
+  <a class="q-title" href="questions/cmbsl1b4r004x07ad388lxwci.html">Design Spreadsheet with Formulas</a>
+  <div class="q-tags">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Mid December, 2024</div>
+  <div class="q-desc">Design a spreadsheet API where cells can contain values or formulas that reference other cells, automatically handling updates when dependencies change. Implement dependency graph…</div>
+</div>
+<div class="q-card" data-type="System Design" data-level="Staff">
+  <a class="q-title" href="questions/cm717jaa200danzcu8goffalw.html">Design a Foursquare-like App</a>
+  <div class="q-tags">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+  </div>
+  <div class="q-meta">📋 1 人报告 · 🕒 Mid August, 2024</div>
+  <div class="q-desc">Design a location-based mobile app similar to Foursquare that allows users to discover nearby Points of Interest (POIs) by submitting their coordinates and receiving a list of the…</div>
+</div></div>
+</main>
+
+<script>
+document.querySelectorAll('.filter-bar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    document.querySelectorAll('.q-card').forEach(card => {
+      card.style.display = (filter === 'all' || card.dataset.type === filter) ? '' : 'none';
+    });
+  });
+});
+</script>
+</body>
+</html>

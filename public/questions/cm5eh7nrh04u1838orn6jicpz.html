@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 253. Meeting Rooms II · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 253. Meeting Rooms II</div>
+  <h1>Leetcode 253. Meeting Rooms II</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Early June, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/meeting-rooms-2/cm5eh7nrh04u1838orn6jicpz" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a list of meeting time intervals, determine the minimum number of conference rooms required so that no meetings overlap. The core challenge is computing the maximum number of concurrent intervals (e.g., via sorting with a min-heap of end times or a sweep-line of start/end events).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 253 Meeting Rooms II</strong>：给一组会议 <code>[(start, end), ...]</code>，求最少需要几间会议室才能让所有会议都开（不冲突）。</p>
+<p>经典 <strong>"最多并发区间数"</strong> 题。OpenAI Senior 级，1 人报告。</p>
+<h3>解题思路（两种主流解法）</h3>
+<h4>方法 A：扫描线（Sweep Line / Chronological Sort）⭐</h4>
+<p>把所有事件按时间排序：start 是 +1（需要一间），end 是 -1（释放一间）。扫一遍维护当前并发数，最大值就是答案。</p>
+<pre class="language-python"><code class="language-python">def minMeetingRooms(intervals: list[list[int]]) -&gt; int:
+    events = []
+    for s, e in intervals:
+        events.append((s, +1))
+        events.append((e, -1))
+    # 注意：同一时刻 end 事件应在 start 之前处理（10 点结束 = 10 点开始不冲突）
+    events.sort(key=lambda x: (x[0], x[1]))
+    rooms = 0
+    max_rooms = 0
+    for _, delta in events:
+        rooms += delta
+        max_rooms = max(max_rooms, rooms)
+    return max_rooms</code></pre>
+<p><strong>关键</strong>：tie-breaker 让 end 先于 start —— <code>delta = -1 &lt; +1</code> 所以 <code>(time, -1)</code> 在 <code>(time, +1)</code> 前。</p>
+<h4>方法 B：min-heap（按结束时间）⭐</h4>
+<p>按 start 排序遍历会议。维护一个 min-heap，存"当前正在用的会议室的结束时间"。</p>
+<p>每个新会议：</p>
+<ul><li>看堆顶（最早结束的房间）：如果其 end ≤ 新会议 start → 这间房可复用，pop + push 新 end</li><li>否则 → 需新房，push 新 end</li></ul>
+<pre class="language-python"><code class="language-python">import heapq
+
+def minMeetingRooms(intervals):
+    if not intervals: return 0
+    intervals.sort(key=lambda x: x[0])  # 按 start 升序
+    heap = []   # 存正在用的房间的 end times
+    for s, e in intervals:
+        if heap and heap[0] &lt;= s:
+            heapq.heappop(heap)
+        heapq.heappush(heap, e)
+    return len(heap)</code></pre>
+<h3>复杂度</h3>
+<ul><li>两种方法都是 <strong>O(N log N)</strong>（sort 主导）</li><li>空间 O(N)</li></ul>
+<h3>哪种方法更好？</h3>
+<p>| 维度 | 扫描线 | min-heap | |---|---|---| | 直觉 | "每个时刻有几个会议正在开" | "维护可复用的房间池" | | 实现 | 略短 | 略复杂 | | 扩展 | 容易加权（不同 start/end 影响）| 直接套区间贪心模板 | | 适合的变种 | "求每个时刻并发数曲线" | "找最早结束的资源" |</p>
+<p>面试两个都掌握。<strong>扫描线</strong>通常更优雅。</p>
+<h3>关键边界：<code>end == start</code> 算不算冲突？</h3>
+<p>题目通常<strong>不算</strong>（10:00 结束 = 10:00 另一会议开始可以）。所以：</p>
+<ul><li>扫描线：tie-break 让 end 先于 start</li><li>min-heap：<code>heap[0] &lt;= s</code> 用 <code>&lt;=</code> 而非 <code>&lt;</code></li></ul>
+<p>如果题面 "endpoint 闭区间" 则改成严格冲突。</p>
+<h3>变种 1：LC 252 Meeting Rooms</h3>
+<blockquote><p>"是否能用一间房开完所有会议"</p></blockquote>
+<pre class="language-python"><code class="language-python">def canAttendMeetings(intervals):
+    intervals.sort(key=lambda x: x[0])
+    for i in range(1, len(intervals)):
+        if intervals[i][0] &lt; intervals[i-1][1]:
+            return False
+    return True</code></pre>
+<h3>变种 2：返回每个房间排期</h3>
+<p>不只是数量，要列出哪间房开哪些会议。</p>
+<pre class="language-python"><code class="language-python">def assignMeetingRooms(intervals):
+    intervals = sorted(enumerate(intervals), key=lambda x: x[1][0])
+    rooms = []  # rooms[i] = list of meeting indices
+    heap = []   # (end_time, room_id)
+    for orig_idx, (s, e) in intervals:
+        if heap and heap[0][0] &lt;= s:
+            end, rid = heapq.heappop(heap)
+            rooms[rid].append(orig_idx)
+            heapq.heappush(heap, (e, rid))
+        else:
+            rid = len(rooms)
+            rooms.append([orig_idx])
+            heapq.heappush(heap, (e, rid))
+    return rooms</code></pre>
+<h3>变种 3：每个会议室有不同容量</h3>
+<p>如果会议有 attendees 数，房间有 capacity —— 需要"最小容量满足"的房间。可用 sortedcontainers.SortedList。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">assert minMeetingRooms([]) == 0
+assert minMeetingRooms([[0, 30]]) == 1
+assert minMeetingRooms([[0, 30], [5, 10], [15, 20]]) == 2
+assert minMeetingRooms([[7, 10], [2, 4]]) == 1
+# 不重叠（端点接触）
+assert minMeetingRooms([[1, 5], [5, 10], [10, 15]]) == 1</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 扫描线 sort 时 tie-break 忽略，end == start 时 +1/-1 顺序错 —— 算多 1 间； ❌ min-heap 比较用 <code>&lt;</code> 而非 <code>&lt;=</code> —— 端点接触算冲突； ❌ 没 sort 直接扫 —— 错； ❌ 用 brute force <code>for t in range(0, MAX)</code> 数并发 —— 时间太大时 TLE。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"最多并发区间" 类题的两个标准解法：(1) 扫描线 + 排序事件；(2) 按 start 排序 + min-heap by end time。前者更通用（适合"任意时刻并发"），后者更直观（房间复用）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回每个时刻的并发数？" → 扫描线累计 prefix；"如果会议室有不同 type（普通 / VIP）？" → per-type 独立 heap，分配时按优先级；"如果是 calendar UI 实时分配？" → 每来新会议 O(log N) heap 操作，可保证实时性。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (12 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Palantir</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Amazon</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Apple</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Given an array of meeting time intervals consisting of start and end times [[s1,e1],[s2,e2],...] (si &lt; ei), find the minimum number of conference rooms required. · Example 1: · Input: [[0, 30],[5, 10],[15, 20]] · Output: 2 · Example 2: · Input: [[7,10],[2,4]] · Output: 1</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Apple</strong> · Mid-level</div>
+  <div>minimum number of rooms for running a bunch of meetings</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>Meeting Rooms II (variation of this problem) · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">brute force solution is not right for the input test case given, we might need to take min of the max rooms and declare maxRooms to be Integer MAX Value</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5oehnrb0002436gh9b3uzx3.html">← Design Yelp</a>
+    <a href="cmbsl2nhd005107adsfu8ohme.html">Multithreaded Web Crawler →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

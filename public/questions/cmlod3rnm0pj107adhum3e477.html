@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a credit tracking service for user token balances · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Design a credit tracking service for user token balances</div>
+  <h1>Design a credit tracking service for user token balances</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+    <span>📋 11 人报告</span>
+    <span>🕒 最近：Early May, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/token-balance-tracking/cmlod3rnm0pj107adhum3e477" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that tracks user token credits and can efficiently query the number of tokens a user has at any given timestamp. The service should handle credit additions, deductions, and historical balance lookups.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现一个 <strong>token credit tracking service</strong>：跟踪每个用户的 token 信用（充值、消费、退款），支持查询"用户在某个时间点的 token 余额"。</p>
+<p>这是 OpenAI 自家计费系统的简化版 —— 每个 API 调用扣 token，账户余额需要按时刻可查（用于对账、客服争议、定价分析）。</p>
+<p>虽然标的是 <strong>Coding</strong>，但本质是 <strong>API 设计 + 数据结构（per-user 有序事件序列） + 二分查找</strong>。</p>
+<h3>题目语义</h3>
+<p>需要支持：</p>
+<ul><li><code>add_credits(user_id, amount, ts)</code>：增加 token</li><li><code>consume(user_id, amount, ts)</code>：消费 token</li><li><code>get_balance(user_id, ts)</code>：返回 user_id 在 ts 时刻的余额</li><li>余额非负（消费超过余额时应拒绝或记 deficit）</li></ul>
+<h3>解题思路</h3>
+<p>每个 user 维护一个<strong>有序事件列表</strong>：<code>[(ts, delta), ...]</code>。<code>delta</code> 正数为充值 / 负数为消费。</p>
+<p>查询时：对事件列表二分找到 <code>ts</code> 之前的所有事件，前缀和就是余额。</p>
+<p><strong>为什么不能直接 <code>balance += delta</code> 维护当前余额？</strong> 因为题目要查"过去某时刻"的余额。需要保留全部历史。</p>
+<p><strong>优化：前缀和数组</strong>。每次插入事件时同步更新前缀和；查询变 O(log n)。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from bisect import bisect_right, insort
+from collections import defaultdict
+from dataclasses import dataclass
+
+class TokenTracker:
+    def __init__(self):
+        # per-user: timestamps 升序数组 + cumulative balance 数组
+        self._ts: dict[str, list[int]] = defaultdict(list)
+        self._cum: dict[str, list[int]] = defaultdict(list)
+
+    def _apply(self, user_id: str, ts: int, delta: int) -&gt; int:
+        """Insert one event. Returns the balance AT or AFTER this insertion."""
+        ts_arr = self._ts[user_id]
+        cum_arr = self._cum[user_id]
+        # 找到 ts 应该插入的位置（按 ts 升序）
+        i = bisect_right(ts_arr, ts)
+        ts_arr.insert(i, ts)
+        # 计算插入后的新前缀和
+        prev = cum_arr[i - 1] if i &gt; 0 else 0
+        new_cum = prev + delta
+        cum_arr.insert(i, new_cum)
+        # 修正后面所有累计值
+        for k in range(i + 1, len(cum_arr)):
+            cum_arr[k] += delta
+        return new_cum
+
+    def add_credits(self, user_id: str, amount: int, ts: int):
+        assert amount &gt; 0
+        self._apply(user_id, ts, +amount)
+
+    def consume(self, user_id: str, amount: int, ts: int) -&gt; bool:
+        """Returns True if charged; False if insufficient balance at ts."""
+        assert amount &gt; 0
+        bal = self.get_balance(user_id, ts)
+        if bal &lt; amount:
+            return False
+        self._apply(user_id, ts, -amount)
+        return True
+
+    def get_balance(self, user_id: str, ts: int) -&gt; int:
+        ts_arr = self._ts.get(user_id, [])
+        cum_arr = self._cum.get(user_id, [])
+        i = bisect_right(ts_arr, ts)  # 最大 idx s.t. ts_arr[idx] &lt;= ts → i-1
+        return cum_arr[i - 1] if i &gt; 0 else 0</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>get_balance</code>：<strong>O(log n)</strong> 二分</li><li><code>add_credits</code> / <code>consume</code>：<strong>O(n)</strong> 在最坏情况（插入位置之后所有 cum 都要更新）。如果事件<strong>严格按时间顺序到达</strong>（append-only），降为 <strong>O(log n)</strong>。</li><li>空间：O(n) per user</li></ul>
+<h3>进阶优化（如果面试官追问）</h3>
+<p>如果支持任意时间点插入且 n 很大（百万级事件），<strong>Fenwick Tree (Binary Indexed Tree)</strong> / <strong>Segment Tree</strong> 可以把插入也降到 O(log n)。但需要先把所有可能的时间戳离散化（坐标压缩）。</p>
+<pre class="language-python"><code class="language-python">class TokenTrackerBIT:
+    """Assumes timestamps come from a pre-known discrete set."""
+    def __init__(self, all_ts: list[int]):
+        self._idx = {t: i + 1 for i, t in enumerate(sorted(set(all_ts)))}  # 1-based
+        self._tree = [0] * (len(self._idx) + 1)
+
+    def _update(self, i: int, delta: int):
+        while i &lt; len(self._tree):
+            self._tree[i] += delta
+            i += i &amp; -i
+
+    def _query(self, i: int) -&gt; int:
+        s = 0
+        while i &gt; 0:
+            s += self._tree[i]
+            i -= i &amp; -i
+        return s
+
+    def add(self, ts: int, delta: int):
+        self._update(self._idx[ts], delta)
+
+    def get_balance(self, ts: int) -&gt; int:
+        return self._query(self._idx[ts])</code></pre>
+<p>如果时间戳是连续递增（毫秒戳）需要先收集再离散化；或用动态开点的 segment tree。</p>
+<h3>边界 case</h3>
+<ul><li>同一 ts 多个事件：<code>bisect_right</code> 把新事件放在已有等 ts 事件之后（合理：按到达顺序）；</li><li>查询 <code>ts</code> 小于第一个事件：返回 0；</li><li>用户从未出现：返回 0；</li><li>消费余额为 0：拒绝并返回 False；</li><li>负数 delta（退款）：在 <code>add_credits</code> 接口外，应该有独立的 <code>refund</code> 接口或允许 <code>add_credits</code> 接收负数（题面没明说，澄清）。</li></ul>
+<h3>工业级延伸</h3>
+<p>如果是真生产系统：</p>
+<ul><li><strong>持久化</strong>：每个事件写入 append-only log（Kafka / ledger DB）</li><li><strong>快照</strong>：每天对每用户存一个"截止 EOD 的余额"快照，查询时找最近快照 + 增量重放</li><li><strong>强一致</strong>：相同用户的消费走单 partition，避免并发扣款超支</li><li><strong>审计</strong>：每条事件不可变（immutable），原始事件 + 修正事件 ≠ 修改原事件</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>OpenAI 真的有这个系统！考点是<strong>"按时刻查历史余额"</strong> —— 不能用普通 KV 缓存当前余额了事。bisect / 前缀和是面试期望的解法；BIT 是 bonus。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 直接维护 <code>balance</code> 一个数字 —— 历史查不了； ❌ 用 list of (ts, balance_after) 但每次插入不修正后续累计值 —— 错位； ❌ 假设事件按时间到达 —— 题面没说；面试官最爱追"乱序到达怎么办"； ❌ 不澄清"负余额是否允许" —— 题面歧义点，先问。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持百万用户？" → 数据按 user_id sharding；每 shard 内仍是 per-user 列表。"如果要支持事务式 multi-user transfer？" → 引入两阶段提交 / Saga，确保 transfer 原子性。"如何防止 race condition？" → per-user 加锁（Redis SETNX）或用 DB 的 SERIALIZABLE 隔离级别。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (11 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>please provide answer to this Q</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>Given initial class structure with 6 test cases provided.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div># GPU Credit Calculator - Solution Overview · ## The Core Problem · You're tracking credits that: · 1. Have a valid time window `[start, start + expiration]` · 2. Can be partially spent · 3. Can arrive out of order (someone might call `useCredit(100, 5)` before `addCredit("x", 10, 50, 20)`) · ## Why This Is Tricky · **If operations always came in chronological order**, you could just maintain a running balance. But since they can arrive out of order, when someone asks "what's the balance at time 50?", you need to figure out what *would have happened* if you processed everything chronologically up to time 50. · ## The Simple Intuition: "Event Replay" · Think of it like a DVR recording of a sports game: · 1. **Recording**: Every time someone calls `addCredit` or `useCredit`, you're recording an "event" with a timestamp · 2. **Playback**: When someone calls `getBalance(t)`, you "rewind to the beginning" and play forward all events up to time `t` · That's it. The "replay" metaphor is the entire solution. · ## Breaking Down the Events · Each `addCredit(id, amount, start, expiration)` creates **two** events: · - **ADD event at `start`**: "Credit becomes available" · - **EXPIRE event at `start + expiration + 1`**: "Credit is no longer usable" · Each `useCredit(timestamp, amount)` creates **one** event: · - **USE event at `timestamp`**: "Spend this much" · ## Why Event Priorities Matter · What if multiple things happen at the same timestamp? The order matters: · ``` · Time 40: Credit A expires · Time 40: Credit B starts · Time 40: User tries to spend 5 · ``` · You need to process in this order: · 1. **EXPIRE first** (priority 0) - remove expired credits · 2. **ADD second** (priority 1) - add new credits · 3. **USE last** (priority 2) - spend from what's available · Otherwise you might accidentally spend from an expired credit. · ## Why "Earliest Expiry First" When Spending? · When you have multiple active credits and need to spend, which do you drain first? · **Answer**: Spend from the one expiring soonest. This minimizes waste. · Example: · - Credit A: 10 units, expires at time 50 · - Credit B: 10 units, expires at time 100 · - At time 45, spend 5 · If you spend from B, then A expires unused at time 50. Better to spend from A. · ## The Data Structures · **Global (persistent across calls):** · - `event_queue`: A min-heap of all events, sorted by `(time, priority)` · - `grants_by_id`: Metadata about each credit grant · **Per-query (temporary during `getBalance`):** · - `remaining_by_grant_id`: How much is left in each grant *during this simulation* · - `active_grants`: A min-heap of currently-usable grants, sorted by expiry time · ## Simplified Pseudocode · ```python · class GPUCredit: · events = []  # min-heap by (time, priority) · grants = {}  # grant_id -&gt; {amount, start, end} · def addCredit(id, amount, start, expiration): · grant_id = new_unique_id() · grants[grant_id] = {amount, start, end: start + expiration} · events.push(ADD event at time=start, grant_id) · events.push(EXPIRE event at time=start+expiration+1, grant_id) · def useCredit(timestamp, amount): · events.push(USE event at time=timestamp, amount) · def getBalance(timestamp): · # Make a copy so we don't destroy our event log · events_copy = copy(events) · remaining = {}      # grant_id -&gt; remaining amount · active = min_heap() # grants sorted by expiry · balance = 0 · while events_copy has events with time &lt;= timestamp: · event = events_copy.pop() · if event is ADD: · remaining[grant_id] = full_amount · active.push(grant_id sorted by expiry) · balance += amount · if event is EXPIRE: · balance -= remaining[grant_id]  # lose whatever wasn't spent · remaining[grant_id] = 0 · if event is USE: · while need_to_spend &gt; 0 and active not empty: · grant = active.pop_earliest_expiring() · take = min(remaining[grant], need_to_spend) · remaining[grant] -= take · balance -= take · need_to_spend -= take · if remaining[grant] &gt; 0: · active.push(grant)  # still has credit · return balance · ``` · ## The Key Insight · **Every `getBalance` call replays history from scratch.** This is "slow" but correct, and handles out-of-order operations naturally. · ## Common Questions · **Q: Why copy the event queue?** · Each `getBalance` call needs to pop events to process them. If you popped from the original queue, you'd lose events for future queries. · **Q: Why not cache results?** · Because a later `addCredit` call might have an earlier timestamp that changes past balances. You can't cache unless you know no more past events will arrive. · **Q: What's the complexity?** · - `addCredit`/`useCredit`: O(log E) to insert into the heap · - `getBalance`: O(E log E) worst case - you might replay all events · ## Summary · The core idea is: **log everything, replay chronologically when asked**. · ## Problem notes · - Do a deepcopy of the event priority queue · - either do a manual copy by iterating through the PQ items, or use heapq for this · - make sure you're using the return value of the remaining_balance for your calculations · - if using heapq for the priority queue implementation, use IntEnum for any enums that you want to compare. In fact, just always use IntEnum · - initialize the values in the class with __init__ so that they are not reused between tests.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Credits · You're building a system to track balances for the OpenAl API credit purchasing system. · API users can purchase credit grants, specified by an ID, that are active at a timestamp and that let them use the API. · Unused credit grant balances expire at a certain time. · However, there's a kink in our system: requests can arrive out of order because our system is built on a really unstable network. For example, a request to subtract credits can arrive at the system before the request to add credits, even though the request to add credits has a lower timestamp. · Your task is to implement the Credits class, which should support the following operations: · • Granting credits, subtracting credits, and getting the credit balance for a user · • The ability to handle requests that arrive out of order · Some guidelines/hints: · • Do NOT worry about memory or performance concerns. Write simple, working code. No fancy data structures are needed here. · timestamp). · • Subtract from grants expiring soonest first. · • All timestamps can be represented as ints for simplicity and are unique (no two actions will happen at the same</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Operations: · Add credit: At time t, add x credits, which will expire at time t_expire. · Expire credit: Credits added earlier should automatically expire when their expiration time is reached. · Cost: At time t, deduct x credits if available. If insufficient credits exist at that time, return False. · Requirements: · Maintain all events (add, expire, cost) in chronological order. · When processing a cost event: · First check if the current balance is sufficient. · If not, return False. · If yes, deduct credits by adjusting the future expire entries accordingly (consume the oldest credits first). · The system should support multiple adds, expires, and costs interleaved at different timestamps. · Example: · Add(10, 5, expire=20)   # at timestamp=10, add 5 credits, which expire at 20 · Cost(15, 3)             # at timestamp=15, consume 3 credits → valid · After this operation, the future expire at (20, 5) should be updated to (20, 2).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Staff</strong> · OpenAI</div>
+  <div>// You're building a system to track GPU credits across OpenAI employees. OpenAI employees are given "credits" that let them run code on GPUs. · // In this system, we want to support granting credits, using credits, and getting the credit balance. Credit grants expire at a timestamp at which point they're no longer usable and don't show up in the balance. All actions (create_grant, subtract, and getting balance) take in an absolute timestamp at which they happened. All timestamps can be represented as ints for simplicity and are unique (no two actions will happen at the same timestamp). · // Here's an example class that you'll want to fill in: · // Requests might be received out of order. If we first receive a request to subtract credits with timestamp=2, and then a request to create a grant with timestamp=1, we should successfully honor the subtraction. · // A single subtraction can be applied to multiple grants piecewise. · // For now, let's not worry about any memory or performance concerns</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2024 · <strong>Senior</strong> · OpenAI</div>
+  <div>You're given a stream of events that manage tokens/credits that are either a Grant or Consume event. Grants will increase the balance of credits and they have an expiry. Consume events use the credits. · Write code that can return the amount of credits at any given point in time.</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (19 条)</h2>
+  <div class="comment">easy to understand solution public class GPUCredit { List&lt;Event&gt; globalEvents = new ArrayList&lt;&gt;(); public void addCredit(String creditId, int amount, int time, int expiration) { // create  events Event addEvent = new Event(creditId, amount, time, GPUCreditTracking.EventType.ADD); globalEvents.add(addEvent); Event expEvent =  new Event(creditId, amount, expiration, GPUCreditTracking.EventType.EXPIRED); globalEvents.add(expEvent); }</div><div class="comment">public void useCredit(int time, int amount) { Event useEvent =  new Event("", amount, time, GPUCreditTracking.EventType.USE); globalEvents.add(useEvent); }</div><div class="comment">public int currentBalance(int time){ int currentBalance = 0; PriorityQueue&lt;Event&gt; events = new PriorityQueue&lt;&gt;(this.globalEvents); Event currentEvent = events.peek(); while( currentEvent != null &amp;&amp; currentEvent.time &lt;= time){ if (currentEvent.eventType == Event.Type.ADD) { currentBalance += currentEvent.amount; }else if ( currentEvent.eventType == Event.Type.EXPIRE){ currentBalance  -= currentEvent.amount; }else if (currentEvent.eventType == Event.Type.EXPIRE){ currentBalance -= currentEvent.amount; } } return currentBalance;</div><div class="comment">public static class Event implements Comparable&lt;Event&gt;{ Type eventType; int amount ; int time; String grantId;</div><div class="comment">public Event(String grantId, int time, int amount, Type eventTtype){ this.grantId = grantId; this.time = time; this.amount = amount; this.eventType = eventType; }</div><div class="comment">static enum Type { ADD(2), USE(1), EXPIRE(0); private final int priority;</div><div class="comment">Type(int priority) { this.priority = priority; } public int getPriority(){ return this.priority; } }</div><div class="comment">@Override public int compareTo(Event other) { if ( other == null ) return 1; if ( this.eventType == other.eventType) { return Integer.compare(this.amount, other.amount); } return Integer.compare(this.eventType.priority , other.eventType.priority); } }</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmg6up3jj030x08adrb73umuk.html">← Design ChatGPT</a>
+    <a href="cmlod05pd0p4z08adovgk5l1h.html">Design a crossword puzzle service →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

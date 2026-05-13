@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KV Store Serialize/Deserialize · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / KV Store Serialize/Deserialize</div>
+  <h1>KV Store Serialize/Deserialize</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+    <span>📋 34 人报告</span>
+    <span>🕒 最近：Early May, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/kv-serialize-deserialize/cm6xw6unw00003b6qz67bpfaj" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Code a simple KV with serialize/deserialize functions, where key/value are strings and can contain any character.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现一个 KV 存储的 <strong>serialize / deserialize</strong> 函数：key 和 value 都是字符串，<strong>可以包含任意字符</strong>（包括分隔符、换行、null 字节、引号、反斜杠）。要求 round-trip：<code>deserialize(serialize(kv)) == kv</code>。</p>
+<p>这题不考算法，考<strong>协议设计 + 边界处理</strong>。OpenAI 是 LLM 工厂，他们的检索/embedding/checkpoint 系统全都得有序列化能力，对字符串编码的鲁棒性要求极高。</p>
+<h3>解题切入点</h3>
+<p>任何"用分隔符切字符串"的方案都注定挂在分隔符冲突上。三种合理思路：</p>
+<h4>A. 长度前缀（<strong>最简单且正确</strong>）</h4>
+<p>写入每条 entry 时先写 key 长度 + key + value 长度 + value，读取按长度截取，<strong>不存在分隔符冲突</strong>。</p>
+<h4>B. 转义（escape）</h4>
+<p>约定一个分隔符（如 <code>\n</code>），key/value 中出现该字符时转成 <code>\\n</code>。复杂度低，但易出错。</p>
+<h4>C. 二进制 framing（如 length-prefix int32 + payload）</h4>
+<p>工业级方案（gRPC、Redis RESP3 等用类似）。</p>
+<p>面试推荐 <strong>A</strong> —— 实现 10 行，正确性显然。</p>
+<h3>主解法（长度前缀）</h3>
+<pre class="language-python"><code class="language-python">class Codec:
+    @staticmethod
+    def serialize(kv: dict[str, str]) -&gt; str:
+        """
+        编码格式：对每个 (k, v)：
+            "&lt;len(k)&gt;:&lt;k&gt;&lt;len(v)&gt;:&lt;v&gt;"
+        例：{"a":"hello", "":""} →
+            "1:a5:hello0:0:"
+        """
+        parts = []
+        for k, v in kv.items():
+            parts.append(f"{len(k)}:{k}{len(v)}:{v}")
+        return "".join(parts)
+
+    @staticmethod
+    def deserialize(s: str) -&gt; dict[str, str]:
+        kv = {}
+        i, n = 0, len(s)
+        while i &lt; n:
+            # 读 key 长度
+            j = s.index(":", i)        # 找到分隔冒号
+            klen = int(s[i:j])
+            i = j + 1
+            k = s[i:i + klen]
+            i += klen
+            # 读 value 长度
+            j = s.index(":", i)
+            vlen = int(s[i:j])
+            i = j + 1
+            v = s[i:i + vlen]
+            i += vlen
+            kv[k] = v
+        return kv</code></pre>
+<p><strong>为什么 ':' 不冲突？</strong> <code>len(k)</code> 是非负整数的十进制，里面没有冒号；冒号只出现在分隔符位置。我们用第一个冒号定位长度结束 —— key 内容里即使有冒号也无所谓，因为我们按 <code>klen</code> 字节截取，不靠冒号切割。</p>
+<h3>复杂度</h3>
+<ul><li><strong>时间</strong>：serialize O(n) where n = 总字符数；deserialize 同 O(n)</li><li><strong>空间</strong>：O(n)</li></ul>
+<h3>边界 case 验证</h3>
+<pre class="language-python"><code class="language-python"># 空 KV
+assert Codec.deserialize(Codec.serialize({})) == {}
+# 空 key 或空 value
+assert Codec.deserialize(Codec.serialize({"": ""})) == {"": ""}
+# 含特殊字符
+data = {"a:b": "1:2:3", "x\n": "\\\"", "🎉": "héllo"}
+assert Codec.deserialize(Codec.serialize(data)) == data
+# 长字符串
+big = "x" * 100000
+assert Codec.deserialize(Codec.serialize({big: big})) == {big: big}</code></pre>
+<h3>备选解法（转义版，更容易写错）</h3>
+<pre class="language-python"><code class="language-python">ESC = "\\"
+SEP_KV = "="    # 已转义
+SEP_REC = "\n"  # 已转义
+
+def _escape(s):
+    return s.replace(ESC, ESC*2).replace(SEP_KV, ESC+SEP_KV).replace(SEP_REC, ESC+SEP_REC)
+
+def _unescape(s):
+    # 注意：必须从后往前替换或一次扫描，避免 \\\n 被错误展开
+    ...</code></pre>
+<p>转义法写起来短，但一旦面试官追问"如果 escape char 自己出现怎么办"、"如何避免 O(n²) 替换"、"如何流式处理"，得绕一圈。长度前缀直接干净利落。</p>
+<h3>优化方向</h3>
+<p>| 优化点 | 做法 | |---|---| | 二进制更紧凑 | 长度用 varint 编码（protobuf 用法），减少长 string 的 ASCII 开销 | | 流式 | yield 输出 / 用 generator 解析，避免一次性 load 全部到 memory | | 多语言兼容 | 直接用 protobuf / msgpack / cbor 标准库，连协议都不用自己设计 | | Checksum | 末尾加 CRC32，防止文件损坏 |</p>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>永远不要用"分隔符 + 期待 user data 里没出现"</strong> —— 这是 codec 设计第一坑。长度前缀（length-prefixed framing）是工业界标准答案，写起来最干净。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 JSON：题面说 value 含任意字符，JSON 字符串里有引号需要 escape，自己实现 escape 又回到老问题； ❌ 用 base64：输出膨胀 4/3，面试官可能问"为什么不直接写"； ❌ 转义法没考虑 escape char 自己出现的递归； ❌ 用 <code>,</code> <code>;</code> <code>\n</code> 之类常见分隔符 —— 题面明说 value 可含任意字符。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果要支持 nested map / list 怎么办？" → 加一层 type tag（'M' = map, 'L' = list, 'S' = string），递归编码。"如何处理 4GB 大文件？" → length 用 8-byte int + 流式 read。"如果需要 partial update 不重写整个文件？" → 切换到 append-only log（每个 op 一条 record，定期 compact），就是个迷你 LSM。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (34 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>1. No timestamps and history of values for a given key. · 2. For persistence of the serialized data, a mock S3 Bucket class was given. · 3. It was important to talk about the KV store lifecycle: can we call serialization twice in a row? And deserialization? Why? · And then I'd need to update the code according to my reasoning. So, better not to wait till these questions pop up and talk about these cases proactively.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  <div>They expect TLV serialization using fixed width headers. Follow-up is to chunk into 1KB instances with minimum extra files. Optimal answer is to use chunk headers. If you blaze through the implementation they have additional discussion level follow-ups depending on the team you're interviewing with. If it's a product team you may get follow-ups around serializing incoming streams of data, how to handle out of order reassembly, or adding timestamps to the KV store. If it's a security team you might get questions around how to encrypt the chunks or how to protect against accidental vs malicious corruption of the data.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  <div>Part 1 was KV with serialize/deserialize, only string values (no ints/floats/complex data types). · Part 2 was max file size of 1kb using as few files as possible (so no metadata file, optimally).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Followup - 1kb chunk size based uploads. · Need to make sure a mechanism (perhaps another metadata file ?) exists to persist the total number of chunks uploaded so the restore process can read all the chunks correctly</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  <div>Keys and Values can be any character at all</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>A blob storage API is available for use. The intent is to store the serialized content into the blob storage, with minimal number of API calls (get/set) into the blob storage. · ``` · class BlobStorage: · """ · Simple in-memory blob storage. · Methods: · - set(filename: str, data: bytes) -&gt; None · - get(filename: str) -&gt; bytes · """ · def __init__(self) -&gt; None: · self._store: Dict[str, bytes] = {} · def set(self, filename: str, data: bytes) -&gt; None: · """ · Store raw bytes under a filename. · """ · # Accept any bytes-like object; store as immutable bytes · self._store[filename] = data · def get(self, filename: str) -&gt; bytes: · """ · Retrieve raw bytes by filename. · Raises KeyError if the filename is not present. · """ · return self._store[filename] · def str_to_bytes(s: str) -&gt; bytes: · """ · Serialize a Python string to bytes. · """ · return s.encode('utf-8') · def bytes_to_str(b: bytes) -&gt; str: · """ · Deserialize bytes (or bytes-like) back to a Python string. · """ · return b.decode('utf-8') · ```</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Implement a durable key-value store that serializes / deserializes onto a file. · Follow up is to use multiple files if files cannot exceed 1KB in size.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Also asked how to do it with various constraints on files -- like each file could be max 1 KB</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Asked me to use Python and not to use JSON serialization or pickling. Had to complete the class using helper methods to convert between bytes and strings.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  <div>KV Store serialize/deserialize, where key/value are strings, can contain any char.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2024 · <strong>Staff</strong> · OpenAI</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (24 条)</h2>
+  <div class="comment">The solution on chunking does not seem to make sense here.</div><div class="comment">Your goal is to prevent OOM by reading everything into memory at once. But you failed to do so because you still had to read all the bytes for json.loads to work.</div><div class="comment">So did you really mean memory limit or bandwidth limit?</div><div class="comment">Reply D DomesticSalmonToad995 Premium • 8个月前</div><div class="comment">Reply S SharedAmberMinnow428 Premium • 5个月前</div><div class="comment">Java implementation uses Gson library, usually external libraries do not come installed in an interview environment afaik. What are your thoughts on using external libraries in an interview</div><div class="comment">Did this ever come up in an interview for you? I am also wondering if using Gson is viable or if it is just meant as a placeholder for the serialization algo we use in part 1.</div><div class="comment">Reply A ArchitecturalChocolateWarbler927 Premium • 6个月前</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmhykoavb02w108adtuubkyzp.html">← Disease Spread in Flower Grid</a>
+    <a href="cmg6up3jj030x08adrb73umuk.html">Design ChatGPT →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

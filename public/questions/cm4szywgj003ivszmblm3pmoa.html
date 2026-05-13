@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Online Chess · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design Online Chess</div>
+  <h1>Design Online Chess</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff, Manager-Senior Manager</span>
+    <span>📋 58 人报告</span>
+    <span>🕒 最近：Mid May, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a real-time chess platform similar to Chess.com that supports gameplay across multiple devices, move validation, matchmaking, leaderboards, and key features like move undo functionality.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计一个 Chess.com 级别的实时在线棋类对战平台。考点不在"国际象棋规则"本身（面试官不会指望你 30 分钟写完棋规则引擎），而在<strong>实时双玩家状态同步 + 走子合法性的权威服务端校验 + 高并发匹配 + 排行榜</strong>。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>用户注册/登录，可发起对局或加入快速匹配</li><li>双人实时对战（同步走子、聊天、观战）</li><li>走子合法性校验（服务端为权威，客户端不可信）</li><li>悔棋 / 认输 / 和棋</li><li>走子历史 + 棋谱回放</li><li>ELO 排行榜</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>实时（走子端到端 &lt; 100 ms）</li><li>1M DAU 量级，峰值同时进行 50k 局对战</li><li>99.9% 可用，断线重连不丢局</li></ul>
+<p><strong>容量估算：</strong></p>
+<ul><li>平均一局走 80 步，5 分钟 → 50k 并发 → 走子写入 QPS ≈ 50k × 80 / (5 × 60) ≈ 13k QPS</li><li>每个走子事件 ≤ 200 B → 写带宽 ≈ 2.6 MB/s</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">                         ┌──────────────┐
+   Client A ─── WSS ───▶ │   API GW     │ ◀─── WSS ─── Client B
+                         │  (sticky)    │
+                         └──────┬───────┘
+                                │
+                  ┌─────────────┼────────────┐
+                  ▼             ▼            ▼
+            ┌──────────┐  ┌──────────┐  ┌──────────┐
+            │ Game     │  │Matchmkr  │  │ Auth /   │
+            │ Server   │  │ Service  │  │ Profile  │
+            │ (sharded)│  │          │  │ Service  │
+            └────┬─────┘  └────┬─────┘  └────┬─────┘
+                 │             │             │
+                 ▼             ▼             ▼
+            ┌─────────┐   ┌─────────┐   ┌─────────┐
+            │ Redis   │   │ Queue   │   │ Postgres│
+            │ (live   │   │ (Kafka) │   │ (users) │
+            │  game   │   │         │   │         │
+            │ state)  │   │         │   │         │
+            └────┬────┘   └─────────┘   └─────────┘
+                 │
+                 ▼ (game end)
+            ┌─────────┐
+            │ MongoDB │  ◀──  move history, replay
+            │ (games) │
+            └─────────┘
+                 │
+                 ▼ (rating event)
+            ┌──────────┐
+            │ Ranking  │  ELO 计算 + Redis SortedSet
+            │ Worker   │
+            └──────────┘</div>
+<h3>核心组件设计</h3>
+<h4>1. Game Server（最核心）</h4>
+<ul><li><strong>Sticky session by gameId</strong>：同一局的两个玩家通过 gameId hash 路由到同一台 Game Server（一致性哈希）。这样<strong>走子事件只在单机内存里调度</strong>，无需跨节点协调。</li><li><strong>走子合法性校验在服务端</strong>：客户端发 <code>{"from":"e2","to":"e4"}</code>，服务端把状态机推进一步，校验合法（包括将军、王车易位、过路兵、升变等所有规则）。</li><li><strong>内存中保存当前对局状态</strong>（FEN string + 走子列表），Redis 作为热备（每走一步异步写入，用于故障恢复 + 观战快照）。</li><li><strong>超时计时器</strong>：每个玩家剩余时间存在内存，过期触发 <code>timeout</code> 事件判定胜负。</li></ul>
+<h4>2. Matchmaking</h4>
+<ul><li>玩家进入队列：<code>Q_rating_bucket</code> → Redis ZADD by waiting time</li><li>配对 worker 每秒扫描相邻 rating bucket，配对 → 创建 gameId → 推回两个玩家 WSS 通道</li><li>ELO 接近度先严格匹配，每过 5 秒放宽 ±25</li></ul>
+<h4>3. WSS 协议</h4>
+<pre class="language-python"><code class="language-python"># server → client
+{"type":"move", "from":"e2","to":"e4","san":"e4","clock":{"w":297000,"b":300000}}
+{"type":"end","reason":"checkmate","winner":"w"}
+{"type":"chat","from":"playerA","text":"GG"}
+
+# client → server
+{"type":"move","from":"e2","to":"e4","clientSeq":42}
+{"type":"resign"}
+{"type":"draw_offer"}</code></pre>
+<p><code>clientSeq</code> 用于 dedup + 顺序：服务端只接受 <code>clientSeq == lastClientSeq + 1</code>。</p>
+<h4>4. 悔棋（takeback）</h4>
+<p>服务端保存所有走子的 SAN 历史 + 每步的 FEN 快照（或仅保存初始 FEN + moves，需要时回放）。悔棋请求需要对手同意；服务端把状态机倒回到上一步，广播新状态。</p>
+<h4>5. 排行榜</h4>
+<p>走子事件 ≠ 排行榜更新。<strong>对局结束</strong>事件写入 Kafka，Ranking Worker 消费：</p>
+<ul><li>计算 ELO 增减（标准 K=32 公式）</li><li>更新 Redis <code>ZSET leaderboard</code> 用于实时查询</li><li>同步落库 Postgres 做长期持久化</li></ul>
+<h3>关键技术决策</h3>
+<p>| 决策 | 选择 | 原因 | |---|---|---| | 实时协议 | WebSocket / WSS | 双向 push，低延迟 | | 路由 | 一致性哈希 by gameId | 同局两端到达同台机器，避免分布式状态同步 | | 实时状态 | 内存 + Redis 异步 | 内存低延迟，Redis 做故障恢复源 | | 历史/回放 | MongoDB（按 gameId 文档） | 走子列表天然适合文档存储 | | 排行榜 | Redis SortedSet + Postgres | 实时排名 + 长期审计 | | 防作弊 | 走子合法性强校验 + 引擎反作弊（Stockfish 比对走法相似度） | 走子合法性纯规则可校验，外挂检测靠 ML |</p>
+<h3>API 设计</h3>
+<pre class="language-python"><code class="language-python"># REST
+POST /games          # 创建对局（vs 好友邀请）
+GET  /games/{id}     # 获取对局元信息 + 当前状态
+GET  /games/{id}/pgn # 下载棋谱
+POST /matchmaking    # 进入快速匹配队列
+
+# WebSocket
+ws://game.example.com/ws?gameId=xxx&amp;token=yyy</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>这题在 OpenAI 被报告 58 次，是最近最热的 SD 题。OpenAI 面试官最爱追问：(1) 如何保证两端看到的棋盘状态一致？答：服务端权威 + 全局递增 moveSeq；(2) 一台 Game Server 挂了怎么办？答：Redis 持久化 + 重连时拉 FEN 重建；(3) 走子合法性的算法复杂度？答：O(1) per move（位棋盘 bitboard）。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>不要把走子合法性放客户端 —— 1 分钟内会被作弊；不要用 HTTP 长轮询替代 WSS —— 延迟会被打爆；不要把所有对局放在一个 DB 表 —— 写热点。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>常见追问：观战如何做？答：观战者订阅 <code>gameId/spectator</code> channel，Game Server 走完每步多 fan-out 一份。观战延迟可放宽到 1-2 秒。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (105 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  <div>Focus was mainly on match making.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Upstart</strong> · Senior</div>
+  <div>Design Online Chess with some focus on Frontend interactions, user sign up, data modelling followed by HLD and scaling Deep dive</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  <div>The latency distribution among the two parties and the platform (including infra in charge network latencies) is an interesting focus. Map to how agent-user-tool communication pattern.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Upstart</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Manager</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>At Microsoft</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  <div>Asked how to design an online chess platform with a focus on matchmaking capabilities around the same ELO</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  <div>Design Online chess</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Upstart</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Manager</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Upstart</strong> · Mid-level</div>
+  <div>Design an online chess game</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>I got asked this question during my system design interview at OpenAI for London office. The content already exists in the website, but unluckily I didn't work on this question before the interview :)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Design online chess that will surpass chess.com in scale. Deeper probing into cheating prevention mechanisms.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>focus on scaling and game itself</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Senior Manager</strong> · OpenAI</div>
+  <div>Focus more on matchmaking, scorecard, tracking time.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Very simple variation for E4. Chess app but only to connect with friends, so you do not need matchmaking or leaderboard.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Design matchmaking system only</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design a chess game assuming the user is using the Facebook app and logged in. Plan to scale it millions of users playing chess game against their friends at any time and leave the ranking/leaderboard out of scope at this time.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Online chess within messenger app. Users can send an invite; Undo a move until the other user makes their move; No time restrictions; Async move when the other user is offline; 1B active users that can play</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>async Chess with multiple games per users for FB with undo, leaderboard ranking</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Design for large scale &amp; allow users to undo a move.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Design Online chess with undo move</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Focused in on how on-going games can be reflected across a users different devices</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2024 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2024 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Functional Requirements · - user should be able to play real time chess game. (max 1 active game per player) · - user should be able to play the game over multiple devices. · - move validation: position, turn, timeout · - show leaderboard of top-K players · - user should be able to undo move if the other player has not played.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2006 · <strong>Staff</strong> · OpenAI</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (7 条)</h2>
+  <div class="comment">https://medium.com/back-2-basecs/system-design-series-online-chess-341d76fd64f4</div><div class="comment">this is a nice article and the structure is inspired by hello interview</div><div class="comment">Reply F FascinatingAmethystMarsupial369 Top 1% • 1个月前</div><div class="comment">I see this one has a guided practice even though there is no answer key. Thats cool, would love more questions to be added to guided practice, maybe have a separate page to vote for guided practice questions?</div><div class="comment">Reply Y YummyOrangeEmu455 • 1个月前</div><div class="comment">Check out this nice tech blogs for Real-time Multi-Device Chess Platform Design.</div><div class="comment">https://interviewgpt.deepchill.app/blogs/design/real-time-multi-device-chess-platform-6V6zq85399KRzQt6TLHY6J</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <span></span>
+    <a href="cmavpegdk0067ad08ujhdbrjk.html">Design a Payment System →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

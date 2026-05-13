@@ -1,0 +1,128 @@
+/* ---- Reset / base ---- */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.65;
+  color: #1f2328;
+  background: #fafbfc;
+  font-size: 16px;
+}
+img { max-width: 100%; height: auto; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---- Header ---- */
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid #d0d7de;
+}
+.site-header .container { display: flex; align-items: center; gap: 16px; padding: 12px 20px; }
+.site-header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+.site-header h1 a { color: #1f2328; }
+.site-header .meta { color: #57606a; font-size: 13px; margin-left: auto; }
+
+/* ---- Container ---- */
+.container { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+
+/* ---- Index page ---- */
+.intro { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; }
+.intro h2 { margin-top: 0; }
+.intro p { color: #57606a; }
+.intro .stats { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; }
+.intro .stat { background: #f6f8fa; border-radius: 6px; padding: 8px 14px; font-size: 14px; }
+.intro .stat strong { color: #0969da; font-weight: 600; }
+
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+.filter-bar .filter-label { font-size: 13px; color: #57606a; }
+.filter-bar button {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 16px;
+  padding: 4px 12px; font-size: 13px; cursor: pointer; color: #1f2328;
+  font-family: inherit;
+}
+.filter-bar button:hover { background: #f6f8fa; }
+.filter-bar button.active { background: #0969da; color: white; border-color: #0969da; }
+
+.q-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 720px) { .q-grid { grid-template-columns: 1fr 1fr; } }
+
+.q-card {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 16px 18px; transition: box-shadow .15s, transform .15s;
+}
+.q-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.q-card .q-title { font-size: 16px; font-weight: 600; color: #1f2328; display: block; margin-bottom: 8px; }
+.q-card .q-title:hover { color: #0969da; }
+.q-card .q-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.q-card .q-meta { font-size: 12px; color: #57606a; }
+.q-card .q-desc { font-size: 13px; color: #57606a; margin-top: 6px; line-height: 1.5; }
+
+.tag {
+  display: inline-block;
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px;
+  border: 1px solid; line-height: 1.4;
+}
+.tag-coding { color: #0a3069; background: #ddf4ff; border-color: #b6e3ff; }
+.tag-system-design { color: #4d2d00; background: #fff8c5; border-color: #f0e068; }
+.tag-people-management, .tag-behavioral { color: #5a1e02; background: #ffebe9; border-color: #ffaba8; }
+.tag-mobile-system-design { color: #1f3a26; background: #dafbe1; border-color: #aceebb; }
+.tag-level { color: #57606a; background: #f6f8fa; border-color: #d0d7de; font-weight: 500; }
+
+/* ---- Detail page ---- */
+.detail h1 { font-size: 28px; margin: 0 0 8px; }
+.detail .breadcrumb { font-size: 13px; color: #57606a; margin-bottom: 16px; }
+.detail .header-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; font-size: 13px; }
+.detail .header-meta .external { margin-left: auto; }
+
+.section { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 22px 28px; margin-bottom: 18px; }
+.section h2 { margin-top: 0; font-size: 18px; padding-bottom: 8px; border-bottom: 1px solid #eaeef2; }
+.section h3 { font-size: 16px; margin-top: 22px; }
+.section h4 { font-size: 14px; margin-top: 18px; color: #1f2328; }
+.section p { margin: 10px 0; }
+.section ul, .section ol { padding-left: 22px; }
+.section li { margin: 4px 0; }
+
+blockquote { border-left: 4px solid #d0d7de; margin: 12px 0; padding: 6px 16px; color: #57606a; background: #f6f8fa; }
+.problem-statement { font-style: normal; }
+
+pre[class*="language-"] {
+  border-radius: 6px; font-size: 13.5px; padding: 14px 16px; overflow-x: auto;
+  background: #0d1117 !important;
+}
+code:not([class*="language-"]) {
+  background: rgba(175,184,193,.2); padding: 0.15em 0.35em;
+  border-radius: 4px; font-size: 85%;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+
+.complexity-box { display: flex; gap: 24px; padding: 14px 18px; background: #f6f8fa; border-radius: 6px; margin: 12px 0; font-size: 14px; }
+.complexity-box span { display: flex; gap: 8px; }
+.complexity-box strong { color: #0969da; }
+
+.callout { padding: 14px 18px; border-radius: 6px; border-left: 4px solid; margin: 14px 0; }
+.callout-key { background: #fff8c5; border-color: #d4a72c; }
+.callout-pitfall { background: #ffebe9; border-color: #cf222e; }
+.callout-followup { background: #ddf4ff; border-color: #0969da; }
+.callout strong { display: block; margin-bottom: 4px; }
+
+.variants { display: grid; gap: 10px; margin: 8px 0; }
+.variant { padding: 12px 16px; background: #f6f8fa; border-left: 3px solid #d0d7de; border-radius: 4px; font-size: 14px; }
+.variant .vmeta { font-size: 12px; color: #57606a; margin-bottom: 4px; }
+
+.comment { padding: 12px 16px; background: #f6f8fa; border-radius: 6px; margin-bottom: 8px; font-size: 14px; }
+.comment .cmeta { font-size: 12px; color: #57606a; margin-bottom: 4px; }
+
+.nav-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 32px; font-size: 14px; }
+.nav-footer a { padding: 10px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; }
+
+/* Mermaid-ish ascii diagram fallback */
+.ascii-diagram {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.4;
+  background: #f6f8fa; padding: 14px 16px;
+  border-radius: 6px; white-space: pre;
+  overflow-x: auto;
+}

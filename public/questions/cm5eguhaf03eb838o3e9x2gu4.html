@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1797. Design Authentication Manager · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1797. Design Authentication Manager</div>
+  <h1>Leetcode 1797. Design Authentication Manager</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Mid February, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Manage tokens that expire timeToLive seconds after creation/renewal, supporting generate, renew (only if the token is still unexpired), and countUnexpiredTokens (with expirations at time t processed before actions at t). The core challenge is efficiently tracking and removing expired tokens — typically handled with a token-&gt;expiry map plus a min-heap/queue for lazy expiration cleanup.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1797 Design Authentication Manager</strong>：实现一个 token 管理器，token 在创建/续期后 <code>timeToLive</code> 秒过期。需要支持：</p>
+<ul><li><code>generate(tokenId, currentTime)</code> 创建</li><li><code>renew(tokenId, currentTime)</code> 续期（仅在 token 未过期时）</li><li><code>countUnexpiredTokens(currentTime)</code> 当前未过期 token 数</li></ul>
+<p><strong>关键细节</strong>：时刻 <code>t</code> 上的过期发生<strong>先于</strong>该时刻的其他操作（先清理过期再处理本时刻请求）。</p>
+<h3>解题切入点</h3>
+<p>每个 token 维护"过期时间 = 创建/续期时刻 + ttl"。需要快速：</p>
+<ul><li>O(log n) 创建/续期（update 过期时间）</li><li>O(1) 或 O(log n) 查"未过期数"</li></ul>
+<p>两个核心选择：</p>
+<p><strong>A. dict + lazy expiration</strong>：<code>expiry[tokenId] = expiry_time</code>。查询时扫描整 dict 过滤未过期。简单但 query O(N)。</p>
+<p><strong>B. dict + min-heap / SortedDict</strong>：dict 存最新过期；min-heap 按过期时间排序，查询时弹出过期。查询 O(log N) 摊销。</p>
+<p>LC 数据规模小，A 写起来稳。生产推荐 B。</p>
+<h3>Python 实现（推荐方案 B）</h3>
+<pre class="language-python"><code class="language-python">import heapq
+
+class AuthenticationManager:
+    def __init__(self, timeToLive: int):
+        self.ttl = timeToLive
+        # tokenId -&gt; latest expire time (renew 会覆盖)
+        self.expire_at: dict[str, int] = {}
+        # min-heap of (expire_time, tokenId)；可能有 stale entries
+        self.heap: list[tuple[int, str]] = []
+
+    def generate(self, tokenId: str, currentTime: int) -&gt; None:
+        exp = currentTime + self.ttl
+        self.expire_at[tokenId] = exp
+        heapq.heappush(self.heap, (exp, tokenId))
+
+    def renew(self, tokenId: str, currentTime: int) -&gt; None:
+        # 仅当 token 当前未过期才续期
+        if tokenId not in self.expire_at:
+            return
+        if self.expire_at[tokenId] &lt;= currentTime:
+            # 已过期；按题意先过期、再处理 → 续期无效
+            del self.expire_at[tokenId]
+            return
+        new_exp = currentTime + self.ttl
+        self.expire_at[tokenId] = new_exp
+        # 旧的 (old_exp, tokenId) 仍在 heap 里，但后面 countUnexpired
+        # 弹出时会发现 self.expire_at[tokenId] != old_exp，跳过
+        heapq.heappush(self.heap, (new_exp, tokenId))
+
+    def countUnexpiredTokens(self, currentTime: int) -&gt; int:
+        # 先 lazy delete：堆顶过期的弹出
+        while self.heap and self.heap[0][0] &lt;= currentTime:
+            exp, tid = heapq.heappop(self.heap)
+            # 这个 entry 是不是当前最新？若不是，是 stale，丢掉即可
+            if self.expire_at.get(tid) == exp:
+                # 是最新，确实过期了
+                del self.expire_at[tid]
+            # else: stale，丢
+        return len(self.expire_at)</code></pre>
+<h3>复杂度</h3>
+<p>| 操作 | 复杂度 | |---|---| | generate | O(log N) 推 heap | | renew | O(log N) 推 heap | | countUnexpiredTokens | 摊销 O(log N) per call |</p>
+<p>总操作 M 次的总开销 O(M log N)。</p>
+<h3>关键技术点</h3>
+<h4>1. 为什么需要 heap？</h4>
+<p>如果只用 dict，每次 <code>countUnexpiredTokens</code> 都要遍历整个 dict 检查过期，O(N) 每次。N 大时不行。</p>
+<p>heap 提供"按过期时间排序"，每次只需弹掉 ≤ currentTime 的堆顶，剩下的还都未过期。</p>
+<h4>2. Stale heap entries</h4>
+<p><code>renew</code> 时新 expire 入 heap，但旧的不删（heap 不支持删除任意元素）。<code>countUnexpiredTokens</code> 弹出时检测：</p>
+<pre class="language-python"><code class="language-python">if self.expire_at.get(tid) == exp:  # 当前最新
+    # 真的过期了
+else:
+    # stale entry，跳过（更新的 entry 还在 heap 后面或已被处理）</code></pre>
+<p>这是 <strong>lazy deletion</strong> 技巧。</p>
+<h4>3. "过期发生在该时刻之前" 边界</h4>
+<p>题面 <code>if expiryTime &lt;= currentTime then expired</code>。注意是 <code>&lt;=</code> 不是 <code>&lt;</code>：例 ttl=5, generate at t=2 → exp=7。currentTime=7 时 7 &lt;= 7 → 已过期。</p>
+<pre class="language-python"><code class="language-python">while heap and heap[0][0] &lt;= currentTime:  # 用 &lt;=</code></pre>
+<h3>LC 简化解法（操作量小时）</h3>
+<pre class="language-python"><code class="language-python">class AuthenticationManager:
+    def __init__(self, ttl):
+        self.ttl = ttl
+        self.tokens = {}        # id -&gt; expire_at
+
+    def generate(self, tid, t):
+        self.tokens[tid] = t + self.ttl
+
+    def renew(self, tid, t):
+        if self.tokens.get(tid, 0) &gt; t:
+            self.tokens[tid] = t + self.ttl
+
+    def countUnexpiredTokens(self, t):
+        # 顺便清理（不必要但有助 long-running）
+        self.tokens = {k: v for k, v in self.tokens.items() if v &gt; t}
+        return len(self.tokens)</code></pre>
+<p>O(N) per countUnexpired，LC 测试能过。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Renew 不检查"是否过期"，直接续期 —— 违反语义； ❌ countUnexpired 用 <code>&gt;=</code> / <code>&lt;</code> 比较错过期边界； ❌ heap 不处理 stale entries 直接 pop 计数 —— 计数错误； ❌ 没考虑 long-running 情况 dict 越来越大（renewed 但不再访问的 token 没清理） —— 加 lazy cleanup。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>dict（权威状态）+ min-heap（按过期排序）+ lazy deletion（heap stale 不删）是这类 TTL 题的标准组合。<code>Authentication Manager</code>、<code>Logger Rate Limiter</code>、<code>Time-Based KV Store</code> 都共用此模式。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果生产环境怎么实现？" → Redis EXPIRE 自带 TTL，不用自己管 heap。"如何分布式？" → Redis 集群分片 by tokenId；countUnexpiredTokens 改为聚合（不实时一致）。"如果需要列出所有未过期 token？" → 返回 dict 的 keys，调用前先 lazy cleanup。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (5 条)</h2>
+  <div class="comment">It was asked in onsite round ? May i know which group ?</div><div class="comment">Reply A AgriculturalPlumGoat100 Premium • 2个月前</div><div class="comment">was this for coding or system design?</div><div class="comment">Reply R RomanticAquamarineUrial103 Premium • 2个月前</div><div class="comment">Coding check on leetcode question 1797</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmhi1hhbh05wt08ad2knqdyh2.html">← Design CoderPad</a>
+    <a href="cmlod4ttu0pa608ad89vm8qkj.html">Authentication Manager →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

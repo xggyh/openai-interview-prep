@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N- ary tree · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / N- ary tree</div>
+  <h1>N- ary tree</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 2 人报告</span>
+    <span>🕒 最近：Early February, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/cluster-node-count/cmfc459e4046608adgfjpzzio" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Each node of the tree represents a real machine in a cluster. Each machine in the cluster can only communicate with its parent and child nodes through "nodeld" using the following two methods: sendAsyncRequest(toNodeId. message) and receiveRequest(fromNodeId, message) . When a request reaches a machine, the receiveRequest method of that machine will be triggered automatically.
+Suppose root machine (node 1 in the above tree) needs to have the ability to count and print out the total number of machines in the cluster, can you implement the node/machine class and its receiveRequest(fromNodeId, message) method to handle this case? There's no need to implement sendAsyncRequest (toNodeId, message), but you can call this method when needed.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>N-ary tree 节点通信 → count cluster machines</strong>：树的每个节点代表集群中的一台机器。每台机器只能通过 <code>sendAsyncRequest(toNodeId, message)</code> 和 <code>receiveRequest(fromNodeId, message)</code> 与<strong>父节点和子节点</strong>通信。Root 节点要统计整个集群有多少台机器。</p>
+<p>题目隐含约束：</p>
+<ul><li>节点 id 互通（已知 parent / children id）</li><li>通信是异步的（不是直接函数调用）</li><li>不存在共享状态</li></ul>
+<p>考点：<strong>分布式聚合 / 树形 reduce / 异步消息处理</strong>。</p>
+<h3>解题切入点</h3>
+<p>经典<strong>分布式 reduce-on-tree</strong> 模式：</p>
+<ol><li>Root 向所有 child 发 <code>"COUNT_REQUEST"</code></li><li>每个内部节点收到后向自己的所有 child 发 <code>"COUNT_REQUEST"</code>，并记下"在等几个 child 回复"</li><li>叶子节点收到后立即向 parent 回复 <code>"COUNT_RESPONSE: 1"</code>（自己 1 台）</li><li>内部节点收到全部 child 的 <code>COUNT_RESPONSE</code> 后，sum + 1（自己）→ 回复给 parent</li><li>Root 集齐所有 child 的回复 → sum + 1 → 这就是总数</li></ol>
+<p>这是 <strong>fan-out + fan-in</strong> 模式。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import defaultdict
+from typing import Callable
+
+class Node:
+    """集群中的一台机器。仅与父和子通过 sendAsyncRequest 通信。"""
+
+    def __init__(self, node_id: int, parent_id: int | None, children_ids: list[int]):
+        self.node_id = node_id
+        self.parent_id = parent_id
+        self.children_ids = children_ids
+        # 当前正在等待的 count 请求状态
+        # request_id -&gt; {pending: set of child ids, sum: int, origin: 'self' or parent_id}
+        self._pending: dict[str, dict] = {}
+        # 当 root 收到完整 count 时的回调
+        self._on_count_complete: Callable[[int], None] | None = None
+
+    # ----- 框架提供的 API -----
+    def sendAsyncRequest(self, to_node_id: int, message: dict):
+        """框架提供：把 message 异步发到 to_node_id"""
+        raise NotImplementedError  # framework will inject
+
+    # ----- 公共 API -----
+    def count_cluster(self, callback: Callable[[int], None]) -&gt; None:
+        """Root 调用此 API 启动计数"""
+        if self.parent_id is not None:
+            raise RuntimeError("count_cluster must be called on root")
+        request_id = self._new_request_id()
+        self._on_count_complete = callback
+        self._pending[request_id] = {
+            'pending': set(self.children_ids),
+            'sum': 0,
+            'origin': 'self',
+        }
+        if not self.children_ids:
+            # 单节点集群
+            callback(1)
+            return
+        for cid in self.children_ids:
+            self.sendAsyncRequest(cid, {
+                'type': 'COUNT_REQUEST',
+                'request_id': request_id,
+                'sender': self.node_id,
+            })
+
+    def receiveRequest(self, from_node_id: int, message: dict) -&gt; None:
+        """由框架在收到消息时自动调用"""
+        mtype = message['type']
+        rid = message['request_id']
+
+        if mtype == 'COUNT_REQUEST':
+            # 我是内部节点或叶子，记录是哪个 parent 问的
+            if not self.children_ids:
+                # 叶子，直接回复 1
+                self.sendAsyncRequest(from_node_id, {
+                    'type': 'COUNT_RESPONSE',
+                    'request_id': rid,
+                    'count': 1,
+                })
+                return
+            # 内部节点：转发给 children，等回复
+            self._pending[rid] = {
+                'pending': set(self.children_ids),
+                'sum': 0,
+                'origin': from_node_id,
+            }
+            for cid in self.children_ids:
+                self.sendAsyncRequest(cid, {
+                    'type': 'COUNT_REQUEST',
+                    'request_id': rid,
+                    'sender': self.node_id,
+                })
+
+        elif mtype == 'COUNT_RESPONSE':
+            state = self._pending.get(rid)
+            if not state:
+                return  # 重复 / 过期
+            state['sum'] += message['count']
+            state['pending'].discard(from_node_id)
+            if not state['pending']:
+                total = state['sum'] + 1  # +1 算自己
+                origin = state['origin']
+                del self._pending[rid]
+                if origin == 'self':
+                    # 我是 root，完成
+                    if self._on_count_complete:
+                        self._on_count_complete(total)
+                else:
+                    # 转发给 parent
+                    self.sendAsyncRequest(origin, {
+                        'type': 'COUNT_RESPONSE',
+                        'request_id': rid,
+                        'count': total,
+                    })
+
+    def _new_request_id(self) -&gt; str:
+        import uuid
+        return uuid.uuid4().hex</code></pre>
+<h3>复杂度</h3>
+<ul><li>消息数：每个节点收到 1 个 REQUEST + 1 个 RESPONSE，<strong>O(N)</strong> 总消息</li><li>时间（wall-clock）：树高 H 的 round trip → <strong>O(H)</strong> 时间，H = O(log N) for balanced tree</li></ul>
+<h3>关键设计点</h3>
+<h4>1. 用 request_id 区分并发请求</h4>
+<p>可能有多个 count 操作同时跑（监控系统每秒一次）。每次 root 启动用唯一 <code>request_id</code>，节点用 <code>_pending[rid]</code> 隔离状态。</p>
+<h4>2. 叶子早回复</h4>
+<p><code>if not children_ids:</code> → 直接 send response。否则会陷入"我等 child / 没 child 等" 的悖论。</p>
+<h4>3. 内部节点先等齐再上报</h4>
+<p><code>state['pending']</code> 集合维护"还在等的 child"。每个 RESPONSE 到达就 discard 一个。集合空了表示齐了，sum + 1 转发给 parent。</p>
+<h4>4. Origin 记录</h4>
+<p>每个内部节点要记住"这次 count 是哪个 parent 发起的"，因为多 count 并发时不能搞混向哪个 parent 回复。</p>
+<h4>5. 容错（如果面试官追问）</h4>
+<ul><li><strong>超时</strong>：每个节点对每个 request 设 timeout（如 5s）。超时未集齐 → 向 parent 发 partial / fail 报告</li><li><strong>节点故障</strong>：parent 等不到某 child 的回复 → 标记该 child unreachable，sum 不包括其子树（或者 retry）</li><li><strong>消息丢失</strong>：基础设计假设可靠传输（TCP）；如果是 UDP 需要 application-level ack + retry</li></ul>
+<h3>替代方案</h3>
+<h4>同步递归 RPC（如果框架支持）</h4>
+<pre class="language-python"><code class="language-python">def count(self) -&gt; int:
+    if not self.children_ids:
+        return 1
+    return 1 + sum(self.send_sync(c, 'COUNT') for c in self.children_ids)</code></pre>
+<p>简单很多，但同步阻塞 → root 等待时间 = tree depth × RTT，期间不能做别的事。</p>
+<p>异步版本可以<strong>root 同时向所有 child 发送</strong>，每个 child 又同时向自己 child 发送 —— <strong>总时间是 O(H)，不是 O(N)</strong>。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 内部节点没区分 "是 root 还是中转" —— 上报对象搞错； ❌ 没用 request_id —— 多 count 并发时状态串了； ❌ Sum 时忘了 +1（自己）； ❌ 同步阻塞每个 child（一个一个等）—— O(H × children_per_node)，应当并发； ❌ 不处理重复消息 —— 网络重传导致计数翻倍。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>树形分布式聚合的核心：<strong>fan-out 请求 + 等齐 child 回复 + reduce 上报</strong>。模式同 MapReduce 的 shuffle、Spark 的 reduceByKey-on-tree、Gossip 协议。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何扩展到 sum/min/max 任意聚合？" → 用 monoid 抽象（identity + associative op），框架不变只换 op。"如何处理节点动态加入/离开？" → 加入时 parent 注册，再 count 时自动包括；离开则 parent 检测 stale 后剔除。"如何避免节点频繁 count 浪费？" → 增量更新：节点状态变化时主动向上 propagate delta。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (18 条)</h2>
+  <div class="comment">Possible solution import java.util.*;</div><div class="comment">public class Solution2 { public void count(Node root ){ if ( root == null || root.children.isEmpty()){ System.out.println("Number of node in the cluster is : " + 1); return ; }</div><div class="comment">for(Node n : root.children) { n.sendAsynchMessg(root, Type.COUNT_REQUEST.name()); } while (root.children.size() &gt; root.seen.size() ){ try { System.out.println(" waiting  root message received " + root.seen.size()); Thread.sleep(1000l); } catch (InterruptedException e) { throw new RuntimeException(e); } } System.out.println("Number of node in the cluster is : " + root.count); }</div><div class="comment">public static void main(String arg []) { Node root = new Node("1", null); Node node2 = new Node("2", root); root.addChild(node2); Node node3 = new Node("3", root); root.addChild(node3); Node node4 = new Node("4", root); root.addChild(node4); Node node5 = new Node("5", root); root.addChild(node5); Node node6 = new Node("6", root); root.addChild(node6);</div><div class="comment">Node node7 = new Node("7", node2); node2.addChild(node7); Node node8 = new Node("8", node2); node2.addChild(node8); Node node9 = new Node("9", node2); node2.addChild(node9);</div><div class="comment">Node node10 = new Node("10", node3); node3.addChild(node10); Node node11 = new Node("11", node3); node3.addChild(node11);</div><div class="comment">Node node12 = new Node("12", node4); node4.addChild(node12);</div><div class="comment">Node node13 = new Node("13", node5); node5.addChild(node13); Node node14 = new Node("14", node5); node5.addChild(node14); Node node15 = new Node("15", node5); node5.addChild(node15); Node node16 = new Node("16", node5); node5.addChild(node16); Solution2 solution = new Solution2(); solution.count(root);</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5svnaco01dqxszbok7e1lk1.html">← Design a URL Shortener</a>
+    <a href="cmhf5kjws00vx08ad4b1e37z2.html">Why do you want to work at OpenAI? →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

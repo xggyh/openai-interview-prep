@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 994. Rotting Oranges",
+  "shortDescription": "Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nSalary Negotiation\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 994. Rotting Oranges\n\nGiven an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges.\n\nAsked at:\n\nOpenAI\n\nAmazon\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate April, 2026\n\nOpenAI\n\nSenior\n\nEarly September, 2025\n\nAmazon\n\nJunior\n\nLate October, 2024\n\nAmazon\n\nJunior\n\nRotting oranges (variation and optimized code) - graph problem\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Mock Interviews\nGift Premium\nOur Coaches\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate April, 2026\n\nOpenAI\n\nSenior\n\nEarly September, 2025\n\nAmazon\n\nJunior\n\nLate October, 2024\n\nAmazon\n\nJunior\n\nRotting oranges (variation and optimized code) - graph problem\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 994. Rotting Oranges",
+    "slug": "/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "url": "https://www.hellointerview.com/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Late April, 2026",
+    "description": "Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges."
+  }
+}

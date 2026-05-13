@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>In-Memory Database: Implement SQL-Like Operations · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / In-Memory Database: Implement SQL-Like Operations</div>
+  <h1>In-Memory Database: Implement SQL-Like Operations</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+    <span>📋 11 人报告</span>
+    <span>🕒 最近：Late March, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/memory-database-sql/cmbsl00wk004v07adwuorveqo" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Build an in-memory database that supports basic SQL-like operations including insert, query with WHERE clauses, and ORDER BY functionality. Implement efficient data storage structures, query parsing for condition evaluation, and inverted indexes to optimize search performance.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现一个 <strong>in-memory database</strong>，支持 SQL-like 操作：<code>INSERT</code>、<code>SELECT WHERE</code>、<code>ORDER BY</code>。需要数据结构 + 解析 WHERE 条件 + <strong>inverted index</strong> 加速 lookup。</p>
+<p>OpenAI 真实报告 Mid-Staff 级，11 人。考点：<strong>class 设计 + 简单 query 解析器 + 索引</strong>。</p>
+<h3>题目语义</h3>
+<pre class="language-python"><code class="language-python">db = MiniDB()
+db.create_table("users", schema=["id", "name", "age", "city"])
+db.insert("users", {"id": 1, "name": "Alice", "age": 30, "city": "SF"})
+db.insert("users", {"id": 2, "name": "Bob",   "age": 25, "city": "NYC"})
+db.insert("users", {"id": 3, "name": "Carol", "age": 30, "city": "SF"})
+
+db.select("users",
+    where={"city": "SF", "age": {"$gte": 30}},
+    order_by=("age", "DESC"))
+# → [{"id":1,"name":"Alice",...}, {"id":3,"name":"Carol",...}]</code></pre>
+<h3>解题思路</h3>
+<ol><li>表：<code>dict[table_name] -&gt; Table</code></li><li>每个 Table：行用 list，自增 row_id；每列可选建索引</li><li>索引：<code>column -&gt; value -&gt; set[row_id]</code>（倒排）</li><li>SELECT：从索引交集出候选 row_id → 过滤剩余条件 → 排序</li><li>简化版只支持等值 WHERE 用索引；范围 WHERE 退化为扫描</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import defaultdict
+from typing import Any
+import operator
+
+class Table:
+    def __init__(self, schema: list[str]):
+        self.schema = schema
+        self.rows: list[dict] = []           # row_id = idx
+        # column -&gt; value -&gt; set of row_ids
+        self.index: dict[str, dict[Any, set[int]]] = {col: defaultdict(set) for col in schema}
+
+    def insert(self, row: dict):
+        # 校验 schema
+        for col in self.schema:
+            if col not in row:
+                raise ValueError(f"missing col {col}")
+        rid = len(self.rows)
+        self.rows.append(row.copy())
+        for col, val in row.items():
+            if col in self.index:
+                self.index[col][val].add(rid)
+        return rid
+
+    def _match_predicate(self, row: dict, col: str, pred) -&gt; bool:
+        if not isinstance(pred, dict):
+            return row.get(col) == pred
+        for op_name, target in pred.items():
+            op = {
+                '$eq':  operator.eq,
+                '$ne':  operator.ne,
+                '$gt':  operator.gt,
+                '$gte': operator.ge,
+                '$lt':  operator.lt,
+                '$lte': operator.le,
+                '$in':  lambda a, b: a in b,
+            }[op_name]
+            if not op(row.get(col), target):
+                return False
+        return True
+
+    def select(self, where: dict = None, order_by: tuple = None,
+               limit: int | None = None) -&gt; list[dict]:
+        where = where or {}
+        # 1. 找到所有等值条件 → 走索引
+        eq_filters = {c: v for c, v in where.items()
+                      if not isinstance(v, dict)}
+        other_filters = {c: v for c, v in where.items()
+                         if isinstance(v, dict)}
+
+        # 2. 用索引交集出候选
+        if eq_filters:
+            candidate_sets = [self.index[c].get(v, set()) for c, v in eq_filters.items()]
+            candidates = set.intersection(*candidate_sets) if candidate_sets else set(range(len(self.rows)))
+        else:
+            candidates = set(range(len(self.rows)))
+
+        # 3. 应用范围 / 不等条件
+        rows = []
+        for rid in candidates:
+            row = self.rows[rid]
+            ok = all(self._match_predicate(row, c, p) for c, p in other_filters.items())
+            if ok:
+                rows.append(row)
+
+        # 4. ORDER BY
+        if order_by:
+            col, direction = order_by
+            rows.sort(key=lambda r: r.get(col), reverse=(direction == "DESC"))
+
+        # 5. LIMIT
+        if limit is not None:
+            rows = rows[:limit]
+        return rows
+
+class MiniDB:
+    def __init__(self):
+        self.tables: dict[str, Table] = {}
+
+    def create_table(self, name: str, schema: list[str]):
+        if name in self.tables:
+            raise ValueError("table exists")
+        self.tables[name] = Table(schema)
+
+    def insert(self, table: str, row: dict):
+        return self.tables[table].insert(row)
+
+    def select(self, table: str, **kwargs):
+        return self.tables[table].select(**kwargs)</code></pre>
+<h3>复杂度</h3>
+<p>| 操作 | 有索引 | 无索引 | |---|---|---| | INSERT | O(C)，C = 列数 | O(C) | | SELECT 等值 | O(K)，K = 命中行数 | O(N) | | SELECT 范围 | O(M)，M = 候选行（先索引粗筛） | O(N) | | ORDER BY | O(K log K) | O(N log N) |</p>
+<h3>关键设计点</h3>
+<h4>1. 倒排索引（Inverted Index）</h4>
+<p>每列一个 dict：<code>value -&gt; set[row_id]</code>。等值查询直接命中；多列 AND 等值用 <code>set.intersection</code>。</p>
+<pre class="language-python"><code class="language-python"># city='SF' AND age=30 的查询
+ids_sf = self.index['city']['SF']      # {0, 2}
+ids_30 = self.index['age'][30]         # {0, 2}
+ids_sf &amp; ids_30                        # {0, 2}</code></pre>
+<h4>2. 范围查询</h4>
+<p>简单实现：先用等值索引粗筛，再扫描结果。生产级：用 <strong>B-tree / skip list</strong> 为列建有序索引（<code>SortedList</code> from sortedcontainers），支持 <code>range query</code> 在 O(log N + K)。</p>
+<h4>3. UPDATE / DELETE</h4>
+<p>要维护索引：删除时从 <code>index[col][old_val]</code> 移除 row_id；插入时加入新值。row 用 dict 自增 id 而非物理位置，删除不需要重排（标记 tombstone）。</p>
+<h4>4. 多个条件的成本估算（query planner 雏形）</h4>
+<p>如果 <code>city='SF'</code> 命中 100 行，<code>age=30</code> 命中 1 行，先用 age 索引开始，能避免扫 100 行的 SF。生产 DB 用 column statistics 决定 plan。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 理由 | |---|---|---| | 存储 | 行式 list[dict] | 简单。列式（dict[col][rid]）查询友好但插入复杂 | | 索引 | 每列默认建索引 | 简化；生产应允许 user 选择 | | 并发 | 单线程 | 加 Lock 简单但题面没要求 | | WHERE 解析 | dict 风格（$gt $lt） | 比解析 SQL string 简单且清晰 |</p>
+<h3>扩展（如果面试官追问）</h3>
+<ul><li><strong>多表 JOIN</strong>：先实现 nested loop join，O(N×M)；优化用 hash join（小表建 hash）</li><li><strong>GROUP BY + 聚合</strong>：分组用 dict，对每组算 sum/avg</li><li><strong>持久化</strong>：把 rows + index 序列化到文件（pickle / JSON）</li><li><strong>事务</strong>：BEGIN / COMMIT / ROLLBACK，写一份 WAL（write-ahead log）</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>这题是<strong>OOP 设计 + 数据结构选择</strong>的展示。先把 INSERT / SELECT 主路径写干净，倒排索引是核心亮点。WHERE 用 dict 风格比解析 SQL string 节省时间。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用嵌套循环扫每个 row 检查 WHERE —— O(N×C) 慢但勉强对；面试官会问"如何加速"，必须答上索引； ❌ 索引存储用 <code>list[(value, rid)]</code> 而不是 dict —— 等值查询变 O(N)； ❌ INSERT 不更新索引 —— 写入后查不到； ❌ ORDER BY 完不 LIMIT，写了 LIMIT 但没在 sort 之后 —— 先 sort 再 limit。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 SELECT DISTINCT？" 用 set 去重。"如何支持 OR 查询？" <code>set.union</code>。"如果数据太大放不下内存？" → 引入 mmap 或简单 LSM tree。"并发写入？" 每表 RWLock 或乐观锁（CAS on rid）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (11 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>During Screening</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Build an in-memory database that supports basic SQL-like operations including insert, query with WHERE clauses, and ORDER BY functionality. Implement efficient data storage structures, query parsing for condition evaluation, and inverted indexes to optimize search performance. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (65 条)</h2>
+  <div class="comment">this is a lot of parts. Do they give starter code and do we really have to implement the parser part...</div><div class="comment">Reply Shivank Goel Premium • 2个月前</div><div class="comment">End to end working code with binary search on index.</div><div class="comment">from sortedcontainers import SortedDict</div><div class="comment">class Database: def __init__(self): self.records = [] self.inverted_indexes = {}</div><div class="comment">def insert(self, record): record_id = len(self.records) self.records.append(record) for k,v in record.items(): if k not in self.inverted_indexes: self.inverted_indexes[k] = SortedDict()</div><div class="comment">if v not in self.inverted_indexes[k]: self.inverted_indexes[k][v] = set()</div><div class="comment">self.inverted_indexes[k][v].add(record_id)</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmc7x7xjb00023b6fihsk8apf.html">← Design Github Actions</a>
+    <a href="cm5eh7nrh04uj838od5a18zxf.html">Leetcode 271. Encode and Decode Strings →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

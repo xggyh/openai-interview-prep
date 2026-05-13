@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advent of Code Day 7 Variation · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Advent of Code Day 7 Variation</div>
+  <h1>Advent of Code Day 7 Variation</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Late December, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/advent-code-day7/cmjrr2k5v07zc08ado2pqgd2l" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Solve a modified version of Advent of Code Day 7 problem. Implement an algorithm to handle the specific requirements and constraints of this coding challenge.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Advent of Code Day 7 Variation</strong> —— Advent of Code 2022 Day 7 是一个"模拟 Unix 文件系统"的经典题：给一组 shell 输出（<code>cd</code>、<code>ls</code>），重建目录树，然后求满足条件的目录大小。</p>
+<p>OpenAI 报告 Senior 级，1 人。考点：<strong>输入解析 + 树构建 + DFS 聚合</strong>。</p>
+<h3>题目语义（标准版）</h3>
+<p>输入是终端 session log：</p>
+<pre class="language-plaintext"><code class="language-plaintext">$ cd /
+$ ls
+dir a
+14848514 b.txt
+8504156 c.dat
+dir d
+$ cd a
+$ ls
+dir e
+29116 f
+...
+$ cd ..
+$ cd d
+$ ls
+4060174 j
+...</code></pre>
+<p>任务：</p>
+<ol><li><strong>part 1</strong>：找所有目录大小（递归含子目录）≤ 100000 的目录，求总和</li><li><strong>part 2</strong>：根目录总用量 70_000_000 - X = available。需要至少 30_000_000 available。找最小那个删了就能腾出空间的目录的大小</li></ol>
+<p>变种可能是：求 max depth、求某 file 的完整路径、按大小排序、找重复 file 等。</p>
+<h3>解题思路</h3>
+<ol><li>解析 log：状态机 —— 当前位置 + 当前命令</li><li>构建树：每个 dir 是节点，含 <code>files: list[(name, size)]</code> 和 <code>dirs: list[Dir]</code></li><li>计算 dir size：递归 DFS，每个节点 size = own files size + sum(child dirs size)</li><li>用 size 排序 / 过滤完成 part 1 + part 2</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class Dir:
+    name: str
+    parent: Optional['Dir'] = None
+    children: dict[str, 'Dir'] = field(default_factory=dict)
+    files: dict[str, int] = field(default_factory=dict)
+
+    def total_size(self) -&gt; int:
+        return sum(self.files.values()) + sum(c.total_size() for c in self.children.values())
+
+    def walk(self):
+        yield self
+        for c in self.children.values():
+            yield from c.walk()
+
+
+def parse(log: str) -&gt; Dir:
+    root = Dir(name='/')
+    cur = root
+    for line in log.strip().splitlines():
+        line = line.strip()
+        if line.startswith('$ cd '):
+            target = line[5:]
+            if target == '/':
+                cur = root
+            elif target == '..':
+                if cur.parent:
+                    cur = cur.parent
+                # else: already at root, ignore
+            else:
+                if target not in cur.children:
+                    # 没见过的 dir，先建
+                    cur.children[target] = Dir(name=target, parent=cur)
+                cur = cur.children[target]
+        elif line == '$ ls':
+            pass  # 下面的非 $ 行都是 ls 输出
+        elif line.startswith('dir '):
+            name = line[4:]
+            if name not in cur.children:
+                cur.children[name] = Dir(name=name, parent=cur)
+        else:
+            # 形如 "12345 filename.ext"
+            size_str, name = line.split(' ', 1)
+            cur.files[name] = int(size_str)
+    return root
+
+
+# ----- Part 1 -----
+def part1(root: Dir, threshold: int = 100_000) -&gt; int:
+    total = 0
+    for d in root.walk():
+        sz = d.total_size()
+        if sz &lt;= threshold:
+            total += sz
+    return total
+
+
+# ----- Part 2 -----
+def part2(root: Dir, disk: int = 70_000_000, needed: int = 30_000_000) -&gt; int:
+    used = root.total_size()
+    free = disk - used
+    must_free = needed - free
+    candidates = [d.total_size() for d in root.walk() if d.total_size() &gt;= must_free]
+    return min(candidates)
+
+
+# Demo
+log = """\
+$ cd /
+$ ls
+dir a
+14848514 b.txt
+8504156 c.dat
+dir d
+$ cd a
+$ ls
+dir e
+29116 f
+2557 g
+62596 h.lst
+$ cd e
+$ ls
+584 i
+$ cd ..
+$ cd ..
+$ cd d
+$ ls
+4060174 j
+8033020 d.log
+5626152 d.ext
+7214296 k
+"""
+root = parse(log)
+print('part1:', part1(root))   # 95437
+print('part2:', part2(root))   # 24933642</code></pre>
+<h3>复杂度</h3>
+<ul><li>解析 log: O(L)，L = log 行数</li><li>DFS 求 size：当前实现每次 <code>total_size()</code> 都重算 O(N²)；可以<strong>缓存（memoization）</strong> 到 O(N)：</li></ul>
+<pre class="language-python"><code class="language-python">def total_size_cached(self) -&gt; int:
+    if hasattr(self, '_cached_size'):
+        return self._cached_size
+    self._cached_size = sum(self.files.values()) + sum(c.total_size_cached() for c in self.children.values())
+    return self._cached_size</code></pre>
+<p>或者<strong>自下而上 post-order DFS</strong> 一次遍历填好所有 size：</p>
+<pre class="language-python"><code class="language-python">def compute_sizes(d: Dir, sizes: dict):
+    own = sum(d.files.values())
+    sub = sum(compute_sizes(c, sizes) for c in d.children.values())
+    sizes[id(d)] = own + sub
+    return sizes[id(d)]</code></pre>
+<h3>关键技术点</h3>
+<h4>1. 状态机解析</h4>
+<p><code>$ cd X</code> / <code>$ ls</code> / <code>dir X</code> / <code>&lt;size&gt; &lt;name&gt;</code> 四种行类型。<code>cur</code> 指针随 cd 移动。</p>
+<h4>2. cd .. 边界</h4>
+<p>如果 <code>cur</code> 已经是 root，再 <code>cd ..</code> 应该不动（或报错，按题意）。我代码里检查 <code>if cur.parent</code>。</p>
+<h4>3. 重复 ls</h4>
+<p>同一目录 ls 多次可能输出相同 entry。代码里 <code>if name not in cur.children</code> 避免重复建。</p>
+<h4>4. 文件 / 目录命名冲突</h4>
+<p>如果一个目录里既有文件 <code>foo</code> 又有 dir <code>foo</code> —— Advent of Code 数据集里没有，但要在 review 时确认。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 <code>dict[path_string, Dir]</code> 全局 flat 存目录 —— path 计算麻烦，重名 dir 在不同 path 下处理乱；用树形 + parent pointer 简洁； ❌ 解析 <code>cd ..</code> 没处理 root 边界 —— stack underflow； ❌ Part 1 重复算 size（递归内每个 child 又递归到 root）—— 复杂度 O(N²)；用 memoization 或 post-order； ❌ 把 size 算成 own files only —— part 1 part 2 都错。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三个工程练习点：(1) 输入解析做成 state machine 模式；(2) 树结构用 parent pointer 便于 cd ..；(3) 子树大小用 post-order DFS 一次算完。这种 "log → tree → aggregate" 模式很常见（log analyzer、build dependency 计算）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果 log 是流式的（边读边解析）？" → state machine 不变，逐行处理； "如果文件可以 hard link 到多个 dir？" → 不再是树，是 DAG；size 用 visited set 避免重复算； "如何支持 symlink？" → 类似 <code>Unix Cd with Symbolic Link Resolution</code> 那题，加 symlink resolution + cycle detection； "如何找重复文件（同 hash 但不同 path）？" → 加 file hash 字段，按 hash group by。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmkq1swdr0fh807adwlyp760o.html">← Monster Game</a>
+    <a href="cm78h7tyk02kgl7b16admv2nz.html">Design a Metrics Aggregator →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 994. Rotting Oranges · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 994. Rotting Oranges</div>
+  <h1>Leetcode 994. Rotting Oranges</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Late April, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>LeetCode 994 Rotting Oranges：m×n 网格，0=空 / 1=新鲜 / 2=腐烂。每分钟所有腐烂橘子 4 方向扩散到相邻新鲜橘子。求所有新鲜变腐烂的最短分钟数；若有新鲜永远无法腐烂返回 -1。</p>
+<p><strong>多源 BFS</strong> 经典题。OpenAI 真实报告 Senior 级，"interviewer does not care about optimized solution"。</p>
+<h3>解题思路</h3>
+<p>不是单源 BFS（一个起点），而是<strong>多源 BFS</strong>：所有初始 <code>2</code> 同时入队作为 level 0，每轮处理一层。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import deque
+from typing import List
+
+class Solution:
+    def orangesRotting(self, grid: List[List[int]]) -&gt; int:
+        if not grid or not grid[0]: return 0
+        R, C = len(grid), len(grid[0])
+        q = deque()
+        fresh = 0
+        for r in range(R):
+            for c in range(C):
+                if grid[r][c] == 2:
+                    q.append((r, c))
+                elif grid[r][c] == 1:
+                    fresh += 1
+        if fresh == 0:
+            return 0
+
+        minutes = 0
+        DIRS = [(-1,0),(1,0),(0,-1),(0,1)]
+        while q and fresh &gt; 0:
+            for _ in range(len(q)):  # 处理整层
+                r, c = q.popleft()
+                for dr, dc in DIRS:
+                    nr, nc = r+dr, c+dc
+                    if 0 &lt;= nr &lt; R and 0 &lt;= nc &lt; C and grid[nr][nc] == 1:
+                        grid[nr][nc] = 2
+                        fresh -= 1
+                        q.append((nr, nc))
+            minutes += 1
+
+        return minutes if fresh == 0 else -1</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(R × C)</strong>，每个 cell 最多入队一次</li><li>空间：<strong>O(R × C)</strong> 队列最坏装满</li></ul>
+<h3>关键点</h3>
+<ol><li><strong>多源初始化</strong>：把所有 <code>2</code> 在循环开始前都 push 进队列（这就是"多源"）</li><li><strong>按层处理</strong>：用 <code>for _ in range(len(q))</code> 把本层全部出队后再 <code>minutes += 1</code></li><li><strong>提早终止</strong>：<code>while q and fresh &gt; 0</code>，没有新鲜橘子就不再增加 minutes</li><li><strong>-1 判定</strong>：循环结束后还有 fresh，说明有不可达</li></ol>
+<h3>边界 case</h3>
+<p>| Case | 期望返回 | |---|---| | 全空 grid | 0 | | 全 1（无 2） | -1 | | 全 2 | 0 | | 单 cell <code>[[1]]</code> | -1 | | 单 cell <code>[[2]]</code> | 0 |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>没按层处理</strong>：直接 BFS 出队累加 1，每个 cell 都 +1 minute → 错； ❌ <strong>fresh = 0 时返回 -1</strong>：开局就没新鲜，应返回 0； ❌ <strong>初始没把所有 2 入队</strong>：错把它当单源 BFS； ❌ <strong>修改 grid 而不更新 fresh</strong> → 死循环或 -1 错判。</p></div>
+<h3>变种</h3>
+<p>OpenAI 抓到的真实变种（见列表中的 "Disease Spread in Flower Grid"）：<strong>每个 cell 被感染需要 ≥ T 个感染邻居</strong>。T=1 退化为标准 994；T≥2 需要按层同步推进（不能逐个出队就翻转，因为同一层内的传播必须并行）。详见 <code>Disease Spread in Flower Grid</code> 那一题的分析。</p>
+<div class="callout callout-key"><strong>核心要点</strong><p>多源 BFS = "把所有起点放进 q 同时启动" + "按层数累计步数"。这套模板还能解：LC 1162 As Far From Land、LC 542 01 Matrix。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果是 8 方向（含对角）？" DIRS 加 4 个对角；"如果有些细胞免疫（永远不感染）？" 标记成 <code>3</code> 在传播时跳过；"返回每个 cell 被感染的具体时刻？" 用 dict <code>time[(r,c)]</code> 在 BFS 翻转时记 minutes。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Amazon</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>Rotting oranges (variation and optimized code) - graph problem</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm4szunov00303g2e2gomqo2j.html">← Design a Chat/Messaging System</a>
+    <a href="cmkq1t9uu0fij07adqaw1gapu.html">Monster Fight →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tell me about your job and role · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / People Management / Tell me about your job and role</div>
+  <h1>Tell me about your job and role</h1>
+  <div class="header-meta">
+    <span class="tag tag-people-management">People Management</span>
+    <span class="tag tag-level">Manager</span>
+    <span>📋 2 人报告</span>
+    <span>🕒 最近：Late August, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/describe-job-role/cm6ffodsw00013b6pt5izxwps" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Tell me about your job and role"</strong> —— 看似最简单，<strong>实则是面试官第一道筛选</strong>。你的回答决定了：</p>
+<ul><li>接下来 30 分钟问什么类型的题</li><li>面试官对你的 baseline 期待</li><li>你的 seniority signal</li></ul>
+<p>OpenAI 报告 Manager 级 2 人。这题在 Manager / TL 面试里<strong>必问</strong>。</p>
+<h3>面试官想从这题得到什么</h3>
+<ol><li><strong>Scope of impact</strong>：你管多少人、负责多少 surface、决策权多大</li><li><strong>Technical depth</strong>：你做的是什么具体技术，而不是"我们做平台"这种虚词</li><li><strong>Communication clarity</strong>：能不能 2-3 分钟讲清自己是谁</li><li><strong>Match signal</strong>：你的经验跟目标岗位有多 align</li></ol>
+<h3>回答结构（2-3 分钟）</h3>
+<h4>Layer 1：身份定位（30 秒）</h4>
+<p>一句话 nail down 三个维度：<strong>职级 + 组织规模 + 业务领域</strong></p>
+<blockquote><p>"I'm a Staff engineer at X company, leading the personalization-infrastructure team — 4 ICs reporting to me on the technical track, plus close partnership with 2 PMs and an EM."</p></blockquote>
+<p>不要："I work at X doing stuff"。给数字。</p>
+<h4>Layer 2：业务上下文（45 秒）</h4>
+<p>你的 team 在做什么、为公司创造什么价值。<strong>避免内部 jargon</strong>。</p>
+<blockquote><p>"Our team owns the real-time feature pipeline that feeds the recommendation models — basically when a user clicks something, we propagate that signal to the ranking model within 200 ms so the next page they see is updated. This drives roughly 12% of total ad revenue."</p></blockquote>
+<p>模板：<code>我们 team 做 [系统] 给 [谁] 解决 [什么问题]，影响 [可量化指标]</code>。</p>
+<h4>Layer 3：技术深度（60 秒）</h4>
+<p>举 1-2 个<strong>最近</strong>的项目，<strong>展示你的技术决策</strong>：</p>
+<blockquote><p>"Last quarter I led a migration from Kafka to Pulsar for our event bus. The decision came down to needing tiered storage and per-message TTL — Kafka required us to maintain a separate cold storage path. I designed the migration as a dual-write phase followed by gradual cut-over by topic. We migrated 200+ topics in 6 weeks without a single consumer outage. The hardest part was retrofitting our schema registry to support both protocols during the transition."</p></blockquote>
+<p>提供：(1) 问题、(2) 你的方案、(3) 数字结果、(4) 一个具体技术细节让面试官 hook 上来追问。</p>
+<h4>Layer 4：当前重心 + 转向（30 秒）</h4>
+<blockquote><p>"Right now we're scaling the system 5x to handle the new region launch in EMEA. I'm focused on both — the technical hard problem of cross-region replication latency, and the people side of building out a new sub-team in Dublin."</p></blockquote>
+<p>不要说"I do many things"。给一个<strong>具体在做的事</strong>。</p>
+<h3>不同 level 的 anchor 表达</h3>
+<p>| Level | 应有的描述 | |---|---| | Junior | "I work on tasks within my team's roadmap, primarily X" | | Mid | "I own feature areas of X system end-to-end" | | Senior | "I lead 2-3 person efforts and mentor 1-2 juniors" | | Staff | "I drive 3-month+ initiatives, set technical direction, manage cross-team dependencies" | | Principal | "I shape multi-year architectural direction for our org of 50+" | | Manager | "I have N reports / org of M, focus on hiring + people growth + delivery" |</p>
+<p>回答时<strong>自然透露</strong>你的 level，让面试官调整问题难度。</p>
+<h3>OpenAI 加分项</h3>
+<ul><li><strong>AI / LLM 相关经验</strong>：哪怕只是 side project，提一提（"My side project is a ... using GPT-4o"）</li><li><strong>Production scale 数字</strong>：QPS、users、$$ impact —— 让面试官知道你接触过 scale</li><li><strong>跨 team 影响</strong>：不要只描述自己 team —— 提到 partner team + 外部 stakeholder</li><li><strong>Failure / learning</strong>：可以铺一个失败 hook，等面试官追问 "tell me about a hard problem"</li></ul>
+<h3>真实示例</h3>
+<h4>Example 1：Tech Lead / Staff IC</h4>
+<blockquote><p>"I'm a Staff software engineer at LinkedIn on the search ranking team. We're a team of 5 ICs and 1 EM, reporting into the search org of about 80 engineers.</p>
+<p>Our team owns the second-stage ranker — given the top 1000 candidates from recall, we run a deep model to produce the final ranked list. We serve about 8M queries per second peak with P99 latency 80ms.</p>
+<p>The most recent project I led was migrating our ranker from XGBoost to a transformer-based model. The hard part was that the transformer needs 30x more compute per query — we couldn't just swap. I designed a two-tower architecture where we precompute user embeddings nightly and only run the cross-attention at query time. End result: 2.1% lift in CTR, 1.5x infra cost (acceptable to the business).</p>
+<p>I'm currently working with our research partners to integrate LLM-generated query expansions. That's why I'm exploring OpenAI — your work on agents and tool use directly impacts what we're trying to build."</p></blockquote>
+<h4>Example 2：Engineering Manager</h4>
+<blockquote><p>"I'm an EM at Square on the developer platform team. I have 7 direct reports — 5 ICs ranging from new grad to Staff, plus 1 TL who manages 2 of them.</p>
+<p>My team builds the internal SDK and API gateway that every Square service uses to talk to each other. Roughly 600 internal services, 4 million RPC/s peak.</p>
+<p>What I've been spending most time on: I'm 8 months into a re-architecture from monolith gRPC services to service mesh (Istio). The org-wide rollout has been... educational. Three engineering teams pushed back on adoption because of latency concerns; we did a series of joint perf workshops to ground-truth the numbers. We're now at 60% rollout with no major incidents.</p>
+<p>On the people side, I just promoted two engineers — one to Senior, one to Staff. I'm now working with my new TL on his first scope expansion."</p></blockquote>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "I do whatever needs to be done" / "I'm flexible" → no signal； ❌ 报家门 5 分钟不停 —— 面试官会拦截；2-3 分钟是上限； ❌ 全部 internal jargon ("我 own SLO 跨 PR 推动 OKR") —— 听不懂； ❌ 不给数字 —— 没法评估 scope； ❌ 用过去 5 年 + 当前 1 个 + 未来 5 年都讲了 —— 范围太大；只讲<strong>当前 + 最近 1 个 highlight</strong>； ❌ 故意大而虚 "leading transformation" —— 具体！</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>这题的<strong>唯一目标</strong>：让面试官精准判断 "Should I ask the easy version of question X, or the hard version?" 你越能展示 specific scope + concrete impact + relevant tech depth，面试官越会给你 senior-级的题。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>后续可能问的：</p>
+<ul><li>"Walk me through the most challenging tech decision you made"</li><li>"Tell me about a time you disagreed with someone"</li><li>"What's your team's biggest constraint right now?"</li><li>"Why are you considering leaving?" → 提前准备好诚实回答</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (18 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Manager</strong> · OpenAI</div>
+  <div>I was asked this question in the Technical Round (First round before loop).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Manager</strong> · OpenAI</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhah03va838ozuanzsde.html">← Leetcode 2408. Design SQL</a>
+    <a href="cm5oehnrb0002436gh9b3uzx3.html">Design Yelp →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

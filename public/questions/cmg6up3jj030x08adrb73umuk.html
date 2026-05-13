@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design ChatGPT · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design ChatGPT</div>
+  <h1>Design ChatGPT</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Staff, Manager-Senior Manager</span>
+    <span>📋 24 人报告</span>
+    <span>🕒 最近：Early May, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/chatbot-design/cmg6up3jj030x08adrb73umuk" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a conversational AI system similar to ChatGPT that allows users to have natural language conversations and receive intelligent responses. Focus on a simple version that can handle basic chat functionality for a limited number of users.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计一个简化版 ChatGPT —— 用户在 web 上输入消息，系统调用 LLM 生成回复，<strong>支持多轮对话上下文</strong>，<strong>流式输出（token-by-token streaming）</strong>。规模：先支持中等量用户（say 1k 并发会话）。</p>
+<p>OpenAI 自家问这题，他们想看你是否理解 <strong>LLM 推理的工程边界</strong>：上下文管理、流式协议、推理服务集群、长尾延迟控制、限流、安全（prompt injection / 毒性内容）。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>用户登录 → 创建/切换 conversation → 发消息 → 看到流式回复</li><li>对话历史持久化，刷新页面不丢</li><li>多设备同步（手机/电脑看到同一份 history）</li><li>Regenerate / Edit message / Branch conversation</li><li>模型选择（gpt-4o / o3 / etc.）</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>首 token 延迟 P99 &lt; 1s（TTFT，time-to-first-token）</li><li>端到端流式吞吐 30+ tokens/s</li><li>1k 并发对话起步，可扩</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">       Browser
+          │  SSE / WebSocket
+          ▼
+    ┌─────────────┐
+    │   Edge GW   │  → auth, rate-limit, fan-in conversation
+    └──────┬──────┘
+           │
+    ┌──────▼──────────┐
+    │  Chat API       │  → 拉历史、调 LLM、stream 回去
+    │  (stateless)    │
+    └──┬──────────┬───┘
+       │          │
+       ▼          ▼
+  ┌────────┐  ┌────────────────────────┐
+  │ Convo  │  │  Inference Service     │
+  │ Store  │  │  (model serving)       │
+  │ (PG +  │  └─────┬──────────────────┘
+  │  Mongo)│        │ gRPC streaming
+  └────────┘        ▼
+                ┌─────────────────────┐
+                │ Model Worker Pool   │
+                │ (GPU servers,       │
+                │  vLLM / TGI)        │
+                └─────────────────────┘
+                        │
+                        ▼ (logging, eval)
+                ┌─────────────────┐
+                │  Eval / Safety  │
+                │  Worker (async) │
+                └─────────────────┘</div>
+<h3>核心组件设计</h3>
+<h4>1. 流式协议（最关键）</h4>
+<p><strong>Server-Sent Events (SSE) over HTTPS</strong> —— 单向 server → client 推 token，连接长保持。比 WebSocket 简单（不需要双向），比轮询低延迟。</p>
+<pre class="language-plaintext"><code class="language-plaintext">GET /chat/{conv_id}/stream
+Accept: text/event-stream
+
+event: token
+data: {"t":"Hello"}
+
+event: token
+data: {"t":" world"}
+
+event: done
+data: {"finish_reason":"stop","usage":{"prompt_tokens":42,"completion_tokens":2}}</code></pre>
+<p>客户端用 <code>EventSource</code> API 接收，遇到 <code>done</code> 关闭连接。</p>
+<h4>2. Conversation Store</h4>
+<pre class="language-python"><code class="language-python"># Postgres：用户、对话元信息
+class Conversation:
+    id: UUID
+    user_id: UUID
+    title: str           # 由 LLM 摘要生成
+    model: str
+    created_at: datetime
+    updated_at: datetime
+
+# MongoDB / Spanner：消息内容（写入量大，schema 灵活）
+class Message:
+    id: UUID
+    conv_id: UUID
+    role: 'user' | 'assistant' | 'system' | 'tool'
+    content: str
+    parent_id: UUID | None   # 支持 branch
+    created_at: datetime
+    token_count: int</code></pre>
+<p><strong>多设备同步</strong>：客户端 subscribe <code>conv_id</code> 的 SSE channel，新 message 通过 Redis pub/sub fan-out 到该 conv 的所有活跃 session。</p>
+<h4>3. Context Window 管理</h4>
+<p>LLM 有上下文长度限制（如 gpt-4o 128k tokens）。策略：</p>
+<ul><li><strong>完整 history</strong>：当 token 数 &lt; 模型上下文 80%，直接发全部</li><li><strong>滑窗截断</strong>：丢掉最早的 message（保留 system prompt）</li><li><strong>摘要压缩</strong>：调用便宜模型把早期对话摘要成 1-2 句，节省 token 数</li></ul>
+<pre class="language-python"><code class="language-python">def build_prompt(conv_id, max_tokens=100_000):
+    msgs = load_messages(conv_id)
+    total = sum(m.token_count for m in msgs)
+    if total &lt;= max_tokens * 0.8:
+        return msgs
+    # Summarize earliest segment
+    keep = [msgs[0]]  # system
+    cutoff = 0
+    while sum(m.token_count for m in msgs[cutoff+1:]) &gt; max_tokens * 0.6:
+        cutoff += 1
+    summary = call_cheap_model("Summarize:", msgs[1:cutoff+1])
+    return keep + [Message(role='system', content=f"[earlier]: {summary}")] + msgs[cutoff+1:]</code></pre>
+<h4>4. Inference Service</h4>
+<ul><li><strong>多副本 GPU worker</strong>（每副本一个模型 instance），前置 router 按 model 名分发</li><li>用 <strong>vLLM</strong> 或 <strong>TGI</strong>：核心是 PagedAttention + continuous batching，把多个并发 request 拼成一个 batch 喂 GPU</li><li>TTFT 优化：prefill 阶段计算 prompt 的 KV cache，decode 阶段一 token 一 token 出 → 用 <strong>prefix caching</strong> 缓存常用 system prompt，避免重复 prefill</li></ul>
+<h4>5. 限流 + 配额</h4>
+<ul><li>每用户每分钟 token budget（input + output）</li><li>每模型 global concurrency limit（GPU 数量）</li><li>排队系统：等待队列长度过大时返回 429 / 显示"系统繁忙"</li></ul>
+<h4>6. 安全（Trust &amp; Safety）</h4>
+<ul><li><strong>Input moderation</strong>：用户输入过 moderation API（敏感词 / 越狱检测）</li><li><strong>Output moderation</strong>：流式生成的同时分块跑 safety classifier，发现违规即截断并替换</li><li><strong>Prompt injection 防御</strong>：对系统的内部指令不要直接拼用户输入到 prompt 末尾，要用 message role 隔离</li></ul>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | 流式协议 | SSE | WebSocket（双向更重）/ HTTP polling（延迟高） | | 历史存储 | MongoDB（消息）+ Postgres（元信息） | 单 Postgres：写入热点 | | Inference batching | continuous batching (vLLM) | static batching：延迟 spike | | TTFT 优化 | prefix caching | 每次重算：浪费 GPU | | 模型副本 | 多模型多副本，按 SLA 调度 | 单副本：上不去并发 |</p>
+<h3>容量估算</h3>
+<ul><li>1k 并发对话 × 平均 30 tokens/s 输出 = 30k tokens/s</li><li>一张 H100 跑 gpt-4o-mini 可以达到 ~5k tokens/s（不同模型差很多）</li><li>至少 6-10 张 H100，加冗余 → 1 个 cluster 16 张</li></ul>
+<h3>实施关键点</h3>
+<ul><li><strong>流式中断</strong>：用户点 stop 按钮 → 客户端关闭 SSE → 服务端检测到对端断开 → 给 worker 发 cancel 信号 → 释放 GPU</li><li><strong>断线重连</strong>：流式中断后，客户端可以请求 <code>GET /chat/{conv_id}/messages/{msg_id}</code> 拉已生成部分继续</li><li><strong>billing</strong>：每 message 记录 input_tokens、output_tokens，按模型单价 × 量计费</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>这题 OpenAI 自己问最有信号 —— 他们想看你<strong>懂 LLM 推理工程</strong>（不只是叫 API）。三个亮点：<strong>(1) SSE 流式 + cancel</strong>；<strong>(2) continuous batching（vLLM）+ prefix caching</strong>；<strong>(3) context window 管理 + 摘要压缩</strong>。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把 LLM 调用做成普通 REST：流式体验丢失，TTFT 爆炸； ❌ 把整个对话历史拼成一个大 string 存：无法 branch / edit / regenerate； ❌ 同步模型推理（一请求一 GPU）：浪费 GPU 70%+； ❌ 不做 input moderation：jailbreak / 违法内容直接生成； ❌ 把每个用户 session 黏在一台 inference server 上（违反 stateless）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 image input（multimodal）？" → 图片走 vision encoder 输出 embedding 拼到 LLM context。"如何 fine-tune per-user？" → LoRA adapter per-user，运行时按 conv_id 加载。"如何监控质量？" → online RLHF logging + A/B test 不同 prompt template。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (27 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Q</strong> · Qualified Health AI</div>
+  <div>Manager · Design Chat gpt</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  <div>simple gpt small amount of users · no scaling · get basics right and you will be ok</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>They supplied initial requirements that changed throughout the interview. There was a focus on both the frontend and backend architectures. · Task: Design a basic AI chat application. · Initial Requirements: · - Users should be able to authenticate themselves. · - Users should be able to send messages and receive back a response from an AI. · - The AI response should stream in. · - If the user refreshes the page, they get a fresh start. No persistence of the conversation is needed.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  <div>Given a public streaming API that takes a list of messages and responds with AI response, · - Users should see streamed responses · - Users should be able to create, delete conversations · - Users should be able to name the conversation with AI · - Users should be able to see all past conversation history</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  <div>for full stack role, frontend component design and interaction with the backend system was asked</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  <div>Design ChatGPT similar to what we have today focusing on consistency, LLM model and token usage</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Senior Manager</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Manager</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>Needed to design back end to front eng of chat gpt with specific features they wanted you to build</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Staff</strong> · OpenAI</div>
+  <div>Design it end-to-end. Simple version, not many users.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Mid-level</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Senior</strong> · OpenAI</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6xw6unw00003b6qz67bpfaj.html">← KV Store Serialize/Deserialize</a>
+    <a href="cmlod3rnm0pj107adhum3e477.html">Design a credit tracking service for user token balances →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

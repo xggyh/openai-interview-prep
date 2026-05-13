@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 981. Time Based Key-Value Store · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 981. Time Based Key-Value Store</div>
+  <h1>Leetcode 981. Time Based Key-Value Store</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior, Senior-Staff</span>
+    <span>📋 3 人报告</span>
+    <span>🕒 最近：Mid October, 2025</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/time-key-value-store/cm5eguhad02rn838o3ttrkt0w" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a time-based key-value store that records multiple values per key with timestamps and returns the value whose timestamp is the largest &lt;= the queried timestamp. With timestamps per key strictly increasing and up to 2e5 operations, the typical solution uses per-key ordered timestamp/value lists and binary search to find the floor timestamp efficiently.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 981 Time Based Key-Value Store</strong>：实现一个 KV store，每个 key 可以多次 set（带 timestamp），<code>get(key, ts)</code> 返回 <code>timestamp ≤ ts</code> 中<strong>最大的那次</strong> set 对应的值；不存在返回 ""。</p>
+<p>题目保证：<strong>同一 key 的 set 严格按时间戳递增</strong>（这是关键约束）。</p>
+<h3>解题切入点</h3>
+<p>每个 key 维护一个 (ts, value) 列表。由于同 key set 是递增 ts，<strong>列表天然有序</strong>。</p>
+<p><code>get(key, t)</code>：在有序 ts 列表里二分找 <code>floor(t)</code> —— 最大的 <code>ts_i ≤ t</code>。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from bisect import bisect_right
+from collections import defaultdict
+
+class TimeMap:
+    def __init__(self):
+        # key -&gt; list of (ts, value)，ts 升序
+        self._store: dict[str, list[tuple[int, str]]] = defaultdict(list)
+
+    def set(self, key: str, value: str, timestamp: int) -&gt; None:
+        # 题目保证 timestamp 严格递增，直接 append
+        self._store[key].append((timestamp, value))
+
+    def get(self, key: str, timestamp: int) -&gt; str:
+        arr = self._store.get(key)
+        if not arr:
+            return ""
+        # bisect by ts；我们需要 max idx s.t. arr[idx].ts &lt;= timestamp
+        # bisect_right((timestamp, +inf)) - 1
+        # Trick：构造 (timestamp, chr(255)) 让 bisect_right 把所有 ts==timestamp 的都视作 &lt; target
+        idx = bisect_right(arr, (timestamp, chr(255))) - 1
+        if idx &lt; 0:
+            return ""
+        return arr[idx][1]</code></pre>
+<p><strong>关键技巧</strong>：<code>bisect_right</code> 在 tuple 上按字典序比较。<code>(timestamp, chr(255))</code> 让 bisect 把所有 (timestamp, anything) 都视为小于此 target（除非有更大 ts），减一就是 floor。</p>
+<p>更清晰的写法是手写二分只比较 ts：</p>
+<pre class="language-python"><code class="language-python">def get(self, key, timestamp):
+    arr = self._store.get(key, [])
+    lo, hi = 0, len(arr) - 1
+    res = ""
+    while lo &lt;= hi:
+        mid = (lo + hi) // 2
+        if arr[mid][0] &lt;= timestamp:
+            res = arr[mid][1]
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return res</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>set</code>：<strong>O(1)</strong> 摊销（append）</li><li><code>get</code>：<strong>O(log N)</strong> 二分</li><li>空间：O(M)，M = 总 set 调用数</li></ul>
+<h3>关键点</h3>
+<h4>1. 为什么不用 dict + 直接查？</h4>
+<p><code>{key: {ts: value}}</code> 嵌套 dict 直查 O(1)，但 <code>get(key, t)</code> 要找"≤ t 的最大 ts" → 必须排序 ts 集合或扫描，O(N) 每次 get。二分是必要的。</p>
+<h4>2. 为什么 set 严格递增不需要 insort？</h4>
+<p>如果 set 是乱序，每次 set 要 <code>bisect.insort_left(arr, (ts, val))</code>，O(N) 插入。题目保证递增 → 直接 append O(1)。</p>
+<p>如果题目变成乱序 set：</p>
+<pre class="language-python"><code class="language-python">from bisect import insort
+def set(self, key, value, timestamp):
+    insort(self._store[key], (timestamp, value))</code></pre>
+<p>整体仍 O(log N) get + O(N) set。</p>
+<h4>3. 同时间戳多次 set？</h4>
+<p>题目"严格递增" → 每个 ts 只有一次 set。如果允许 same ts，按"后到的覆盖"或"全部记录" 处理需澄清。</p>
+<h4>4. 大规模优化</h4>
+<p>如果 N 极大（亿级），可以用：</p>
+<ul><li><strong>跳表 (Skip List)</strong> —— O(log N) 插入 + 查找</li><li><strong>B+ Tree</strong> —— 磁盘友好</li><li><strong>LSM Tree</strong> —— 高写场景</li></ul>
+<p>LC 用普通数组够了。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">tm = TimeMap()
+tm.set("foo", "bar", 1)
+assert tm.get("foo", 1) == "bar"
+assert tm.get("foo", 3) == "bar"      # 没 ts &gt; 1 的，返回最近的 1
+tm.set("foo", "bar2", 4)
+assert tm.get("foo", 4) == "bar2"
+assert tm.get("foo", 5) == "bar2"
+assert tm.get("foo", 3) == "bar"      # ts=3 &lt; 4，返回 ts=1 那次
+assert tm.get("foo", 0) == ""         # 没有 ≤ 0 的
+assert tm.get("bar", 100) == ""       # key 不存在</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 <code>bisect.bisect_left</code> 返回的 idx 不调整 —— 算的是 "≥ target" 而不是 "≤ target"； ❌ <code>bisect_right((ts, val))</code> 之后忘了 <code>-1</code> —— 错位； ❌ 没处理 <code>key 不存在</code> 返回 ""； ❌ 假设 set 乱序时直接 append —— 列表无序，二分失效。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Time-based KV 的核心：<strong>有序 ts 数组 + 二分找 floor</strong>。当题目保证 ts 递增可以直接 append；否则要 insort。这套模式还能解 LC 1146 Snapshot Array、Authentication Manager 等"按时间快照"题。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何分布式？" → 按 key hash 分 shard；同 key 仍在单 shard 内有序数组；"如何持久化？" → append-only log 顺序写 disk，启动时回放重建内存索引；"如何支持范围查询 (get all keys whose latest ts ≥ X)？" → 加一个 global ts 索引或秒级倒排索引。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (13 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>MongoDB</strong> · Mid-level</div>
+  <div>This round was of 1 hour and too place on 1st April. I was asked this problem statement. · You are building a versioned datastore. You are given two APIs. · PUT(docId int, contents string, timestamp int) -&gt; This will save the contents of that docId for that timestamp. There can be more than one call for a doc ID with differing timestamp, so we would essentially need to store versions for a given docId. · GET(docId int, timestamp int) -&gt; For the timestamp in input, return the content of that docId for the version just before the timestamp. If there is no content, return an empty string. · The timestamp for PUT calls can be unordered. For eg. · PUT(1, "abc", 10) · PUT(2, "bcd", 11) · PUT(1, "cde", 8) · PUT(2, "def", 9) · GET(1, 5) -&gt; "" · GET(1, 9) -&gt; "cde" · GET(2, 15) -&gt; "bcd"</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>MongoDB</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Gusto</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Gusto</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>NVIDIA</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Gusto</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Apple</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Staff</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Apple</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Junior</strong> · OpenAI</div>
+  <div>Design a system to process a series of post/delete statements with timestamps and compute a balance at any arbitrary timestamp. Similar to LeetCode's Time Based Key Value Store. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (6 条)</h2>
+  <div class="comment">it would be good to have the same toggle "Marked as read " as present on other pages on hello interview. Helps to remember which problems I have read / solved</div><div class="comment">Reply P proton1999vpn Premium • 14天前</div><div class="comment">I think the actual problem asked is harder variant, where timestamps in set are not ordered. We would likely have to use a self balancing BST for each key (docId). This way both get and set would be O(logN) always.</div><div class="comment">O(1) for set, O(log n) for get No. timestamps = [t for t, v in pairs] makes it O(N)</div><div class="comment">Thanks for pointing this out, the code is updated to binary search directly on the stored pairs, so it's now properly O(log n)</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6wu2x3y0000356pl299toa0.html">← Design YouTube</a>
+    <a href="cmbskz7ck004r07ad6f1jxlni.html">Resumable Iterator →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

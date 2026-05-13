@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Authentication Manager · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Authentication Manager</div>
+  <h1>Authentication Manager</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+    <span>📋 1 人报告</span>
+    <span>🕒 最近：Mid February, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/authentication-session/cmlod4ttu0pa608ad89vm8qkj" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design and implement an authentication manager system that can handle user login, logout, and session management operations. The system should validate credentials and maintain active user sessions with appropriate security measures.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>实现 <strong>Authentication Manager</strong>（custom 版本，区别于 LC 1797）：处理用户 login、logout、session 管理，validate credentials，maintain active sessions。</p>
+<p>OpenAI Staff 级，1 人报告。这题更<strong>像生产 AuthN 服务</strong>而非纯算法。考点：<strong>密码哈希 + session token + 安全特性</strong>。</p>
+<h3>题目语义</h3>
+<pre class="language-python"><code class="language-python">auth.register(username, password)       # 注册
+auth.login(username, password) -&gt; token # 登录 → 返回 session token
+auth.is_valid(token) -&gt; bool             # token 是否有效
+auth.logout(token)                       # 注销
+auth.list_active_sessions(user) -&gt; list  # 列出用户活跃 session</code></pre>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import secrets
+import hashlib
+import hmac
+import time
+from dataclasses import dataclass
+
+@dataclass
+class Session:
+    token: str
+    user_id: str
+    created_at: float
+    last_seen_at: float
+    expires_at: float
+    user_agent: str = ''
+    ip: str = ''
+
+class AuthenticationManager:
+    """生产级 auth manager：密码哈希、session token、TTL、可注销。"""
+
+    SESSION_TTL = 3600 * 24 * 7   # 7 days
+    PEPPER = b'global_secret_pepper'  # 应来自环境变量 / KMS
+
+    def __init__(self):
+        # username -&gt; (salt, password_hash)
+        self.users: dict[str, tuple[bytes, bytes]] = {}
+        # token -&gt; Session
+        self.sessions: dict[str, Session] = {}
+        # user -&gt; set of active tokens
+        self.user_sessions: dict[str, set[str]] = {}
+
+    # ----- 注册 / 登录 -----
+    def register(self, username: str, password: str) -&gt; bool:
+        if username in self.users:
+            return False
+        salt = secrets.token_bytes(16)
+        pwd_hash = self._hash_password(password, salt)
+        self.users[username] = (salt, pwd_hash)
+        self.user_sessions[username] = set()
+        return True
+
+    def login(self, username: str, password: str,
+              user_agent: str = '', ip: str = '') -&gt; str | None:
+        rec = self.users.get(username)
+        if not rec:
+            # constant-time pretend hash to avoid leaking "user exists" by latency
+            secrets.compare_digest(b'\x00' * 32, b'\x00' * 32)
+            return None
+        salt, stored_hash = rec
+        candidate = self._hash_password(password, salt)
+        if not hmac.compare_digest(candidate, stored_hash):
+            return None
+        return self._create_session(username, user_agent, ip)
+
+    # ----- session -----
+    def is_valid(self, token: str) -&gt; bool:
+        s = self.sessions.get(token)
+        if not s:
+            return False
+        now = time.time()
+        if now &gt;= s.expires_at:
+            self._revoke(token)
+            return False
+        s.last_seen_at = now
+        return True
+
+    def logout(self, token: str) -&gt; None:
+        self._revoke(token)
+
+    def logout_all(self, username: str) -&gt; int:
+        """注销该用户所有 session（密码改了 / 撞库怀疑时调用）"""
+        tokens = list(self.user_sessions.get(username, set()))
+        for t in tokens:
+            self._revoke(t)
+        return len(tokens)
+
+    def list_active_sessions(self, username: str) -&gt; list[Session]:
+        now = time.time()
+        return [self.sessions[t] for t in self.user_sessions.get(username, set())
+                if t in self.sessions and self.sessions[t].expires_at &gt; now]
+
+    # ----- internal -----
+    def _hash_password(self, password: str, salt: bytes) -&gt; bytes:
+        # PBKDF2-HMAC-SHA256：100k iterations + pepper
+        # 生产应用 Argon2id，但 stdlib 提供 pbkdf2 + scrypt
+        return hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode() + self.PEPPER,
+            salt,
+            iterations=100_000,
+            dklen=32
+        )
+
+    def _create_session(self, username: str, user_agent: str, ip: str) -&gt; str:
+        token = secrets.token_urlsafe(32)  # 32 字节 → 43 字符 base64url
+        now = time.time()
+        sess = Session(
+            token=token,
+            user_id=username,
+            created_at=now,
+            last_seen_at=now,
+            expires_at=now + self.SESSION_TTL,
+            user_agent=user_agent,
+            ip=ip,
+        )
+        self.sessions[token] = sess
+        self.user_sessions.setdefault(username, set()).add(token)
+        return token
+
+    def _revoke(self, token: str) -&gt; None:
+        s = self.sessions.pop(token, None)
+        if s and s.user_id in self.user_sessions:
+            self.user_sessions[s.user_id].discard(token)</code></pre>
+<h3>复杂度</h3>
+<p>所有操作 <strong>O(1)</strong> 或 O(1) 摊销（除了 <code>logout_all</code> 是 O(K)，K = 用户活跃 session 数）。</p>
+<h3>安全要点（面试官期待你说）</h3>
+<h4>1. 密码不能明文存</h4>
+<p>用 <strong>盐 (salt) + 慢 hash（PBKDF2 / scrypt / Argon2）</strong>：</p>
+<ul><li>Salt：每用户独立随机 16 字节，防 rainbow table</li><li>慢 hash：让暴力破解每次猜测耗时长（100k iterations ≈ 100ms）</li></ul>
+<p><strong>不要用</strong> MD5 / SHA1 / 无 salt 的 SHA256 —— 1 张消费级 GPU 每秒 10B+ hash。</p>
+<h4>2. Pepper（额外秘密）</h4>
+<p>代码里 / 环境变量里有 PEPPER，DB 泄漏后单单 DB 不能破解密码（攻击者还需要 application server 的 secret）。</p>
+<h4>3. Constant-time comparison</h4>
+<p><code>hmac.compare_digest</code> 比 <code>==</code> 抗时序攻击（==' 短路返回，可以根据耗时推断匹配前 N 位）。</p>
+<h4>4. Session token 随机性</h4>
+<p><code>secrets.token_urlsafe(32)</code> → 32 字节 = 256 bit 熵，撞库不可行。<strong>绝不能</strong> 用 <code>random.choice</code> 或 <code>uuid4</code> 之外的可预测来源。</p>
+<h4>5. Session 不在 URL 里</h4>
+<p>token 放 HttpOnly cookie（防 XSS）+ SameSite=Strict（防 CSRF）。不放在 URL 路径或 query string（会进 server log / refer header）。</p>
+<h4>6. Logout 真的失效</h4>
+<p><code>logout</code> 必须 <strong>服务端撤销 token</strong>，不能只删客户端 cookie。本实现把 token 从 <code>self.sessions</code> 移除，下次 <code>is_valid</code> 直接 False。</p>
+<h4>7. 密码改了 → 撤销所有 session</h4>
+<p><code>logout_all(username)</code> 必须在密码 reset 之后调用。</p>
+<h3>工业级延伸</h3>
+<p>| 特性 | 说明 | |---|---| | <strong>JWT</strong> | 自包含 token，无需 DB 查询。但<strong>不易撤销</strong>（需 deny-list） | | <strong>Refresh + Access token</strong> | Access token 短 TTL（15 分钟），refresh token 长 TTL（30 天）。Access 不可撤销但短命，refresh 可撤销 | | <strong>2FA</strong> | 登录时除密码还要 TOTP 或 WebAuthn | | <strong>Rate limit</strong> | 同 IP / 同 username 一分钟内 5 次失败后锁定 / captcha | | <strong>Login alert</strong> | 异地登录通知邮件 | | <strong>Device fingerprint</strong> | 记录 user_agent + ip + browser 指纹，可疑设备 step-up |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 密码哈希用 SHA256 不加 salt —— rainbow table 秒破； ❌ Session token 用 <code>uuid4().hex</code> —— 仍有 122 bit 熵，但语义上不是 cryptographically random；用 <code>secrets</code>； ❌ <code>==</code> 比较哈希 —— 时序攻击； ❌ Logout 只清客户端 cookie —— 服务端不撤销，token 仍然有效； ❌ 密码改了不 invalidate 其他设备 —— 旧密码泄漏的攻击者可以继续登录。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>实现 auth 不是"写完 CRUD"，是<strong>展示对密码哈希、token 熵、安全比较、session 撤销的理解</strong>。这些是 OpenAI 面试官想看的安全敏感度。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何对接 OAuth (Google login)？" → 用户走 OAuth 流程，拿到 google id_token → 我们 verify google JWT → 创建本地 user record + session。"如何防止 session hijacking？" → IP/UA binding（变化时 step-up 验证）+ HTTPS + HttpOnly。"如何 100M 用户扩展？" → users 表分 sharding by username hash；sessions 放 Redis（自带 TTL 不需要 heap）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Staff</strong> · OpenAI</div>
+  
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">https://www.hellointerview.com/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4?company=OpenAI&amp;level=STAFF</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaf03eb838o3e9x2gu4.html">← Leetcode 1797. Design Authentication Manager</a>
+    <a href="cm5svnaco01dqxszbok7e1lk1.html">Design a URL Shortener →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

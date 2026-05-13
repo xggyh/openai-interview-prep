@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a prompt playground · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a prompt playground</div>
+  <h1>Design a prompt playground</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior</span>
+    <span>📋 2 人报告</span>
+    <span>🕒 最近：Early March, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/prompt-playground/cmjd4xmkg04nf08adwd3m0bvs" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a prompt playground platform that allows users to create, test, and iterate on AI prompts with different models and parameters.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计一个 <strong>prompt playground</strong>：用户编写 prompt，<strong>用不同模型 + 不同参数</strong>（temperature、top_p、max_tokens）测试、对比、迭代。代表产品：OpenAI Playground、Anthropic Workbench、Vercel AI Playground。</p>
+<p>OpenAI 自家工具，他们最懂。核心考点：<strong>多 model 调用 / 并发 diff 对比 / 模板系统 / 历史版本 / 协作</strong>。</p>
+<h3>需求拆解</h3>
+<p><strong>功能性：</strong></p>
+<ul><li>编辑 prompt（含 system / user / assistant 多 role messages）</li><li>选择模型（gpt-4o, gpt-3.5, claude, custom fine-tune）</li><li>调参数（temp, top_p, max_tokens, stop sequences）</li><li>Run → 流式看到输出</li><li>多 run 横向对比（同 prompt，不同 model / 参数）</li><li>保存 prompt template，参数化（<code>{{variable}}</code> 替换）</li><li>版本历史 + 分享 link</li></ul>
+<p><strong>非功能性：</strong></p>
+<ul><li>1k 并发用户测 prompt</li><li>单次 run 流式 &lt; 30s</li><li>历史保存可追溯</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">        Browser
+           │
+           ▼
+     ┌─────────────┐
+     │   Playground│  React SPA
+     │   Frontend  │
+     └──────┬──────┘
+            │ REST + SSE
+            ▼
+     ┌──────────────┐
+     │  Playground  │
+     │  API         │   manage runs, templates, history
+     └──┬─────┬─────┘
+        │     │
+        ▼     ▼
+   ┌──────┐  ┌────────────────┐
+   │ Tmpl │  │ Run            │  → 流式调底层 LLM
+   │ Store│  │ Orchestrator   │
+   │ (PG) │  │  (1 run = 1+ models in parallel)
+   └──────┘  └─────────┬──────┘
+                       │
+                       ▼ gRPC
+              ┌──────────────────┐
+              │ Inference Pool   │ ◀── vLLM / TGI / external API
+              │ (multi-model)    │
+              └──────────────────┘
+                       │
+                       ▼ logging
+              ┌──────────────────┐
+              │ Run History DB   │ Cassandra / Postgres
+              │  (prompt + resp +│
+              │   tokens + cost) │
+              └──────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Prompt Template 系统</h4>
+<pre class="language-python"><code class="language-python">class Template:
+    id: UUID
+    user_id: UUID
+    name: str
+    version: int
+    messages: list[{
+        'role': 'system' | 'user' | 'assistant',
+        'content': str   # 支持 {{var_name}} 占位
+    }]
+    variables: list[{'name': str, 'description': str, 'default': str}]
+    created_at: datetime</code></pre>
+<p><strong>版本化</strong>：每次保存 incr version；旧版本不可改（immutable）。<code>current_version</code> 指针指最新。</p>
+<p><strong>渲染</strong>：</p>
+<pre class="language-python"><code class="language-python">import re
+def render(template, vars: dict[str, str]) -&gt; list[dict]:
+    rendered = []
+    for msg in template.messages:
+        body = re.sub(r'\{\{(\w+)\}\}', lambda m: vars.get(m.group(1), ''), msg['content'])
+        rendered.append({'role': msg['role'], 'content': body})
+    return rendered</code></pre>
+<h4>2. Run（一次 API 调用）</h4>
+<pre class="language-python"><code class="language-python">class Run:
+    id: UUID
+    template_id: UUID
+    template_version: int
+    variables: dict
+    config: {
+        'model': str,
+        'temperature': float,
+        'top_p': float,
+        'max_tokens': int,
+        'stop': list[str]
+    }
+    status: 'pending' | 'streaming' | 'done' | 'failed'
+    started_at: datetime
+    completed_at: datetime
+    rendered_messages: list[dict]   # 已展开的 prompt
+    response: str
+    finish_reason: str
+    usage: {'prompt_tokens': int, 'completion_tokens': int, 'cost_usd': float}</code></pre>
+<h4>3. 多 Run 横向对比</h4>
+<p>UI 上用户可点 "Run with 3 models" → 后端并发发起 3 个 Run，每个独立 stream。前端用 3 列显示 streaming 输出。</p>
+<pre class="language-python"><code class="language-python">async def run_comparison(template_id, variables, configs: list):
+    """同一 prompt × N 个 model/param 组合 → 并发"""
+    tasks = [run_one(template_id, variables, cfg) for cfg in configs]
+    return await asyncio.gather(*tasks)</code></pre>
+<h4>4. 流式 + cancel</h4>
+<p>跟 ChatGPT 设计一样：SSE 推 token；用户点 stop → 关闭连接 → 后端检测到 → cancel 给 inference worker。</p>
+<h4>5. 协作（团队共享 prompt）</h4>
+<ul><li>Workspace 概念：一个公司一个 workspace，prompts 默认 workspace-shared</li><li>权限：owner / editor / viewer</li><li>实时协作：Yjs / CRDT，多人同时编辑 prompt 看到对方 cursor</li></ul>
+<h4>6. Cost tracking</h4>
+<p>每 run 写 <code>cost_usd = prompt_tokens × in_price + completion_tokens × out_price</code>。汇总到 dashboard per-template、per-user、per-month。</p>
+<h4>7. Eval（如果时间够）</h4>
+<p>用户可以定义一组 test inputs + expected outputs / criteria，批量跑模板 → 输出 pass rate。这就是 OpenAI Evals 的雏形。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 理由 | |---|---|---| | 流式协议 | SSE | 单向，简单，浏览器原生支持 | | Template store | Postgres | 元数据查询友好 | | Run history | Cassandra | 写量大，按 user_id partition | | 多模型路由 | API 层适配（OpenAI / Anthropic / 自家 vLLM 一视同仁） | 用户不应感知后端 | | 协作 | CRDT (Yjs) | 比 OT 简单 |</p>
+<h3>关键技术点</h3>
+<ul><li><strong>Latency 对比</strong>：UI 要显示 TTFT、tok/s、total_latency 三个数；后端在 SSE 第一个 token 时记 TTFT，每隔 N 个 token 算 tok/s</li><li><strong>Token 计数</strong>：用对应模型的 tokenizer（tiktoken for OpenAI、anthropic counter）实时算 prompt_tokens</li><li><strong>Diff view</strong>：两个 run 输出做字符 diff，标红删除标绿新增</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>这题面对 OpenAI 面试官，亮点要打在：(1) <strong>并发多 model 对比 + 流式 diff</strong>；(2) <strong>template 版本化</strong>（不要让用户改 prompt 后丢历史）；(3) <strong>token / cost 实时计算</strong>。</p></div>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把 multi-model 调用做成串行 —— 用户等不了；并发； ❌ Template 改了直接覆盖 —— 用户找不回旧版；必须 immutable + version； ❌ 不计算 cost —— 用户用着用着收账单傻眼； ❌ 不做 input 长度校验 —— 超过 model context window 直接 400。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 chain-of-thought / multi-turn template？" → template 支持多 turn 占位，运行时按 turn 顺序调；"如何 A/B test？" → eval framework，定 metric（accuracy/cost），跑 prompt 变体；"如何 fine-tune 集成？" → 在 model 选择里加用户自训 model id，path 一样。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Staff</strong> · How would you rate the quality of this article?</div>
+  <div>0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmg8pwhzz00hh08adsezwfgvw.html">← IPv4 Address Iterator</a>
+    <a href="cm6ffozaw00023b6pwf95drvs.html">What's your biggest failure →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

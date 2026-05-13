@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monster Fight · OpenAI 面试题</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Monster Fight</div>
+  <h1>Monster Fight</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff</span>
+    <span>📋 4 人报告</span>
+    <span>🕒 最近：Mid April, 2026</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/monster-battle-simulator/cmkq1t9uu0fij07adqaw1gapu" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Implement a system to simulate combat between monsters with different attributes and abilities. Design the logic to handle turn-based fighting mechanics and determine the winner.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Monster Fight</strong>：实现一个回合制怪兽战斗系统，怪兽有不同属性（HP / ATK / DEF / SPD）和<strong>技能（不同效果）</strong>。</p>
+<p>不是算法题，是 <strong>LLD（低级设计 / OOP）</strong> 题。考点：<strong>类设计 + 策略模式 + 状态管理 + 扩展性</strong>。OpenAI 真实报告 Senior-Staff 级。</p>
+<h3>解题思路</h3>
+<p>OOP 题面试通用框架：</p>
+<ol><li>列<strong>核心实体</strong>（Monster, Skill, Battle, Effect）</li><li>列<strong>核心交互</strong>（攻击、技能释放、状态变化）</li><li>用<strong>多态 / 策略模式</strong>让"技能"和"效果"可扩展</li><li>写一个能跑的 main demo</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Callable
+import random
+
+# ---------- 基础数据 ----------
+class StatusEffect(Enum):
+    POISON = 'poison'       # 每回合受伤
+    STUN = 'stun'           # 本回合无法行动
+    BURN = 'burn'           # 每回合受伤 + ATK 降低
+    SHIELD = 'shield'       # 减伤
+
+@dataclass
+class Status:
+    effect: StatusEffect
+    remaining_turns: int
+    magnitude: int = 0      # 伤害量或减伤量
+
+# ---------- 技能（策略模式）----------
+class Skill(ABC):
+    def __init__(self, name: str, cost: int = 0):
+        self.name = name
+        self.cost = cost   # 法力/CD
+
+    @abstractmethod
+    def apply(self, caster: 'Monster', target: 'Monster', log: list[str]):
+        ...
+
+class BasicAttack(Skill):
+    def apply(self, caster, target, log):
+        dmg = max(1, caster.atk - target.def_)
+        target.take_damage(dmg)
+        log.append(f"{caster.name} attacks {target.name} for {dmg}")
+
+class FireBlast(Skill):
+    def __init__(self):
+        super().__init__(name='Fire Blast', cost=10)
+    def apply(self, caster, target, log):
+        dmg = caster.atk * 2 - target.def_
+        target.take_damage(max(1, dmg))
+        target.statuses.append(Status(StatusEffect.BURN, 3, magnitude=5))
+        log.append(f"{caster.name} casts Fire Blast: {dmg} dmg + 3-turn burn")
+
+class StunStrike(Skill):
+    def __init__(self):
+        super().__init__(name='Stun Strike', cost=8)
+    def apply(self, caster, target, log):
+        target.take_damage(caster.atk // 2)
+        target.statuses.append(Status(StatusEffect.STUN, 1))
+        log.append(f"{caster.name} uses Stun Strike: stuns {target.name}")
+
+class HealSelf(Skill):
+    def __init__(self):
+        super().__init__(name='Heal', cost=12)
+    def apply(self, caster, target, log):  # target ignored
+        amt = caster.max_hp // 4
+        caster.hp = min(caster.max_hp, caster.hp + amt)
+        log.append(f"{caster.name} heals {amt}")
+
+# ---------- Monster ----------
+@dataclass
+class Monster:
+    name: str
+    max_hp: int
+    atk: int
+    def_: int
+    spd: int
+    mana: int = 100
+    hp: int = field(init=False)
+    statuses: list[Status] = field(default_factory=list)
+    skills: list[Skill] = field(default_factory=list)
+
+    def __post_init__(self):
+        self.hp = self.max_hp
+        # 默认每只都有 basic attack
+        self.skills = [BasicAttack('Basic')] + (self.skills or [])
+
+    def is_alive(self) -&gt; bool:
+        return self.hp &gt; 0
+
+    def take_damage(self, dmg: int):
+        # 检查 shield
+        shield = next((s for s in self.statuses if s.effect == StatusEffect.SHIELD), None)
+        if shield:
+            dmg = max(0, dmg - shield.magnitude)
+        self.hp = max(0, self.hp - dmg)
+
+    def is_stunned(self) -&gt; bool:
+        return any(s.effect == StatusEffect.STUN and s.remaining_turns &gt; 0 for s in self.statuses)
+
+    def tick_statuses(self, log: list[str]):
+        """每回合开始：处理 dot（damage over time）+ 倒计时"""
+        for s in self.statuses:
+            if s.effect == StatusEffect.POISON:
+                self.take_damage(s.magnitude)
+                log.append(f"{self.name} suffers {s.magnitude} poison damage")
+            elif s.effect == StatusEffect.BURN:
+                self.take_damage(s.magnitude)
+                log.append(f"{self.name} burns for {s.magnitude}")
+            s.remaining_turns -= 1
+        self.statuses = [s for s in self.statuses if s.remaining_turns &gt; 0]
+
+# ---------- Battle 引擎 ----------
+class Battle:
+    def __init__(self, a: Monster, b: Monster):
+        self.a, self.b = a, b
+        self.log: list[str] = []
+        self.turn = 0
+
+    def _order(self) -&gt; tuple[Monster, Monster]:
+        # spd 高先动；并列时 a 先动
+        if self.a.spd &gt;= self.b.spd:
+            return self.a, self.b
+        return self.b, self.a
+
+    def _choose_skill(self, m: Monster) -&gt; Skill:
+        # 简单 AI：能用强技就用；否则 basic
+        usable = [s for s in m.skills if s.cost &lt;= m.mana]
+        non_basic = [s for s in usable if not isinstance(s, BasicAttack)]
+        if non_basic:
+            return random.choice(non_basic)
+        return m.skills[0]   # basic
+
+    def run(self, max_turns: int = 100) -&gt; str:
+        while self.a.is_alive() and self.b.is_alive() and self.turn &lt; max_turns:
+            self.turn += 1
+            self.log.append(f"--- Turn {self.turn} ---")
+            first, second = self._order()
+            for actor, foe in [(first, second), (second, first)]:
+                if not actor.is_alive() or not foe.is_alive():
+                    break
+                actor.tick_statuses(self.log)
+                if not actor.is_alive():
+                    break
+                if actor.is_stunned():
+                    self.log.append(f"{actor.name} is stunned, skips turn")
+                    continue
+                skill = self._choose_skill(actor)
+                actor.mana -= skill.cost
+                skill.apply(actor, foe, self.log)
+        if self.a.is_alive() and not self.b.is_alive():
+            return self.a.name
+        if self.b.is_alive() and not self.a.is_alive():
+            return self.b.name
+        return 'draw'
+
+# ---------- 示例 ----------
+if __name__ == '__main__':
+    fireball = FireBlast()
+    stun = StunStrike()
+    heal = HealSelf()
+
+    ifrit = Monster(name='Ifrit',  max_hp=120, atk=22, def_=10, spd=15, skills=[fireball, heal])
+    golem = Monster(name='Golem',  max_hp=180, atk=18, def_=20, spd=8,  skills=[stun])
+
+    b = Battle(ifrit, golem)
+    winner = b.run()
+    print('\n'.join(b.log))
+    print('Winner:', winner)</code></pre>
+<h3>设计亮点</h3>
+<ol><li><strong>Skill 是策略模式（Strategy Pattern）</strong>：新加技能只要写新 class + 实现 <code>apply()</code>，引擎不变。</li><li><strong>Status / 状态机解耦伤害逻辑</strong>：dot（poison/burn）、stun、shield 都用同一 Status 数据结构，<code>tick_statuses</code> 每回合统一处理。</li><li><strong>Battle 引擎决定行动顺序 + AI</strong>：分离了 Monster 数据、技能行为、战斗流程。</li><li><strong>可扩展点</strong>：装备（equip slot）、被动技能（passive，注册到 hook 如 <code>on_hit</code>）、buff/debuff、群体技能（multi-target）。</li></ol>
+<h3>取舍</h3>
+<p>| 选择 | 理由 | |---|---| | Python dataclass + Enum | 简洁，面试 30 分钟内能写完 | | 简单 random AI | 不是 AI 题，过得去就行 | | 同步逐回合 | 不引入 async / event loop，简化 |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把所有技能塞在 Monster 类里用 if/elif —— 不可扩展； ❌ 状态效果直接改 ATK / DEF —— 难恢复；用 Status 列表 + 计算时减； ❌ 没有 max_turns 兜底 —— 死循环（互砍 1 dmg）； ❌ tick_statuses 在 take_damage 之前还是之后？答：之前，模拟"回合开始结算"。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>OOP 题不写完美代码，要展示<strong>清晰的边界</strong>：实体 / 行为 / 引擎三层；策略模式让技能可扩展。先写最简单 <code>BasicAttack</code> 跑通整个 Battle，再加 status / mana / AI。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持多对多战斗？" → Battle 接受 list[Monster]，行动顺序按 spd 排序，target selection 加一层。"如何 replay 战斗？" → 把每回合 (turn, actor, skill, target, dmg) 记录到 event log，replay 时重放。"如何写单测？" → mock random，断言伤害数值；mock skill，断言调用顺序。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Staff</strong> · OpenAI</div>
+  <div>Simulate Turn-Based Monster Team Battle · Problem Statement · Implement the core battle engine for a turn-based monster team fight between Team A and Team B. Each team has an ordered list of monsters. The battle proceeds in rounds until one side has no living monsters left, and you must produce a detailed, time-ordered battle log. · Each monster has: · - name (string) · - health (HP, integer) · - attack (ATK, integer) · Active Monster: · - For each team, the Active Monster is the first monster in its list with HP &gt; 0. · - If a team has no living monsters, it loses immediately. · Round flow (fixed): · 1) Team A's Active Monster attacks Team B's Active Monster. · 2) Team B's Active Monster counterattacks Team A's Active Monster. · 3) Next round starts. · Damage: · - When X attacks Y: Y.HP -= X.ATK · Important rule (to match the interview version and allow draws): · - The counterattack always happens if Team B had a living Active Monster at the start of the round, even if Team A's attack reduces it to HP &lt;= 0. This is a "dying strike". · - A monster that reaches HP &lt;= 0 during the round is removed after the counterattack step finishes. · Replacement: · - When an Active Monster dies, it is removed and the next living monster (if any) becomes Active for the next round. · End conditions: · - "Team A wins" if Team B has no living monsters. · - "Team B wins" if Team A has no living monsters. · - "Draw" if both teams have no living monsters after the same round. · Logging requirements (in order): · - Each attack: who attacked whom, damage, and defender HP change (before -&gt; after). · - Counterattacks that are dying strikes must be marked with "[dying strike]". · - Each death event. · - Each replacement event ("Team X sends out ...") when applicable. · - Final result as the last log line: "Result: Team A wins" / "Result: Team B wins" / "Result: Draw". · Implementation requirement: · - Your code should be reasonably OOD: define Monster, Team, and BattleEngine (they can be nested inside the solution function). Return a BattleResult-like object (you may use a dict) containing the winner and the full log.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Senior</strong> · OpenAI</div>
+  
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">What are all the follow up parts though?</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02s0838ouei0wtvs.html">← Leetcode 994. Rotting Oranges</a>
+    <a href="cm6ffodsw00003b6paxwmrf57.html">Design Slack →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>
