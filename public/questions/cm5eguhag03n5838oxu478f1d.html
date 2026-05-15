@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2115. Find All Possible Recipes from Given Supplies · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2115. Find All Possible Recipes from Given Supplies</div>
+  <h1>Leetcode 2115. Find All Possible Recipes from Given Supplies</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior-Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/recipes-supplies/cm5eguhag03n5838oxu478f1d" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior-Mid-level · 📋 2 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given recipes whose ingredients may include other recipes and an initial set of supplies, determine which recipes can be produced; the core challenge is dependency resolution on a directed graph (topological ordering or DFS) while handling cycles and using supplies as base nodes.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2115 Find All Possible Recipes from Given Supplies</strong>：给一组 recipes（每个 recipe 有 name + ingredients list）+ supplies 初始拥有的原料。Recipe 可作为其他 recipe 的原料。返回<strong>最终能做出的所有 recipe</strong>。</p>
+<p>经典<strong>拓扑排序</strong>。</p>
+<h3>解题思路</h3>
+<p>把每个 ingredient → recipe 当作"依赖关系"。Recipe 是"能否做"取决于所有 ingredients 都满足（要么在 supplies，要么是已能做的 recipe）。</p>
+<p><strong>Kahn 拓扑</strong>：</p>
+<ol><li>每 recipe 的 in_degree = ingredients 数（不算已在 supplies 的）</li><li>构建反向图：ingredient → recipes that need it</li><li>把 in_degree=0 的 recipe 入队</li><li>出队时把它当做新 supply，更新 dependent recipes 的 in_degree</li><li>收集所有出队的 recipe</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import defaultdict, deque
+from typing import List
+
+class Solution:
+    def findAllRecipes(self, recipes: List[str], ingredients: List[List[str]],
+                       supplies: List[str]) -&gt; List[str]:
+        # supplies set，O(1) 查
+        have = set(supplies)
+        # in_deg[recipe] = 还差多少 ingredient
+        in_deg: dict[str, int] = {}
+        # graph[ingredient] = list of recipes needing it
+        graph: dict[str, list[str]] = defaultdict(list)
+        for r, ings in zip(recipes, ingredients):
+            need = 0
+            for ing in ings:
+                if ing in have:
+                    continue   # 已有，不计入 in_deg
+                graph[ing].append(r)
+                need += 1
+            in_deg[r] = need
+
+        q = deque(r for r in recipes if in_deg[r] == 0)
+        result = []
+        while q:
+            r = q.popleft()
+            result.append(r)
+            # r 现在也是 supply
+            for next_r in graph[r]:
+                in_deg[next_r] -= 1
+                if in_deg[next_r] == 0:
+                    q.append(next_r)
+        return result</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(R + E)</strong>，R = recipes 数，E = 总 ingredient 引用次数</li><li>空间：O(R + E)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. supplies 当初始</h4>
+<p>提前把 ingredients 中 already-in-supplies 的去掉，让 in_deg 只数"还差的"。</p>
+<h4>2. 反向图 ingredient → recipes</h4>
+<p>为了快速找"哪些 recipe 依赖此 ingredient"。</p>
+<h4>3. Recipe 完成后视为新 supply</h4>
+<p><code>r</code> 出队后，所有 <code>graph[r]</code> 里的 recipe 的 in_deg 减 1。</p>
+<h4>4. 拓扑确保无循环</h4>
+<p>如果有 recipe 互相依赖（A 需 B，B 需 A），它们的 in_deg 永远 &gt; 0，不被加入 result。这符合题意（这种 recipe 不能做出）。</p>
+<h4>5. 不要 import graphlib</h4>
+<p>stdlib <code>graphlib.TopologicalSorter</code> 适合通用拓扑但语义略不同（不允许循环 vs 这里允许"做不出来"）。Kahn 手写更清晰。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sorted(sol.findAllRecipes(
+    ["bread"], [["yeast","flour"]], ["yeast","flour","corn"])) == ["bread"]
+
+# 嵌套 recipe
+assert sorted(sol.findAllRecipes(
+    ["bread","sandwich"], [["yeast","flour"],["bread","meat"]],
+    ["yeast","flour","meat"])) == ["bread","sandwich"]
+
+# 循环依赖 → 都做不出
+assert sol.findAllRecipes(
+    ["a","b"], [["b"],["a"]], []) == []</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不预先排除 supplies 中已有 ingredient → in_deg 偏大永远到不了 0； ❌ 反向图建错（recipe→ingredient 而非 ingredient→recipe）； ❌ 循环依赖 case 没处理 —— Kahn 自然处理（不出队即可）； ❌ 同名 recipe 出现多次 —— 题目通常保证 unique； ❌ 用 DFS + memoization 也可以，但 Kahn 更简洁。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>拓扑排序处理"依赖完成 → 解锁后续" 的标准模式。同模板：课程表 (LC 207/210)、Alien Dictionary (LC 269)、Task Scheduling (LC 1857)。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回每 recipe 的 ingredient 树？" → DFS 展开；"找所有需要 ingredient X 的 recipe？" → 反向 BFS；"如果 ingredient 有数量？" → 改为流量问题或 multiset；"如果 recipe 有优先级（先做某个）？" → 拓扑后按优先级排序输出。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find All Possible Recipes from Given Supplies</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2024 · <strong>Google</strong> · Junior</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nri04x6838o1f4f8f5b.html">← Leetcode 366. Find Leaves of Binary Tree</a>
+    <a href="cm5eh7nrh04nk838on7tqow3r.html">Leetcode 20. Valid Parentheses →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2402. Meeting Rooms III · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2402. Meeting Rooms III</div>
+  <h1>Leetcode 2402. Meeting Rooms III</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/meeting-rooms-iii/cm5eguhah03v4838o6lf58qge" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior · 📋 3 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Assign each meeting (with unique start times) to the lowest-numbered available room or delay it (keeping its duration and prioritizing earlier original start times) until a room frees, and return the index of the room that hosted the most meetings. The core challenge is simulating this scheduling efficiently using priority queues to track free room indices and next-free times while counting assignments.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2402 Meeting Rooms III</strong>：n 个会议室（编号 0..n-1）。给一组会议 <code>[start, end]</code>。规则：</p>
+<ul><li>优先选<strong>编号最小</strong>的空闲房间</li><li>没空闲时，挑<strong>最早结束</strong>的房间排队等（会议被延后到那房间空闲）</li><li>多个房间同时空闲时优先编号小</li></ul>
+<p>返回<strong>举办最多会议的房间编号</strong>（并列返回编号最小）。</p>
+<p>经典<strong>双 heap</strong>题。</p>
+<h3>解题思路</h3>
+<p>维护两个 heap：</p>
+<ol><li><code>free_rooms</code>：min-heap of 编号，当前空闲房间</li><li><code>busy_rooms</code>：min-heap of (end_time, room_id)，正在用的房间</li></ol>
+<p>排序 meetings 按 start。每个 meeting：</p>
+<ul><li>先把 <code>busy_rooms</code> 里 end_time ≤ start 的房间 pop 出来 push 到 free</li><li>如果 free 不空：取出最小编号；分配</li><li>否则：等最早结束的房间（end_time, id），新 meeting 延后到 end_time 开始，end_time += (orig_end - orig_start)</li></ul>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import heapq
+from typing import List
+
+class Solution:
+    def mostBooked(self, n: int, meetings: List[List[int]]) -&gt; int:
+        meetings.sort(key=lambda x: x[0])
+        free = list(range(n))     # min-heap of room ids
+        heapq.heapify(free)
+        busy = []                 # min-heap of (end_time, room_id)
+        count = [0] * n           # count[r] = 房间 r 主持的会议数
+
+        for s, e in meetings:
+            duration = e - s
+            # 1. 释放到 s 已结束的房间
+            while busy and busy[0][0] &lt;= s:
+                _, rid = heapq.heappop(busy)
+                heapq.heappush(free, rid)
+            # 2. 分配
+            if free:
+                rid = heapq.heappop(free)
+                heapq.heappush(busy, (e, rid))
+                count[rid] += 1
+            else:
+                end_time, rid = heapq.heappop(busy)
+                # 会议从 end_time 开始，延后 duration
+                heapq.heappush(busy, (end_time + duration, rid))
+                count[rid] += 1
+
+        # 找 count 最大的房间编号（并列返回最小编号）
+        max_count = max(count)
+        return count.index(max_count)</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O((N + M) log N)</strong>，M = meetings 数。每个 meeting heap 操作 log(N)。</li><li>空间：O(N)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 双 heap 设计</h4>
+<ul><li><code>free</code>：min-heap by room_id —— 用于"找编号最小的空闲"</li><li><code>busy</code>：min-heap by end_time —— 用于"找最早结束的"，tie-break by room_id（heapq 比较 tuple 自然处理）</li></ul>
+<h4>2. 延后会议</h4>
+<p>如果当前都 busy，新会议不是被丢弃，而是排队到"最早结束的房间"。新会议<strong>延后 duration</strong> 而非 hard time → end_time + duration。</p>
+<p>例：meeting (4, 10) 来了但都 busy；最早结束是 (6, 3) → 这个 meeting 排队，从 t=6 开始，持续 (10-4)=6 → end = 6+6 = 12 → push (12, 3) 回 busy。</p>
+<h4>3. count 最大但编号最小</h4>
+<p>Python <code>list.index(value)</code> 找首个 max，自然是编号最小的。</p>
+<h4>4. 严格 <code>&lt;=</code> 还是 <code>&lt;</code></h4>
+<p>题目 "if at time t one meeting ends and another starts at t, the one that ends has higher priority"。所以 <code>busy[0][0] &lt;= s</code> 用 <code>&lt;=</code>（end == start 算不冲突，房间已空）。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.mostBooked(2, [[0,10],[1,5],[2,7],[3,4]]) == 0
+# room 0: (0,10)
+# room 1: (1,5)
+# at t=2, both busy. 等。最早结束 (5, 1)。meeting (2,7) duration=5, 排到 room 1, end=5+5=10.
+# at t=3, both busy (room 0 to 10, room 1 to 10). meeting (3,4) duration=1, 最早 (10,0)（编号小），排到 0, end=10+1=11.
+# count: [2, 2] -&gt; index 0
+assert sol.mostBooked(3, [[1,20],[2,10],[3,5],[4,9],[6,8]]) == 1</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 延后会议时把 end 算成 max(s, busy_end) + duration（× 错，应是 busy_end + duration）； ❌ free heap 用 list 而非 heap —— pop 最小 O(N)； ❌ <code>busy[0][0] &lt; s</code> 用 <code>&lt;</code> 而非 <code>&lt;=</code> —— 边界会议挤占； ❌ tie-break：用 (end_time, room_id) 自然处理；用 (end_time,) 单元素 tuple 会忽略 room_id 优先； ❌ 找 max count 用 reverse sort + 取首 —— 可能不是最小编号；用 <code>count.index(max(count))</code> 正确。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"事件调度" 模式：双 heap（空闲池 + 忙队列）+ 按时间扫。同模板：医院床位调度、停车场分配、磁盘 IO 调度。Tie-break 设计是这类题的灵魂。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果不允许延后（超时丢弃）？" → free 空时直接 skip；"加 room 容量（人数）？" → 每 meeting 需要的房间 size，free heap 改为 SortedList by (capacity, room_id)；"取消会议？" → busy heap 需要 lazy delete（用 dict 标记 cancelled，pop 时 skip）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (8 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Oracle</strong> · Senior</div>
+  <div>find out minimum GPU to execute all processes</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Uber</strong> · Senior</div>
+  <div>Variation of meetings rooms scheduling https://leetcode.com/problems/meeting-rooms-iii/</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2024 · <strong>Google</strong> · Senior</div>
+  <div>Meeting Rooms III</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Implement a solution for the Meeting Rooms II problem · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">for input - n = 2, meetings = [[0,10], [1,5], [2,7]] answer should be 1 not 0 , as meeting room has most assigned meeting</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6jzrva4000gyis4tbslkc0q.html">← Count Islands in Binary Trees</a>
+    <a href="cm5eguhad02xn838o2q3dvi00.html">Leetcode 1197. Minimum Knight Moves →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

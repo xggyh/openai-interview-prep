@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Song Shuffler · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Song Shuffler</div>
+  <h1>Song Shuffler</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior-Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/playlist-shuffle/cm6jwvh80005vui4b4epro213" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior-Mid-level · 📋 2 · 🕒 Early January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an algorithm to shuffle a playlist of songs such that each song is played once in a random order. The algorithm should ensure that the shuffle is unbiased and each permutation of the playlist is equally likely.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Song Shuffler</strong>：实现播放列表 shuffle，每首歌恰好播一次，<strong>uniform random</strong>（每个排列等概率）。也有变种：add/remove songs；多人偏好的拓扑序合并。</p>
+<h3>主要解法：Fisher-Yates Shuffle</h3>
+<p>经典 unbiased shuffle，O(N) 时间。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import random
+
+class Playlist:
+    def __init__(self, songs: list[str]):
+        self.songs = list(songs)
+        self.order: list[int] = []   # 待播 idx
+        self.shuffle()
+
+    def add(self, song: str):
+        self.songs.append(song)
+        # 简化：加入后重新 shuffle 剩余
+        self.order = list(range(len(self.songs)))
+        self._fisher_yates(self.order)
+
+    def remove(self, song: str):
+        idx = self.songs.index(song)
+        self.songs.pop(idx)
+        self.order = list(range(len(self.songs)))
+        self._fisher_yates(self.order)
+
+    def shuffle(self):
+        self.order = list(range(len(self.songs)))
+        self._fisher_yates(self.order)
+
+    def next_song(self) -&gt; str | None:
+        if not self.order:
+            return None
+        idx = self.order.pop()
+        return self.songs[idx]
+
+    @staticmethod
+    def _fisher_yates(arr: list):
+        for i in range(len(arr) - 1, 0, -1):
+            j = random.randint(0, i)
+            arr[i], arr[j] = arr[j], arr[i]</code></pre>
+<h3>Fisher-Yates 证明 uniform</h3>
+<p>每个排列概率 = 1/n × 1/(n-1) × ... × 1/1 = 1/n!。</p>
+<p>错误版本（Naive Shuffle）：每位置随机选另一位置 swap，<strong>结果有偏</strong>（不是 uniform）。</p>
+<pre class="language-python"><code class="language-python"># WRONG (biased)
+def naive_shuffle(arr):
+    for i in range(len(arr)):
+        j = random.randint(0, len(arr) - 1)  # 错：应是 i..n-1
+        arr[i], arr[j] = arr[j], arr[i]</code></pre>
+<h3>多人偏好合并（拓扑序题）</h3>
+<p>如果 N 人每人给一个偏好顺序（partial order），找一个 valid total order 满足所有：<strong>拓扑排序</strong>。</p>
+<pre class="language-python"><code class="language-python">def merge_preferences(prefs: list[list[str]]) -&gt; list[str] | None:
+    """每个 pref 是该用户给出的歌曲偏好序"""
+    from collections import defaultdict, deque
+    in_deg = defaultdict(int)
+    adj = defaultdict(set)
+    songs = set()
+    for p in prefs:
+        for s in p:
+            songs.add(s)
+        for i in range(len(p) - 1):
+            if p[i+1] not in adj[p[i]]:
+                adj[p[i]].add(p[i+1])
+                in_deg[p[i+1]] += 1
+    q = deque(s for s in songs if in_deg[s] == 0)
+    order = []
+    while q:
+        s = q.popleft()
+        order.append(s)
+        for nxt in adj[s]:
+            in_deg[nxt] -= 1
+            if in_deg[nxt] == 0:
+                q.append(nxt)
+    return order if len(order) == len(songs) else None</code></pre>
+<h3>复杂度</h3>
+<ul><li>Shuffle: <strong>O(N)</strong></li><li>拓扑序合并: O(V + E)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. Fisher-Yates 的正确性</h4>
+<p>第 i 步从 [0, i] 选 j（不是 [0, n-1]），保证已 fix 的部分不被打乱。这是 unbiased 的关键。</p>
+<h4>2. random.shuffle 即是 Fisher-Yates</h4>
+<p>Python <code>random.shuffle(list)</code> 内部就是 Fisher-Yates。生产代码直接用，面试要会自己写。</p>
+<h4>3. 不要在 shuffle 后再"调整一下"</h4>
+<p>任何二次操作（如"避免连续两首同 artist"）会破坏 uniform。需要其他算法（rejection sampling 或加权采样）。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Naive shuffle 用 <code>randint(0, n-1)</code> 在每个位置 → 有偏 (n^n 选法 / n! 排列 → 不均匀)； ❌ 用 <code>sorted(arr, key=lambda x: random.random())</code> shuffle —— 部分语言/版本有偏； ❌ 多线程同时 shuffle —— 需锁； ❌ 偏好合并有环 → 无 valid order，必须 detect 并返回 None。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Fisher-Yates 是 uniform shuffle 的金标准。同思路：reservoir sampling (k 个元素从 stream 等概率)、weighted random selection。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"shuffle 后避免连续重复 artist？" → swap 相邻重复元素到非相邻位置（如果可能）；"多用户的偏好同时考虑？" → 拓扑序合并（如上）；"流式 add song 同时 shuffle？" → reservoir sampling 维护当前 random pick。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Amazon</strong> · Senior</div>
+  <div>Write code to create song playlist with functions to add and remove songs from playlist</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Google</strong> · Junior</div>
+  <div>Play songs in order: Given n people with specific song orders, find if a valid order exists that satisfies all preferences (topological ordering problem).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Song Shuffler</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">https://leetcode.com/problems/shuffle-an-array/description/ Leetcode problem</div>
+</section>
+  <section class="section"><h2>外部链接</h2><ul><li><a href="https://leetcode.com/problems/shuffle-an-array/description/" target="_blank" rel="noopener">https://leetcode.com/problems/shuffle-an-array/description/</a></li></ul></section>
+
+  <div class="nav-footer">
+    <a href="cm6ffpfij00043b6pben6f0r8.html">← What are the signals you're looking for if an engineer is ready for a promo</a>
+    <a href="cm6jwv6ar0033ui4bpqke1e4w.html">Convert Graph to Binary Tree with Alternating Colors →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

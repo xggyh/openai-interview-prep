@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 212. Word Search II · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 212. Word Search II</div>
+  <h1>Leetcode 212. Word Search II</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Intern, Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/leetcode-212-word-search/cm5eh7nrh04sw838o1tr5hk57" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Intern, Mid-level · 📋 2 · 🕒 Mid October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an m×n letter grid and a list of words, find all words that can be formed by sequentially adjacent (horizontal/vertical) non-repeating cells. The core challenge is efficiently searching many candidate words on the board using DFS/backtracking with prefix pruning (e.g., a Trie) to handle up to 12×12 boards and tens of thousands of words.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 212 Word Search II</strong>：m×n 网格里搜索给定字典中的所有单词。单词由 grid 相邻字符（4 方向）组成，<strong>不能重用同一 cell</strong>。返回找到的单词列表。</p>
+<p>经典<strong>Trie + DFS + 回溯</strong>。Hard。</p>
+<h3>朴素 vs Trie 优化</h3>
+<p><strong>朴素</strong>：对每个 word 做一次 LC 79 (Word Search)。复杂度 O(W × R × C × 4^L)，W = 单词数。慢。</p>
+<p><strong>Trie</strong>：把所有 word 建 Trie，DFS grid 时沿 Trie 走（自然 prune），找到 leaf 就 record。复杂度 O(R × C × 4^L_max)，W 因子消失。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class TrieNode:
+    def __init__(self):
+        self.children: dict[str, 'TrieNode'] = {}
+        self.word: str | None = None   # 在 leaf 存完整 word（方便 record）
+
+class Solution:
+    def findWords(self, board: List[List[str]], words: List[str]) -&gt; List[str]:
+        # 1. Build Trie
+        root = TrieNode()
+        for w in words:
+            node = root
+            for c in w:
+                if c not in node.children:
+                    node.children[c] = TrieNode()
+                node = node.children[c]
+            node.word = w
+
+        R, C = len(board), len(board[0])
+        result = []
+
+        def dfs(r: int, c: int, node: TrieNode):
+            ch = board[r][c]
+            if ch not in node.children:
+                return
+            nxt = node.children[ch]
+            if nxt.word is not None:
+                result.append(nxt.word)
+                nxt.word = None    # 去重 + 防重复 push
+            board[r][c] = "#"   # mark visited
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr, nc = r+dr, c+dc
+                if 0 &lt;= nr &lt; R and 0 &lt;= nc &lt; C and board[nr][nc] != "#":
+                    dfs(nr, nc, nxt)
+            board[r][c] = ch    # restore
+
+            # Pruning: 如果 nxt 没 children 了，从父 node 移除（减少未来搜索）
+            if not nxt.children:
+                node.children.pop(ch, None)
+
+        for r in range(R):
+            for c in range(C):
+                dfs(r, c, root)
+
+        return result</code></pre>
+<h3>复杂度</h3>
+<ul><li>建 Trie：O(total chars in words)</li><li>DFS：每个 cell 起点 → 最深 4^L_max（实际远小，因为 Trie 早 prune）</li><li>总：<strong>O(R × C × 4^L_max)</strong>，远小于"每词独立 DFS"的 O(W × R × C × 4^L)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. Trie 把所有 word 共享 prefix</h4>
+<p>如果 <code>["cat", "car", "card"]</code>，共享 prefix "ca"。Trie 上从 root 走 c→a 时，遇到下一字符是 't' 还是 'r' 各自分叉，<strong>不必为每个 word 重新搜</strong>。</p>
+<h4>2. DFS 沿 Trie 走</h4>
+<p>不是先有 word，再 grid 搜。而是 grid DFS 一步，Trie 一步。Trie 上有该子节点就继续，没有就终止该分支。<strong>搜索剪枝</strong>自动发生。</p>
+<h4>3. 标记 visited</h4>
+<p>把 <code>board[r][c]</code> 临时改为 <code>"#"</code>，DFS 回溯时还原。这样不用额外 visited set。</p>
+<h4>4. Trie 剪枝（性能加分）</h4>
+<p>DFS 完一条分支后，如果当前 Trie node 已无 children（所有 word 都找到了），把它从父 node 移除。下次 DFS 走到这里就立即返回。</p>
+<p>LC 212 测试集开启这个剪枝差 5-10x 性能。</p>
+<h4>5. word=None 去重</h4>
+<p>找到 word 后把 leaf 的 <code>.word</code> 清零。这样不会把同一个 word 多次 append（grid 上可能有多条路径拼出同一 word）。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">board = [
+    ["o","a","a","n"],
+    ["e","t","a","e"],
+    ["i","h","k","r"],
+    ["i","f","l","v"]
+]
+words = ["oath","pea","eat","rain"]
+# 期望: ["eat", "oath"]</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 对每个 word 独立 DFS —— TLE； ❌ Visited 用 set 而非 in-place <code>#</code> —— 工作但常数大； ❌ 找到 word 不清零 → 重复加入 result； ❌ Trie 不 prune —— 仍能 AC 但慢； ❌ 回溯时忘恢复 <code>board[r][c] = ch</code> —— 网格被破坏； ❌ DFS 不检查 <code>ch not in node.children</code> 立即返回 —— 多走无用路径。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>多模匹配 + grid 搜索 = Trie + DFS。"Trie 上走" 把搜索复杂度从 <code>O(W × 路径)</code> 降到 <code>O(路径)</code>。这套思路也用于：拼字游戏、DNA 模式匹配、敏感词过滤。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果 word 长度可超过 R×C？" → Trie 仍工作，但 DFS 永远找不到（visited 用完）；"如果允许重用 cell？" → 不要 mark visited，但要 cycle detection 或限制深度；"如果 board 巨大？" → 把高频字符做 spatial index 加速起点选择；"输出每 word 在 grid 上的路径？" → DFS 记录路径，找到时复制。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (8 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Uber</strong> · Senior</div>
+  <div>Problem is similar or even identical to Leetcode, except the interviewer stressed emphasis on solving it via graphs instead of the trie approach.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>G</strong> · glean</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Bloomberg</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Google</strong> · Intern</div>
+  <div>Same as the leetcode version, just that you can search along the diagonals too.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Snowflake</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04uh838o2u70bl2w.html">← Leetcode 269. Alien Dictionary</a>
+    <a href="cmbskz7ck004r07ad6f1jxlni.html">Resumable Iterator →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1279. Traffic Light Controlled Intersection · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1279. Traffic Light Controlled Intersection</div>
+  <h1>Leetcode 1279. Traffic Light Controlled Intersection</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/traffic-light-intersection/cm5eguhae02zx838oeshehcvt" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 1 · 🕒 Mid May, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given arrival times/orders of cars and a traffic light that cycles through states, simulate the intersection to determine which cars can pass (and when) under the light's timing constraints. This is an easy event-driven simulation/queueing problem that tests correct handling of timing, ordering, and light state transitions.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1279 Traffic Light Controlled Intersection</strong>：模拟交叉路口的红绿灯。两条 road 交叉，灯有状态。车辆请求过路 (carId, road, direction)：if road's light is green pass else wait then switch light.</p>
+<p>设计题 + concurrency。</p>
+<h3>解法</h3>
+<p>用一个<strong>互斥锁 + 共享 light state</strong>。当车要过：</p>
+<ul><li>如果当前 road 灯绿，过；</li><li>否则：上锁 → 切换灯 → 过 → 解锁。</li></ul>
+<pre class="language-python"><code class="language-python">import threading
+
+class TrafficLight:
+    def __init__(self):
+        self.green_road = 1   # initially road 1 is green
+        self.lock = threading.Lock()
+
+    def carArrived(self, carId: int, roadId: int, direction: int,
+                   turnGreen, crossCar) -&gt; None:
+        with self.lock:
+            if self.green_road != roadId:
+                turnGreen()
+                self.green_road = roadId
+            crossCar()</code></pre>
+<h3>复杂度</h3>
+<ul><li>每车 O(1) + 锁开销</li><li>空间 O(1)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 临界区</h4>
+<p><code>green_road</code> 是共享状态，多 thread 并发会 race。<code>Lock</code> 保证一次只有一辆车过 + 切灯原子。</p>
+<h4>2. 不要在锁内 sleep</h4>
+<p><code>turnGreen</code> 和 <code>crossCar</code> 通常是即时操作（LC 框架内部）。如果它们慢，要释放锁后再做，但这道题不要求。</p>
+<h4>3. Re-entrant lock 不需要</h4>
+<p>每个 carArrived 调用是独立的，不嵌套。</p>
+<h4>4. 公平性？</h4>
+<p>题目不要求 FIFO；Python <code>Lock</code> 也不保证 fair。如果要 fair，用 <code>queue.Queue</code> 序列化请求。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不加锁 —— race condition，两车同时切灯； ❌ 用 RLock 没必要，性能略差； ❌ 把 <code>green_road</code> 当 atomic 改而不锁 —— check-then-set 不 atomic； ❌ 死锁：忘了 with 语句释放。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>并发控制基础：临界区 + Lock。同模式：LC 1114 Print in Order、LC 1115 Print FooBar Alternately、各种 producer-consumer。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"公平调度？" → 等待队列；"多路口？" → 每路口独立 Lock；"超时机制？" → <code>lock.acquire(timeout=...)</code> 或 condition variable；"分布式（多服务器多车）？" → 中心 lock service (Redis) 或 distributed consensus。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02zh838oa4lbcq1w.html">← Leetcode 1263. Minimum Moves to Move a Box to Their Target Location</a>
+    <a href="cm5eguhae032r838owfplgsi3.html">Leetcode 1381. Design a Stack With Increment Operation →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

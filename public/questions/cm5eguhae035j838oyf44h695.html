@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1481. Least Number of Unique Integers after K Removals · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1481. Least Number of Unique Integers after K Removals</div>
+  <h1>Leetcode 1481. Least Number of Unique Integers after K Removals</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/least-unique-integers/cm5eguhae035j838oyf44h695" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Early January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Remove exactly k elements from an integer array to minimize the number of distinct values remaining. This reduces to counting element frequencies and greedily eliminating values with the smallest counts until k is used.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1481 Least Number of Unique Integers after K Removals</strong>：移除恰好 k 个元素后，剩下数组的 unique 元素数量最小。</p>
+<h3>解法</h3>
+<p>贪心：优先删除<strong>频率最小的整数</strong>（一次性把它清空，比把同一高频整数砍一半更划算）。</p>
+<ol><li>Count freq</li><li>按 freq 升序排序</li><li>顺序消耗 k：每删除一种 (freq 个) ，k 减 freq，unique-- ；如果 k 不够删完整种，则停止</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import Counter
+from typing import List
+
+class Solution:
+    def findLeastNumOfUniqueInts(self, arr: List[int], k: int) -&gt; int:
+        freq = Counter(arr).values()
+        sorted_freq = sorted(freq)
+        unique = len(sorted_freq)
+        for f in sorted_freq:
+            if k &gt;= f:
+                k -= f
+                unique -= 1
+            else:
+                break
+        return unique</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N + U log U)</strong>，U = unique count</li><li>空间：O(U)</li></ul>
+<h3>关键点</h3>
+<h4>1. 贪心正确性</h4>
+<p>要让 unique 最小 → 尽可能多地完全删掉某些整数。删掉一个 freq=f 的整数花 f 次操作，让 unique 减 1。<strong>优先选 f 最小的</strong>（性价比最高）。</p>
+<h4>2. 处理 k 用完</h4>
+<p>如果 <code>k &lt; f</code>，删不完这种整数，但它仍然存在于数组里 → unique 不减。break。</p>
+<h4>3. Bucket sort 优化</h4>
+<p>如果想做 O(N) 而非 O(U log U)：</p>
+<pre class="language-python"><code class="language-python">freq = Counter(arr)
+buckets = [0] * (len(arr) + 1)
+for f in freq.values():
+    buckets[f] += 1
+unique = sum(buckets)
+for f in range(1, len(arr) + 1):
+    if buckets[f] == 0: continue
+    can_remove = min(buckets[f], k // f)
+    unique -= can_remove
+    k -= can_remove * f
+    if k &lt; f: break
+return unique</code></pre>
+<p>复杂度 O(N)。LC 数据下 sort 也 OK。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 删除最高频的 —— 一次操作只减 1 个，浪费； ❌ k=0 时返回 0 —— 错，应返回 unique 总数； ❌ k 大于总和时返回 0 —— 题目通常保证 k ≤ len(arr)； ❌ 用 list 频繁 sort —— 一次 sort 后顺序固定。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>经典贪心 "选最便宜的购买" 模式。性价比 = "unique 减少量 / 操作数" → 选 f 最小的 ratio = 1/f 最大。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"最大化 unique（保留 k 个）？" → 反过来：保留 freq 最低的，相当于答案 = 多少种 freq 能塞进 k；"加权 unique？" → 改为 1/(f × weight) 排序；"分布式数据？" → MapReduce: count → 全局 sort by freq。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given a fixed size array of integers and a storage limit S, find a number x to truncate each array integer to the largest optimal number such that the sum of the array after truncations is S</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaf03ao838o9lw323kn.html">← Leetcode 1666. Change the Root of a Binary Tree</a>
+    <a href="cm6jwxvny00juui4b1f03avuw.html">String Template Substitution with Variable Replacement →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

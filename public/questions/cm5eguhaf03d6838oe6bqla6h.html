@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1756. Design Most Recently Used Queue · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1756. Design Most Recently Used Queue</div>
+  <h1>Leetcode 1756. Design Most Recently Used Queue</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/most-recently-used-queue/cm5eguhaf03d6838oe6bqla6h" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a queue-like data structure that maintains items ordered by most-recent access, supporting operations to enqueue, dequeue/remove, and "touch" an item to move it to the most-recent position. The challenge is to keep these updates and queries efficient (ideally O(1)) while correctly handling duplicates or capacity constraints if specified.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1756 Design Most Recently Used Queue</strong>：实现 MRU Queue 支持：<code>fetch(k)</code> —— 把第 k 个元素移到末尾，返回该元素值。初始 queue = [1, 2, ..., n]。</p>
+<h3>解法</h3>
+<p>直接用 list 是 O(N) per fetch（删除 + append）。优化方案：<strong>Sqrt Decomposition</strong> 或 <strong>Order-Statistic Tree / BIT</strong>。</p>
+<p>LC 数据下 list 直接 O(N) 可过。面试期望提到更优解。</p>
+<h3>Python 实现（朴素 list）</h3>
+<pre class="language-python"><code class="language-python">class MRUQueue:
+    def __init__(self, n: int):
+        self.q = list(range(1, n + 1))
+
+    def fetch(self, k: int) -&gt; int:
+        v = self.q.pop(k - 1)   # 1-indexed
+        self.q.append(v)
+        return v</code></pre>
+<p><strong>复杂度</strong>：每次 fetch O(N)。N, K ≤ 2000，总 4M ops，AC。</p>
+<h3>优化：Sqrt Decomposition</h3>
+<p>把 queue 切成 √N 大小的 buckets。<code>fetch(k)</code>：</p>
+<ol><li>找 k 在哪个 bucket（计 cumulative size）</li><li>删除该 bucket 内 idx 的元素</li><li>append 到最后一个 bucket（如果满了就 new bucket）</li></ol>
+<p>每操作 O(√N)。总 O(K√N)。</p>
+<pre class="language-python"><code class="language-python">class MRUQueueSqrt:
+    def __init__(self, n: int):
+        import math
+        self.bucket_size = int(math.sqrt(n)) + 1
+        self.buckets: list[list[int]] = []
+        cur = []
+        for x in range(1, n + 1):
+            if len(cur) == self.bucket_size:
+                self.buckets.append(cur)
+                cur = []
+            cur.append(x)
+        if cur: self.buckets.append(cur)
+
+    def fetch(self, k: int) -&gt; int:
+        k -= 1   # 0-indexed
+        for bucket in self.buckets:
+            if k &lt; len(bucket):
+                v = bucket.pop(k)
+                self.buckets[-1].append(v)
+                if len(self.buckets[-1]) &gt; self.bucket_size * 2:
+                    # rebalance (optional)
+                    pass
+                return v
+            k -= len(bucket)
+        return -1</code></pre>
+<h3>最优：BIT + sentinel</h3>
+<p>用 BIT 计 1..M 中第 k 个未删除位置（Fractional Cascading / Order-Statistic）。每 fetch O(log² N)。复杂但快。</p>
+<h3>关键技术点</h3>
+<h4>1. 朴素 list.pop(k-1) 是 O(N)</h4>
+<p>list 内部连续数组，删除中间需要 shift 后面元素。N=2000 时 OK。</p>
+<h4>2. Sqrt 平衡</h4>
+<p>让 bucket 数 ≈ √N，每 bucket 大小 ≈ √N。删除是 O(√N)（bucket 内 shift），查找 bucket 也 O(√N)（最坏扫所有 bucket）。</p>
+<h4>3. Rebalance</h4>
+<p>最后一个 bucket 长期 append 会变大。定期 rebalance（拆成多 bucket）保证均衡。LC 数据规模可省。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ fetch(k) 用 0-indexed 但题目 1-indexed —— off by 1； ❌ pop 完没 append 到尾 —— 元素丢； ❌ Sqrt 实现中 bucket 不维护大小变化 —— 查 k 时错位。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"中间删 + 尾部加" 类操作的标准技巧：sqrt decomposition 或 BIT。LC 数据量小时朴素 list 也过，面试可先朴素再说优化。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"动态调整 queue 大小？" → linked list 更灵活；"支持 remove(value)？" → dict 维护 value -&gt; bucket pointer；"分布式 MRU？" → consistent hash + per-shard MRU。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Junior</div>
+  <div>Similar problem, but cache instead of queue to store key-value pairs. implement get, delete, add, and lastAccessed functions</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Squarespace</strong> · Mid-level</div>
+  <div>The same as LRU cache on Leetcode, just adds in an eviction method based on time in the feed.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Most Recently Searched Item (Cache)</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04nk838on7tqow3r.html">← Leetcode 20. Valid Parentheses</a>
+    <a href="cm5eguhai046i838o6759xdrx.html">Leetcode 2812. Find the Safest Path in a Grid →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

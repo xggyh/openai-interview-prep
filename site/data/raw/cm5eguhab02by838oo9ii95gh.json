@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 416. Partition Equal Subset Sum",
+  "shortDescription": "Determine whether the array can be partitioned into two subsets with equal sum — equivalently, check if there exists a subset that sums to half the total. This is a classic 0/1 subset-sum / knapsack problem solvable with DP or bitset techniques since total sum ≤ 200*100.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 416. Partition Equal Subset Sum\n\nDetermine whether the array can be partitioned into two subsets with equal sum — equivalently, check if there exists a subset that sums to half the total. This is a classic 0/1 subset-sum / knapsack problem solvable with DP or bitset techniques since total sum ≤ 200*100.\n\nAsked at:\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nPartition Equal Subset Sum Modification\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nPartition Equal Subset Sum Modification\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 416. Partition Equal Subset Sum",
+    "slug": "/community/questions/partition-subset-sum/cm5eguhab02by838oo9ii95gh",
+    "url": "https://www.hellointerview.com/community/questions/partition-subset-sum/cm5eguhab02by838oo9ii95gh",
+    "type": "Coding",
+    "level": "Mid-level",
+    "reportedUsers": 1,
+    "lastAsked": "Late December, 2024",
+    "description": "Determine whether the array can be partitioned into two subsets with equal sum — equivalently, check if there exists a subset that sums to half the total. This is a classic 0/1 subset-sum / knapsack problem solvable with DP or bitset techniques since total sum ≤ 200*100."
+  }
+}

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 755. Pour Water · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 755. Pour Water</div>
+  <h1>Leetcode 755. Pour Water</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/leetcode-pour-water/cm5eguhac02ld838ohbze23r0" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 4 · 🕒 Mid December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an array of terrain heights, V droplets are poured one by one at index K and each droplet greedily rolls to the leftmost lowest reachable position (otherwise to the right) before settling; return the final heights after all drops. The core challenge is correctly simulating these local greedy flows (left-then-right scan) and updating heights efficiently.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 755 Pour Water</strong>：高度数组 <code>heights</code>，从 <code>pourIdx</code> 倒水 V 次。每滴水按规则：</p>
+<ol><li>先尝试向左找最低点（位置严格递减直到第一个不更低的）</li><li>找不到再向右</li><li>都找不到就停在 pourIdx</li></ol>
+<p>更新 heights[那个位置] += 1。返回最终 heights。</p>
+<h3>解法</h3>
+<p>每滴水模拟。每滴 O(N) 扫描左右。总 <strong>O(V × N)</strong>。</p>
+<p>V ≤ 100, N ≤ 100 → 10k 操作，绝对 OK。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def pourWater(self, heights: List[int], V: int, K: int) -&gt; List[int]:
+        for _ in range(V):
+            best = K
+            # 向左找最低
+            for i in range(K - 1, -1, -1):
+                if heights[i] &gt; heights[i + 1]:
+                    break   # 上坡，停止扫描
+                if heights[i] &lt; heights[best]:
+                    best = i
+            if best != K:
+                heights[best] += 1
+                continue
+            # 向右找最低
+            for i in range(K + 1, len(heights)):
+                if heights[i] &gt; heights[i - 1]:
+                    break
+                if heights[i] &lt; heights[best]:
+                    best = i
+            heights[best] += 1
+        return heights</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(V × N)</strong></li><li>空间：O(1) in-place</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 必须先左后右</h4>
+<p>题目明确："first try to flow left, then right"。即使右边有同样低的点也优先选左。所以左侧扫到最低（如果有）就停。</p>
+<h4>2. 不能爬上坡</h4>
+<p>"水流到比它高的地方就停止" → 扫描中遇到 heights[i] &gt; heights[i+1] 立即 break（向左扫时）。</p>
+<h4>3. 严格小于</h4>
+<p>只有当某位置严格低于当前 best（初始 = K）时才更新 best。否则 best 保持。这保证了"最左侧最低点"。</p>
+<p>向左扫从 K-1 倒序到 0，遇到更低就更新 best。向右扫从 K+1 正序到 n-1，同样。</p>
+<h4>4. best 初始 = K</h4>
+<p>如果整张图都比 pourIdx 高，水留在 K。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.pourWater([2,1,1,2,1,2,2], 4, 3) == [2,2,2,3,2,2,2]
+assert sol.pourWater([1,2,3,4], 2, 2) == [2,3,3,4]
+assert sol.pourWater([3,1,3], 5, 1) == [4,4,4]</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 向左扫一遇到更低就停（不继续找更低）—— 错。要扫到坡顶或边界才停； ❌ 用 <code>&gt;=</code> 而非 <code>&gt;</code> 判断"严格更低" —— 平地不更新 best，应保持最左； ❌ 先右后左 —— 违反题意； ❌ V 大 (1e6+) 直接 O(VN) TLE：可以用 monotonic stack 优化但 LC 数据不需要。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>物理模拟题：仔细读题 +一步一步模拟。同模式：LC 42 Trapping Rain Water、LC 407 Trapping Rain Water II。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"V 极大？" → 模拟到稳态后剩余的水都堆 pourIdx；"二维 grid 倒水？" → LC 407，min-heap 从边界往里漫；"水流速度 / 蒸发？" → 加时间维。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find the point where water gets stored in a matrix when water falls from each point, using graphs and DP</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Store the list of points where water would be collected in the matrix problem</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find the point where water gets stored in a matrix when water falls from each point, using graphs and DP</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Store the list of points where water would be collected in the matrix problem · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmbsl1b4r004x07ad388lxwci.html">← Design Spreadsheet with Formulas</a>
+    <a href="cm5eguhac02ki838ogxhczapt.html">Leetcode 724. Find Pivot Index →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

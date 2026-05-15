@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2812. Find the Safest Path in a Grid · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2812. Find the Safest Path in a Grid</div>
+  <h1>Leetcode 2812. Find the Safest Path in a Grid</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/safest-path-grid/cm5eguhai046i838o6759xdrx" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Compute each cell's Manhattan distance to the nearest thief, then find a path from (0,0) to (n-1,n-1) that maximizes the minimum of those distances along the path — a max‑min (bottleneck) path problem on a grid.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2812 Find the Safest Path in a Grid</strong>：grid 中 1 = 小偷，0 = 空。路径 safeness 定义 = 路径上所有 cell 到<strong>最近小偷</strong>的曼哈顿距离的最小值。求 (0,0) 到 (n-1,n-1) 路径的最大 safeness。</p>
+<h3>解法</h3>
+<p><strong>多源 BFS + 二分答案</strong> 或 <strong>Max-Heap BFS</strong>。</p>
+<h4>Phase 1: 多源 BFS 算 cell 到最近小偷距离</h4>
+<pre class="language-python"><code class="language-python">from collections import deque
+import heapq
+from typing import List
+
+class Solution:
+    def maximumSafenessFactor(self, grid: List[List[int]]) -&gt; int:
+        n = len(grid)
+        DIRS = [(-1,0),(1,0),(0,-1),(0,1)]
+        # dist[i][j] = (i,j) 到最近小偷的曼哈顿距离
+        dist = [[-1]*n for _ in range(n)]
+        q = deque()
+        for r in range(n):
+            for c in range(n):
+                if grid[r][c] == 1:
+                    dist[r][c] = 0
+                    q.append((r, c))
+        while q:
+            r, c = q.popleft()
+            for dr, dc in DIRS:
+                nr, nc = r+dr, c+dc
+                if 0&lt;=nr&lt;n and 0&lt;=nc&lt;n and dist[nr][nc] == -1:
+                    dist[nr][nc] = dist[r][c] + 1
+                    q.append((nr, nc))
+
+        # Phase 2: Max-heap from (0,0) by current cell's dist
+        seen = [[False]*n for _ in range(n)]
+        # heap = (-dist, r, c)
+        pq = [(-dist[0][0], 0, 0)]
+        seen[0][0] = True
+        while pq:
+            negd, r, c = heapq.heappop(pq)
+            if (r, c) == (n-1, n-1):
+                return -negd
+            for dr, dc in DIRS:
+                nr, nc = r+dr, c+dc
+                if 0&lt;=nr&lt;n and 0&lt;=nc&lt;n and not seen[nr][nc]:
+                    seen[nr][nc] = True
+                    # 经过该 cell 的 safeness 受限于 min(当前, dist[nr][nc])
+                    new_safeness = min(-negd, dist[nr][nc])
+                    heapq.heappush(pq, (-new_safeness, nr, nc))
+        return 0</code></pre>
+<h3>复杂度</h3>
+<ul><li>Phase 1: O(N²)（多源 BFS）</li><li>Phase 2: O(N² log N)（max-heap 扫每 cell）</li><li>总：<strong>O(N² log N)</strong></li></ul>
+<h3>关键技术点</h3>
+<h4>1. 多源 BFS 算距离</h4>
+<p>所有小偷一起入队作为 level 0。BFS 自然算出每 cell 到最近小偷的曼哈顿距离（因为 BFS 在网格上 = 曼哈顿）。</p>
+<h4>2. Max-heap 类似 LC 1102</h4>
+<p>路径上的 safeness = path min。要最大化 → max-heap 优先扩展"当前 safeness 最大的"未访问 cell。</p>
+<h4>3. Safeness 单调下降</h4>
+<p>从 (0,0) 沿 max-heap 扩展，safeness 单调不增。到 (n-1,n-1) 时弹出的 safeness 就是答案。</p>
+<h3>替代：二分答案</h3>
+<p>二分 safeness 值 t：check 是否存在 (0,0)→(n-1,n-1) 仅经过 dist &gt;= t 的 cell。O(N² log(maxDist))。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 sum-path 算距离而非 min-path —— 题意是 min； ❌ 用 Euclidean 距离而非 Manhattan —— grid 上 BFS 步数 = Manhattan； ❌ Heap 没用 max（用 min-heap negate 或反向）； ❌ Visited 在 push 时不加 —— 重复入队。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>多源 BFS 算"每 cell 到最近 X" 是 grid 题常用预处理。max-min path 用 max-heap BFS 类似 Dijkstra 思路。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Min-max path（最小化 max）？" → min-heap；"路径上的 sum？" → 普通 Dijkstra；"返回路径？" → 记 parent，从终点回溯。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find the Safest Path in a Grid</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaf03d6838oe6bqla6h.html">← Leetcode 1756. Design Most Recently Used Queue</a>
+    <a href="cm5eh7nri04xy838oo3y3ra9b.html">Leetcode 394. Decode String →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2407. Longest Increasing Subsequence II · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2407. Longest Increasing Subsequence II</div>
+  <h1>Leetcode 2407. Longest Increasing Subsequence II</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/longest-increasing-subsequence/cm5eguhah03v9838oz609h5ji" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Find the length of the longest strictly increasing subsequence of nums such that each adjacent difference is ≤ k. With n up to 1e5 and values bounded, this reduces to DP where dp[x] = 1 + max dp[y] for y in [x-k, x-1], requiring a range-maximum data structure (segment tree / Fenwick) for efficiency.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2407 Longest Increasing Subsequence II</strong>：求严格递增子序列长度，且相邻元素差 ≤ k。</p>
+<p>普通 LIS O(N log N) 用二分 / 单调栈。带 k 约束需要支持 <strong>range max query</strong>。</p>
+<h3>解法</h3>
+<p><code>dp[v]</code> = 以值 v 结尾的 LIS 长度。转移：<code>dp[v] = 1 + max(dp[u] for u in (v-k, v-1))</code>。需要<strong>区间最大值查询 + 单点更新</strong> → <strong>Segment Tree</strong>。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class SegTree:
+    """支持区间 max query + 单点 update."""
+    def __init__(self, n: int):
+        self.n = n
+        self.tree = [0] * (4 * n)
+
+    def update(self, idx: int, val: int, node=1, lo=0, hi=None):
+        if hi is None: hi = self.n - 1
+        if lo == hi:
+            self.tree[node] = max(self.tree[node], val)
+            return
+        mid = (lo + hi) // 2
+        if idx &lt;= mid:
+            self.update(idx, val, 2*node, lo, mid)
+        else:
+            self.update(idx, val, 2*node+1, mid+1, hi)
+        self.tree[node] = max(self.tree[2*node], self.tree[2*node+1])
+
+    def query(self, l: int, r: int, node=1, lo=0, hi=None) -&gt; int:
+        if hi is None: hi = self.n - 1
+        if r &lt; lo or hi &lt; l: return 0
+        if l &lt;= lo and hi &lt;= r: return self.tree[node]
+        mid = (lo + hi) // 2
+        return max(self.query(l, r, 2*node, lo, mid),
+                   self.query(l, r, 2*node+1, mid+1, hi))
+
+
+class Solution:
+    def lengthOfLIS(self, nums: List[int], k: int) -&gt; int:
+        max_val = max(nums)
+        st = SegTree(max_val + 1)
+        best = 0
+        for x in nums:
+            # 找 dp[x-k..x-1] 的 max
+            l = max(0, x - k)
+            r = x - 1
+            prev = st.query(l, r) if r &gt;= 0 else 0
+            cur = prev + 1
+            st.update(x, cur)
+            best = max(best, cur)
+        return best</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N log M)</strong>，M = max value</li><li>空间：O(M) seg tree</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 为什么需要 Seg Tree</h4>
+<p>普通 LIS 二分法不能处理 "差 ≤ k" 约束。BIT (Fenwick) 也能做但需 reverse-indexing 处理 max。Segment tree 最直观。</p>
+<h4>2. 值域作为索引</h4>
+<p><code>dp[v]</code> 索引是值 v 不是位置 i。这样 query [x-k, x-1] 自然是值域范围。如果值域大要离散化。</p>
+<h4>3. 严格递增</h4>
+<p>转移用 <code>[x-k, x-1]</code> 不包含 x，保证严格小于。</p>
+<h4>4. 离散化（当 max_val 很大时）</h4>
+<pre class="language-python"><code class="language-python"># Discretize values
+vals = sorted(set(nums))
+idx = {v: i for i, v in enumerate(vals)}
+# 用 idx[v] 作 seg tree 索引
+# 注意 "v-k" 要找映射后的范围</code></pre>
+<p>这题 max_val ≤ 1e5 不必离散化。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 普通 O(N log N) LIS 二分法 —— 不能加 k 约束； ❌ Seg tree 不支持 range max —— 标准 seg tree 改 sum 为 max； ❌ Query 范围 r &lt; 0 时直接 query —— seg tree 边界处理； ❌ 误以为 k 是 index 距离 —— 题目是 value 差； ❌ 没初始化 prev = 0 —— 当 [x-k, x-1] 空时返回 0，cur = 1 表示自身。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"约束的 LIS" 类问题：dp 索引改值域 + segment tree 维护值域 max。这是高级 DP 的标配。同模板：LC 1187 Make Array Strictly Increasing（dp + 二分）、LC 873 LIS pair。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"差 ∈ [a, b]？" → query [x-b, x-a]；"非严格递增？" → query [x-k, x]；"返回 LIS 自身？" → seg tree 节点存 (max_len, parent_idx)，回溯重建；"二维约束？" → CDQ 分治 / 二维 seg tree。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Longest Increasing Subsequence II</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02uq838o25eqv0mb.html">← Leetcode 1092. Shortest Common Supersequence</a>
+    <a href="cm5eh7nrh04t7838o0xfc0y2q.html">Leetcode 223. Rectangle Area →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

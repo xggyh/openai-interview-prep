@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 346. Moving Average from Data Stream · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 346. Moving Average from Data Stream</div>
+  <h1>Leetcode 346. Moving Average from Data Stream</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/moving-average-stream/cm5eh7nri04wm838ohohaia3c" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 2 · 🕒 Late January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a data structure that, given a continuous stream of numbers and a fixed window size k, returns the moving average of the last k values each time a new value arrives. The challenge is to maintain the sliding window efficiently (constant-time update and query) while using only O(k) space.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 346 Moving Average from Data Stream</strong>：实现固定窗口大小的移动平均。<code>next(val)</code> 返回当前窗口的均值。</p>
+<h3>解法</h3>
+<p>队列 + 累计和（避免每次重算）。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import deque
+
+class MovingAverage:
+    def __init__(self, size: int):
+        self.size = size
+        self.q: deque[int] = deque()
+        self.total = 0
+
+    def next(self, val: int) -&gt; float:
+        self.q.append(val)
+        self.total += val
+        if len(self.q) &gt; self.size:
+            self.total -= self.q.popleft()
+        return self.total / len(self.q)</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>next</code>: <strong>O(1)</strong> 摊销</li><li>空间: O(size)</li></ul>
+<h3>关键点</h3>
+<h4>1. 累计和增量更新</h4>
+<p>不要每次 <code>sum(self.q) / len(self.q)</code> —— 那是 O(size) per call。增量维护 total，O(1)。</p>
+<h4>2. 浮点除 vs 整除</h4>
+<p>Python 3 <code>/</code> 是浮点除。如果用 <code>//</code> 会截断。题目要 float 返回。</p>
+<h4>3. 窗口未满时</h4>
+<p>题目语义：窗口未满直接均值（用当前所有元素）。代码自然处理。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 list 而非 deque —— <code>pop(0)</code> O(N)； ❌ 不维护 running sum —— next O(size)； ❌ size = 0 边界：题目通常保证 size ≥ 1； ❌ 返回 int 除以 int 时用 <code>/</code> 不是 <code>//</code>。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>滑动窗口固定大小 + 增量统计 = O(1) per op。同模板用于：滚动 max/min（用 monotonic deque）、滚动 median（用 two heaps）、滚动 variance。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"动态调整 window size？" → 重置或 shrink；"窗口内 max/min？" → 单调 deque 维护；"加权移动平均？" → 维护加权和 + 加权 count（注意 popleft 的权重）；"如果数据流可重放？" → 不需要 queue，索引访问。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (13 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Box</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>Meta asked this question</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Variant: entire array available at once, sliding window</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Moving Average from Data Stream - Implement the MovingAverage class to calculate the moving average of a stream of numbers.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Meta</strong> · Mid-level</div>
+  <div>Implement a class RunningSumAverage that calculates the average of the last k values from an infinite stream of values</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2022 · <strong>Google</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">I also got this question in my phone screen stage back in Late May 2025, was a variant version of the question.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04te838oog2p509p.html">← Leetcode 230. Kth Smallest Element in a BST</a>
+    <a href="cm5eh7nrh04vo838okqn1o6mb.html">Leetcode 312. Burst Balloons →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

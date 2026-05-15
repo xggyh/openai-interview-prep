@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 3453. Separate Squares I · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 3453. Separate Squares I</div>
+  <h1>Leetcode 3453. Separate Squares I</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/separate-squares-i/55ab7839-b63b-494b-b842-d3bf74dde1c9" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Mid January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given axis-aligned squares (xi, yi, li) whose overlaps count multiply, find the smallest horizontal line y such that the sum of areas of all squares above y equals the sum below. The core approach is to exploit that the area difference is monotonic in y and binary-search the y-coordinate, computing each square's above/below contribution by its vertical overlap.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 3453 Separate Squares I</strong>：给一组轴对齐正方形 <code>squares[i] = [x, y, side]</code>（左下角 + 边长）。找一条<strong>水平线</strong> y = L 使<strong>所有正方形被该线切割的上下面积</strong>相等。返回 L。</p>
+<p><strong>二分实数</strong>经典题。</p>
+<h3>解法</h3>
+<p>定义 <code>f(L)</code> = 所有 square 中 y &lt; L 部分的总面积。<code>f(L)</code> 单调不减。要找 <code>f(L) = total / 2</code> 的 L。</p>
+<p>二分 L ∈ [min_y, max_y_top]，求满足条件的最小 L。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def separateSquares(self, squares: List[List[int]]) -&gt; float:
+        total = sum(side * side for _, _, side in squares)
+        target = total / 2
+
+        def below(L: float) -&gt; float:
+            """所有 square 的 y &lt; L 部分总面积"""
+            s = 0
+            for x, y, side in squares:
+                if L &lt;= y:
+                    pass   # 整体在上方
+                elif L &gt;= y + side:
+                    s += side * side   # 整体在下方
+                else:
+                    s += (L - y) * side
+            return s
+
+        lo = min(y for _, y, _ in squares)
+        hi = max(y + side for _, y, side in squares)
+        # 二分到精度 1e-9
+        for _ in range(60):  # 2^60 步长够精度
+            mid = (lo + hi) / 2
+            if below(mid) &lt; target:
+                lo = mid
+            else:
+                hi = mid
+        return lo</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N × 60)</strong> = O(N)，60 次二分（精度 2^(-60)）</li><li>空间：O(1)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. f(L) 单调不减</h4>
+<p>L 增大 → 每 square 的下半部分 ≥ 原来。所以 f 是非降的函数，<strong>二分必然找到</strong>。</p>
+<h4>2. 二分实数精度</h4>
+<p>不要 <code>while lo &lt; hi</code> —— 浮点比较不可靠。<strong>固定迭代次数</strong>（如 60-100 次）保证精度。</p>
+<h4>3. 三段 case</h4>
+<ul><li>L ≤ y：square 全在上方</li><li>L ≥ y + side：全在下方</li><li>否则：下半 = (L - y) × side</li></ul>
+<h4>4. 范围</h4>
+<p><code>lo = min_y</code>（再低没意义，下面是 0），<code>hi = max(y + side)</code>（再高所有 square 都在下方，f 已饱和）。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用整数二分 —— 答案可能非整； ❌ 浮点 while 终止条件用 <code>&lt;</code> 而非"固定迭代次数"； ❌ f(L) 三段判断写错 —— 边界 L == y 或 L == y+side； ❌ 用 <code>==</code> 比较浮点 —— 永远 False，注意。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>二分<strong>实数</strong> + 单调函数 = 求方程解。同模板：LC 410 Split Array Largest Sum（二分答案）、LC 668 Kth Smallest Number in Multiplication Table。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"垂直线代替水平线？" → 对称处理 x；"任意角度线？" → 复杂得多（旋转 + 二分）；"圆而非正方形？" → 积分计算下半圆面积，仍 monotonic 二分可解；"返回所有合法 L？" → 解集是单点（除非有水平边重合）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given a list of points representing cakes on a table, where each point is [x, y, l] (x and y are coordinates, l is length and height of the cake), find a horizontal line such that the line divides the cakes into equal portions above and below it</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04r5838o6xrbsdjd.html">← Leetcode 149. Max Points on a Line</a>
+    <a href="cm6ffp48000033b6prbe7nexz.html">Tell me a time you helped an engineer promote →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

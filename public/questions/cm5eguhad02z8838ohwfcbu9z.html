@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1254. Number of Closed Islands · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1254. Number of Closed Islands</div>
+  <h1>Leetcode 1254. Number of Closed Islands</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior-Staff, Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/closed-islands-count/cm5eguhad02z8838ohwfcbu9z" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior-Staff, Manager · 📋 3 · 🕒 Late January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Count the number of 4-directionally connected components of 0s in a binary grid that are completely surrounded by 1s (i.e., the component does not touch the grid boundary). This is a flood-fill/DFS-BFS style problem on an up to 100x100 grid.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1254 Number of Closed Islands</strong>：grid 中 <code>0=陆地, 1=水</code>。求<strong>完全被水包围</strong>（不接触 grid 边界）的陆地岛屿数量。</p>
+<h3>解题思路</h3>
+<p>两阶段 DFS：</p>
+<ol><li><strong>先从所有边界陆地出发 DFS</strong>，把它们染色（视为水）—— 这样剩下的陆地全部不接触边界</li><li>然后对剩下的陆地 DFS 数岛</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def closedIsland(self, grid: List[List[int]]) -&gt; int:
+        if not grid: return 0
+        R, C = len(grid), len(grid[0])
+        DIRS = [(-1,0),(1,0),(0,-1),(0,1)]
+
+        def dfs(r: int, c: int):
+            if not (0 &lt;= r &lt; R and 0 &lt;= c &lt; C) or grid[r][c] != 0:
+                return
+            grid[r][c] = 1   # 标记为水
+            for dr, dc in DIRS:
+                dfs(r+dr, c+dc)
+
+        # 边界陆地 DFS 消除
+        for r in range(R):
+            for c in range(C):
+                if (r == 0 or r == R-1 or c == 0 or c == C-1) and grid[r][c] == 0:
+                    dfs(r, c)
+        # 数内部岛
+        count = 0
+        for r in range(1, R-1):
+            for c in range(1, C-1):
+                if grid[r][c] == 0:
+                    count += 1
+                    dfs(r, c)
+        return count</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(R × C)</strong>，每个 cell 最多 DFS 一次</li><li>空间：O(R × C) 递归栈（最坏蛇形 grid）</li></ul>
+<h3>关键点</h3>
+<h4>1. 边界 sink 技巧</h4>
+<p>先把"接触边界"的陆地都"淹没"，剩下的陆地按定义都是 closed。这避免了在主 DFS 里判断"是否触边界"的复杂 propagate 标记。</p>
+<h4>2. In-place modify vs visited set</h4>
+<p><code>grid[r][c] = 1</code> 直接改原数组省内存，但会破坏输入。如果不能改，用 <code>visited</code> set。</p>
+<h4>3. 数完内岛后 grid 已全 1</h4>
+<p>DFS 把所有陆地都改成 1。如果调用方还要再用 grid，要复制。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 直接数 island 不消除边界 —— 把接触边界的也算进去； ❌ 主 DFS 里 propagate "touched_boundary" flag —— 实现复杂且易错； ❌ DFS 边界判断写在第二个 if（值检查）之前 —— OK 但要先 range check 否则 IndexError； ❌ 把 1 当 land：题目是 0 = land。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"排除边界相关" 套路：先逆向消除（边界 DFS），再正向数。同模板：LC 130 Surrounded Regions、LC 1020 Number of Enclaves。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回最大 closed island 面积？" → DFS 记 size，取 max；"8 方向？" → DIRS 扩展；"求所有 closed island 的总面积？" → 累加。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmkq1swdr0fh807adwlyp760o.html">← Monster Game</a>
+    <a href="cm5eh7nrh04ok838oa0xi845w.html">Leetcode 56. Merge Intervals →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

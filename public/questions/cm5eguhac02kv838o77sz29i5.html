@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 737. Sentence Similarity II · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 737. Sentence Similarity II</div>
+  <h1>Leetcode 737. Sentence Similarity II</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/sentence-similarity-2/cm5eguhac02kv838o77sz29i5" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given two equal-length word arrays and a list of similar word pairs where similarity is transitive, determine whether each pair of words at the same index are equivalent (identical or connected through a chain of similarities); this is typically solved by building connectivity (union-find or graph traversal) among words.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 737 Sentence Similarity II</strong>：给一组单词对 <code>pairs[i] = [w1, w2]</code> 表示 w1 ≈ w2。相似性<strong>传递</strong>（w1≈w2 且 w2≈w3 → w1≈w3）。判断两个 sentence (word list) 是否相似（等长 + 各位置 word 相似）。</p>
+<p>经典 <strong>Union-Find</strong>。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class UF:
+    def __init__(self):
+        self.parent: dict[str, str] = {}
+    def find(self, x: str) -&gt; str:
+        self.parent.setdefault(x, x)
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+    def union(self, a: str, b: str):
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self.parent[ra] = rb
+
+class Solution:
+    def areSentencesSimilarTwo(self, s1: List[str], s2: List[str],
+                               pairs: List[List[str]]) -&gt; bool:
+        if len(s1) != len(s2): return False
+        uf = UF()
+        for a, b in pairs:
+            uf.union(a, b)
+        for a, b in zip(s1, s2):
+            if a == b: continue
+            if a not in uf.parent or b not in uf.parent: return False
+            if uf.find(a) != uf.find(b): return False
+        return True</code></pre>
+<h3>复杂度</h3>
+<ul><li>建 UF: O(P × α(P))，P = pairs 数</li><li>检查 sentence: O(N × α(P))</li><li>总: ≈ O((P + N) × α(P))</li></ul>
+<h3>关键技术点</h3>
+<h4>1. Union-Find 处理传递闭包</h4>
+<p>直接建无向图 + DFS/BFS 找连通分量也可，但 UF 更优雅且支持增量加边。</p>
+<h4>2. 路径压缩 + 按秩合并</h4>
+<p><code>find</code> 中递归把链上所有节点直接指向 root，下次 O(α(N))。</p>
+<h4>3. 处理未见单词</h4>
+<p>如果 sentence 里某 word 不在任何 pair 里，它只能和自身相似（不在 UF 里）。代码里 <code>a == b</code> 早返回；否则两个都得在 UF 且同 root。</p>
+<h4>4. 与 LC 734 (Sentence Similarity I) 区别</h4>
+<p>LC 734 不传递（直接查 pair 是否包含 (a, b) 或 (b, a)）。LC 737 传递 → 必须 UF / 连通分量。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不用 UF 直接对 pair 列表做 N×P loop —— O(N×P) 慢； ❌ 误以为 pair 是有向 —— 题目相似性是对称的； ❌ Self-similar (a, a) 忘了 —— 任何 word 和自身相似（代码 <code>a == b</code> 优先返回）； ❌ 不在 UF 里的 word 直接 union(a, b) —— UF 应允许 setdefault； ❌ Length 不等 sentence 直接 union —— 应 return False。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Union-Find 是"传递性等价关系"的标准武器。同模板：Friend Circles (LC 547)、Number of Provinces、Accounts Merge (LC 721)。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"动态加 pair？" → UF 增量 union，O(α) per call；"动态减 pair？" → UF 不支持 delete，需 offline 反向处理或 link-cut tree；"返回所有相似 group？" → DFS UF 收集每 root 的所有元素；"sentence 含 punctuation？" → tokenize 时去除。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Sentence Similarity II</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04t6838oiumjgavv.html">← Leetcode 222. Count Complete Tree Nodes</a>
+    <a href="cm5eguhad02uq838o25eqv0mb.html">Leetcode 1092. Shortest Common Supersequence →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

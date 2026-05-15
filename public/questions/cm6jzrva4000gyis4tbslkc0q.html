@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Count Islands in Binary Trees · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Count Islands in Binary Trees</div>
+  <h1>Count Islands in Binary Trees</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Intern, Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/count-islands-binary-trees/cm6jzrva4000gyis4tbslkc0q" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Intern, Mid-level · 📋 9 · 🕒 Early December, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a binary tree where nodes have values (typically 0 or 1), analyze the 'islands' (connected components of similar values) within the tree. Tasks include counting the total number of islands, identifying unique island types based on their structure and size, and analyzing different patterns of island formations. An island is defined as a connected group of nodes with the same value.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Count Islands in Binary Trees</strong>：二叉树每个节点值是 0 或 1。求 "islands"（值为 1 的连通分量）数量。还有变种：返回每个 island 的 size、unique island shapes 等。</p>
+<p>类似 grid 数岛屿，但拓扑是树。Google 1st-onsite L4 真题。</p>
+<h3>解题思路</h3>
+<p>DFS 树。维护"当前是否在 island 内"。每当从 0 跳到 1（即父是 0 或 None，自己是 1），开启新 island，count++。然后继续 DFS，把同 island 内的 1 都遍历完。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import Optional, List
+
+class TreeNode:
+    def __init__(self, val: int = 0, left: 'TreeNode' = None, right: 'TreeNode' = None):
+        self.val = val; self.left = left; self.right = right
+
+class Solution:
+    def countIslands(self, root: Optional[TreeNode]) -&gt; int:
+        """A 'island' is a maximal connected subgraph of nodes with value 1."""
+        if not root: return 0
+        count = 0
+        # DFS with parent's value as context
+        def dfs(node: Optional[TreeNode], parent_val: int):
+            nonlocal count
+            if not node: return
+            if node.val == 1 and parent_val == 0:
+                count += 1   # new island starts
+            dfs(node.left, node.val)
+            dfs(node.right, node.val)
+        dfs(root, 0)  # 视为根的父值是 0
+        return count
+
+    def islandSizes(self, root: Optional[TreeNode]) -&gt; List[int]:
+        """Return sizes of all islands."""
+        sizes = []
+        def dfs(node: Optional[TreeNode]) -&gt; int:
+            """Returns size of island containing node, or 0 if node.val == 0."""
+            if not node or node.val == 0:
+                # 仍递归子树（可能开新岛）
+                if node:
+                    dfs(node.left); dfs(node.right)
+                return 0
+            size = 1 + dfs_continue(node.left) + dfs_continue(node.right)
+            return size
+        def dfs_continue(node):
+            """Like dfs but doesn't add to sizes; continues current island."""
+            if not node or node.val == 0:
+                if node: dfs(node.left); dfs(node.right)
+                return 0
+            return 1 + dfs_continue(node.left) + dfs_continue(node.right)
+        # 顶层 wrapper：遍历所有节点，从每个"island root"开始测 size
+        def find_island_roots(node, parent_val):
+            if not node: return
+            if node.val == 1 and parent_val == 0:
+                sizes.append(dfs_continue(node))
+            else:
+                find_island_roots(node.left, node.val if node else 0)
+                find_island_roots(node.right, node.val if node else 0)
+        find_island_roots(root, 0)
+        return sizes</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N)</strong>，每个节点访问 O(1) 次</li><li>空间：O(H) 递归栈（H = 树高）</li></ul>
+<h3>关键技术点</h3>
+<h4>1. "Island 起点" 判别</h4>
+<p>节点 v 是某 island 的起点 ⟺ <code>v.val == 1 且 parent.val == 0</code>（或 v 是根且 root.val == 1）。代码里把 "root 的 parent value" 视为 0 处理。</p>
+<h4>2. 不是 grid 题：树没有"邻居 = up/down/left/right"</h4>
+<p>树的连通性只看 parent-child。即父节点是 1，且自己是 1，就属同一 island。</p>
+<h4>3. 三个常见问题（按提到的真实变种）</h4>
+<p>| 变种 | 解法 | |---|---| | count islands | DFS + parent_val | | size of each island | DFS 每个 island 起点开始累加 | | unique island shapes | 把每个 island 序列化为 string，用 set 去重 | | max island size | 同 size 计算 + 取 max |</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">#       1
+#      / \
+#     0   1
+#    / \   \
+#   1   1   0
+#            \
+#             1
+# 期望 3 islands: {root}, {root.left.left}, {root.left.right}, {root.right.right.right}
+# 等等：1-0-1-1（root + left.left）—— root 是 1，left 是 0，所以 root 自己一个 island；
+# left.left 是 1，parent=0，新岛；
+# left.right 是 1，parent=0，新岛；
+# right 是 1，parent=1（root），同 root 一岛？是的。但 root.right.right 是 0...
+# 重新看：root(1)-right(1) 是同岛。</code></pre>
+<p>实际 island 是按 "连续 1 的极大子树"：从根 DFS，碰到 1-1 还在同岛；碰到 0 就断；下一次 0-1 再起新岛。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把题目当 grid 处理 —— 树没有左右邻居概念； ❌ "island root" 判别忘了 root 节点 special case —— 视为 parent=0 处理； ❌ 数 size 时只递归左不递归右 —— size 算偏； ❌ Unique shapes 用 list 而非序列化 string —— hash 不上。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>树上的连通分量计数 = DFS + 跟踪父节点值变化。这套思路也适用于：染色变化点检测、tree-edit distance、二叉树切割问题。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Unique island shapes？" → 把每个 island 用 canonical 序列化（如 preorder traversal with '#' for null + value）然后塞 set；"如果每个节点有任意 children（n-ary tree）？" → DFS 改为遍历 children list；"如果允许"island 内可以包含 0"（即给定阈值）？" → DFS 用 score 累加替代严格 1。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (9 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Was asked in 1st onsite google round for L4</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Return the sizes of unique islands in a Binary Tree</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Max Size of Islands in a Tree</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Intern</div>
+  <div>Count the number of islands in a binary tree where nodes have values 0 or 1. An island is a collection of 1's.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Intern</div>
+  <div>Count the unique types of islands that exist in a binary tree according to size.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Implement variations of the 'Number of Islands' problem on a binary tree, including finding the number of different sizes of islands and non-isomorphic structures · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (18 条)</h2>
+  <div class="comment">The description indicates part of the task is to determine how large the islands are.</div><div class="comment">The sample output of this problem as well as the provided solution don't display/track the island sizes. Is this intended or was this perhaps missed?</div><div class="comment">ig, this can be solved in an easier way as well:</div><div class="comment">public int countIslandsInBinaryTree(TreeNode root) { int left = root.left == null ? 0 : countIslandsInBinaryTree(root.left); int right = root.right == null ? 0 : countIslandsInBinaryTree(root.right); int cnt = left + right; if(((root.left == null &amp;&amp; root.right == null) || (root.left == null &amp;&amp; root.right != null &amp;&amp; root.right.val != root.val) || (root.right == null &amp;&amp; root.left != null &amp;&amp; root.left.val != root.val) || (root.left != null &amp;&amp; root.left.val != root.val &amp;&amp; root.right != null &amp;&amp; root.right.val != root.val))) { cnt++; } return cnt; }</div><div class="comment">Reply Dawid Kałuża Premium • 4个月前</div><div class="comment">Could we count IslandResult object (this is the name in Java solution at least) in space complexity and say that it's O(n) in pessimistic cases where each node forms a separate island?</div><div class="comment">Reply G gomezs108 Premium • 4个月前</div><div class="comment">nodes = [1, 1, 0, 1, 1, null, 0]</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6i9kl1h00px6jlds6pn1hi5.html">← Design a Webhook Callback System</a>
+    <a href="cm5eguhah03v4838o6lf58qge.html">Leetcode 2402. Meeting Rooms III →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

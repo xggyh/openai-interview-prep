@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 149. Max Points on a Line · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 149. Max Points on a Line</div>
+  <h1>Leetcode 149. Max Points on a Line</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/max-points-line/cm5eh7nrh04r5838o6xrbsdjd" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Mid January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given up to 300 unique 2D points, return the maximum number that lie on the same straight line. The core challenge is grouping points by slope from each pivot (handling vertical lines and slope precision) to compute the answer in O(n^2) time using normalized slope keys.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 149 Max Points on a Line</strong>：给一组点 (x, y)，求<strong>最多有多少点共线</strong>。</p>
+<p>经典<strong>斜率 + hash</strong> 题。Hard 因为精度问题。</p>
+<h3>解法</h3>
+<p>对每个 anchor 点 p：</p>
+<ul><li>计算其他点到 p 的斜率</li><li>用 dict 统计每个斜率的点数</li><li>答案 = max(同斜率点数) + 1（包含 anchor 自己）</li></ul>
+<p>枚举每个 anchor，取全局 max。</p>
+<h3>精度陷阱</h3>
+<p>直接用 float <code>dy / dx</code> 不可靠（浮点误差导致同斜率算成不同）。<strong>用 <code>(dy/gcd, dx/gcd)</code> tuple 作 key</strong>，化简到最简分数。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from math import gcd
+from collections import defaultdict
+from typing import List
+
+class Solution:
+    def maxPoints(self, points: List[List[int]]) -&gt; int:
+        n = len(points)
+        if n &lt;= 2: return n
+
+        result = 0
+        for i in range(n):
+            slopes: dict[tuple, int] = defaultdict(int)
+            duplicates = 1   # 起始包含自己
+            for j in range(n):
+                if i == j: continue
+                dx = points[j][0] - points[i][0]
+                dy = points[j][1] - points[i][1]
+                if dx == 0 and dy == 0:
+                    duplicates += 1
+                    continue
+                g = gcd(dx, dy)
+                dx, dy = dx // g, dy // g
+                # 规范化：dx &gt; 0；如果 dx == 0 强制 dy &gt; 0
+                if dx &lt; 0:
+                    dx, dy = -dx, -dy
+                elif dx == 0 and dy &lt; 0:
+                    dy = -dy
+                slopes[(dy, dx)] += 1
+            local_max = max(slopes.values(), default=0)
+            result = max(result, local_max + duplicates)
+        return result</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N²)</strong> 双 loop</li><li>空间：O(N)（每 anchor 的 slopes dict）</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 用 gcd 化简斜率</h4>
+<p><code>gcd(dy, dx)</code> 把斜率化最简。Python <code>math.gcd</code> 接受负数返回非负 → 但符号处理要小心。</p>
+<h4>2. 符号规范化</h4>
+<p><code>(dy, dx)</code> 和 <code>(-dy, -dx)</code> 同一斜率。规范化：让 dx &gt; 0；如果 dx = 0（垂直线）让 dy &gt; 0。</p>
+<h4>3. 重复点</h4>
+<p>两点完全相同 (dx=dy=0) 不形成线但贡献"点数"。单独 count <code>duplicates</code>。</p>
+<h4>4. n ≤ 2 边界</h4>
+<p>任何两点共线。直接返回 n。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 直接用 <code>dy/dx</code> 浮点 —— 精度坑（如 1/3 和 2/6 算不同）； ❌ gcd(0, x) = x，注意处理（垂直/水平线时一个为 0）； ❌ 重复点没单独处理 —— count 偏少； ❌ 符号规范化漏一种 case； ❌ <code>defaultdict(int)</code> 没考虑 anchor 自己不应纳入 slopes —— 用 if i==j skip。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"共线" 题的核心：斜率 gcd 化简成 tuple hash。同套路：LC 356 Line Reflection (轴对称)、LC 1453 Maximum Points on Circle、Steiner Point 类几何题。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"100k 个点？" → O(N²) 难避免，但可以用 Hough Transform 估计概率最大线 (近似)；"3D 点 (x,y,z)？" → 用 (dx,dy,dz) 化简三元 tuple；"求最大共圆点？" → LC 1453，不同方法；"如果允许 ε 内共线（近似）？" → KD-tree + 容差比较。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given a list of points representing cakes on a table, where each point is [x, y, l] (x and y are coordinates, l is length and height of the cake), find a horizontal line such that the line divides the cakes into equal portions above and below it</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaf03f3838oucezph3i.html">← Leetcode 1825. Finding MK Average</a>
+    <a href="55ab7839-b63b-494b-b842-d3bf74dde1c9.html">Leetcode 3453. Separate Squares I →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

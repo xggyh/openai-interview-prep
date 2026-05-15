@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 1254. Number of Closed Islands",
+  "shortDescription": "Count the number of 4-directionally connected components of 0s in a binary grid that are completely surrounded by 1s (i.e., the component does not touch the grid boundary). This is a flood-fill/DFS-BFS style problem on an up to 100x100 grid.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 1254. Number of Closed Islands\n\nCount the number of 4-directionally connected components of 0s in a binary grid that are completely surrounded by 1s (i.e., the component does not touch the grid boundary). This is a flood-fill/DFS-BFS style problem on an up to 100x100 grid.\n\nAsked at:\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate January, 2026\n\nGoogle\n\nSenior\n\nEarly January, 2026\n\nGoogle\n\nManager\n\nMid November, 2025\n\nGoogle\n\nStaff\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate January, 2026\n\nGoogle\n\nSenior\n\nEarly January, 2026\n\nGoogle\n\nManager\n\nMid November, 2025\n\nGoogle\n\nStaff\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 1254. Number of Closed Islands",
+    "slug": "/community/questions/closed-islands-count/cm5eguhad02z8838ohwfcbu9z",
+    "url": "https://www.hellointerview.com/community/questions/closed-islands-count/cm5eguhad02z8838ohwfcbu9z",
+    "type": "Coding",
+    "level": "Senior-Staff, Manager",
+    "reportedUsers": 3,
+    "lastAsked": "Late January, 2026",
+    "description": "Count the number of 4-directionally connected components of 0s in a binary grid that are completely surrounded by 1s (i.e., the component does not touch the grid boundary). This is a flood-fill/DFS-BFS style problem on an up to 100x100 grid."
+  }
+}

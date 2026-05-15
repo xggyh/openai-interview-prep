@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2655. Find Maximal Uncovered Ranges · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2655. Find Maximal Uncovered Ranges</div>
+  <h1>Leetcode 2655. Find Maximal Uncovered Ranges</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/maximal-uncovered-ranges/cm5eguhah0425838oxxdnyjxu" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 1 · 🕒 Mid March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a set of possibly overlapping, unsorted intervals within a domain (e.g., [lower, upper]), compute the maximal uncovered ranges—the complement segments not covered by any interval. This requires merging/sorting the input intervals and then finding the gaps (including boundary gaps) between merged intervals.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2655 Find Maximal Uncovered Ranges</strong>：给整数 <code>n</code>（数轴长度，[0, n-1]）和一组<strong>已覆盖区间</strong> <code>ranges = [[l1,r1],[l2,r2],...]</code>，求<strong>未被覆盖的最大连续区间</strong>列表（合并相邻、按起点排序）。</p>
+<p>经典<strong>区间合并 + 反向求空隙</strong>。</p>
+<h3>解题思路</h3>
+<ol><li>把 <code>ranges</code> 按起点升序</li><li><strong>合并重叠区间</strong> → 得到 disjoint covered intervals</li><li>扫描合并后的覆盖区间，列出<strong>相邻间隙</strong> + <strong>两端开头 / 结尾的空白</strong></li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def findMaximalUncoveredRanges(self, n: int, ranges: List[List[int]]) -&gt; List[List[int]]:
+        if not ranges:
+            return [[0, n - 1]]
+
+        # 1. 按起点排序
+        ranges.sort(key=lambda x: x[0])
+
+        # 2. 合并重叠（或紧邻）区间
+        merged = [ranges[0][:]]
+        for l, r in ranges[1:]:
+            last = merged[-1]
+            if l &lt;= last[1] + 1:    # 相邻也合并（1-2 + 3-4 -&gt; 1-4）
+                last[1] = max(last[1], r)
+            else:
+                merged.append([l, r])
+
+        # 3. 找空隙 + 两端
+        result = []
+        if merged[0][0] &gt; 0:
+            result.append([0, merged[0][0] - 1])
+        for i in range(1, len(merged)):
+            prev_end = merged[i-1][1]
+            cur_start = merged[i][0]
+            if cur_start &gt; prev_end + 1:
+                result.append([prev_end + 1, cur_start - 1])
+        if merged[-1][1] &lt; n - 1:
+            result.append([merged[-1][1] + 1, n - 1])
+        return result</code></pre>
+<h3>复杂度</h3>
+<ul><li>排序：O(R log R)，R = ranges 长度</li><li>合并 + 扫描：O(R)</li><li>总：<strong>O(R log R)</strong></li></ul>
+<h3>关键技术点</h3>
+<h4>1. 相邻区间也合并</h4>
+<p><code>[1,2]</code> 和 <code>[3,4]</code> 之间 <strong>没有未覆盖</strong> 整数（数轴是整数）。所以合并条件用 <code>l &lt;= last[1] + 1</code> 而不是 <code>l &lt;= last[1]</code>。</p>
+<p>如果题目区间是连续实数（不是整数），改用 <code>l &lt;= last[1]</code>。</p>
+<h4>2. Edge: 全空</h4>
+<p><code>ranges = []</code> → 整个 <code>[0, n-1]</code> 都未覆盖。</p>
+<h4>3. Edge: 完全覆盖</h4>
+<p>合并结果 = <code>[[0, n-1]]</code> → 三个 if 都不进，返回空列表。</p>
+<h4>4. 不要修改输入</h4>
+<p><code>merged = [ranges[0][:]]</code> 用 slice copy，避免改用户传入的 list。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.findMaximalUncoveredRanges(10, []) == [[0, 9]]
+assert sol.findMaximalUncoveredRanges(10, [[0, 9]]) == []
+assert sol.findMaximalUncoveredRanges(10, [[2, 4], [6, 8]]) == [[0, 1], [5, 5], [9, 9]]
+assert sol.findMaximalUncoveredRanges(5, [[1, 2], [3, 4]]) == [[0, 0]]   # 相邻合并
+assert sol.findMaximalUncoveredRanges(10, [[0, 5], [3, 8]]) == [[9, 9]]</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 没排序就合并 —— <code>[[3,5],[1,2]]</code> 直接合并漏掉先后； ❌ 整数轴用 <code>l &lt;= last[1]</code> 而非 <code>+1</code> —— <code>[1,2],[3,4]</code> 错算成两段； ❌ 忘了两端开头 / 结尾的空白； ❌ 修改输入 <code>ranges</code> —— 调用方再用就坏； ❌ 用 set 存所有覆盖点 + 找差 —— n 大时 O(n) 内存爆。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"区间合并 + 反向求 gap" 是这类题模板：先排序合并，再扫缝隙。同模板：LC 56 Merge Intervals、LC 57 Insert Interval、LC 252 Meeting Rooms、LC 763 Partition Labels（变种）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果是 query 多次（n 个 ranges 来了走了）？" → 用 SortedList / interval tree 维护合并状态，每次 O(log N)；"如果数轴是 [L, R] 不是 [0, n-1]？" → 边界判断换成 L 和 R；"如果区间是实数（continuous）？" → 合并条件用 <code>&lt;</code> 而非 <code>&lt;=</code> 或 <code>+1</code> 视语义。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04qv838o8afetv7s.html">← Leetcode 139. Word Break</a>
+    <a href="cm5eguhab02dz838oq3vp7bcd.html">Leetcode 489. Robot Room Cleaner →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

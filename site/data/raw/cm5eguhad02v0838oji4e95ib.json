@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 1102. Path With Maximum Minimum Value",
+  "shortDescription": "Given an integer grid where you can move 4-directionally from the top-left to the bottom-right, find a path that maximizes the minimum cell value along the path and return that maximized minimum; this is a maximin path problem typically solved with reachability checks (binary search + BFS/DFS) or a greedy max-heap/Dijkstra-style traversal.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 1102. Path With Maximum Minimum Value\n\nGiven an integer grid where you can move 4-directionally from the top-left to the bottom-right, find a path that maximizes the minimum cell value along the path and return that maximized minimum; this is a maximin path problem typically solved with reachability checks (binary search + BFS/DFS) or a greedy max-heap/Dijkstra-style traversal.\n\nAsked at:\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nEarly October, 2025\n\nGoogle\n\nMid-level\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nEarly October, 2025\n\nGoogle\n\nMid-level\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 1102. Path With Maximum Minimum Value",
+    "slug": "/community/questions/max-min-path/cm5eguhad02v0838oji4e95ib",
+    "url": "https://www.hellointerview.com/community/questions/max-min-path/cm5eguhad02v0838oji4e95ib",
+    "type": "Coding",
+    "level": "Mid-level",
+    "reportedUsers": 1,
+    "lastAsked": "Early October, 2025",
+    "description": "Given an integer grid where you can move 4-directionally from the top-left to the bottom-right, find a path that maximizes the minimum cell value along the path and return that maximized minimum; this is a maximin path problem typically solved with reachability checks (binary search + BFS/DFS) or a greedy max-heap/Dijkstra-style traversal."
+  }
+}

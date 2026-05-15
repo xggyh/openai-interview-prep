@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 139. Word Break · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 139. Word Break</div>
+  <h1>Leetcode 139. Word Break</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/leetcode-word-break/cm5eh7nrh04qv838o8afetv7s" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior · 📋 1 · 🕒 Late March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Determine whether the string s can be segmented into a sequence of one or more words from wordDict (words may be reused). The core challenge is prefix segmentation/reachability over string indices, typically solved with DP or BFS using the dictionary (max word length ≤ 20 limits checks).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 139 Word Break</strong>：给字符串 <code>s</code> 和字典 <code>wordDict</code>，判断能否把 <code>s</code> 切分成字典里的词的拼接。<code>s</code> 长度 ≤ 300，单词 ≤ 20 字符，字典 ≤ 1000 个词。</p>
+<p><strong>DP</strong> 经典题，Google 高频。</p>
+<h3>解题思路</h3>
+<p><code>dp[i]</code> = <code>s[0:i]</code> 能否被 break。</p>
+<ul><li>base: <code>dp[0] = True</code>（空串 trivially OK）</li><li>转移：<code>dp[i] = True</code> 当且仅当存在 <code>j ∈ [0, i)</code> 使 <code>dp[j] == True</code> 且 <code>s[j:i] ∈ wordSet</code></li></ul>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def wordBreak(self, s: str, wordDict: List[str]) -&gt; bool:
+        word_set = set(wordDict)
+        n = len(s)
+        dp = [False] * (n + 1)
+        dp[0] = True
+        for i in range(1, n + 1):
+            for j in range(i):
+                if dp[j] and s[j:i] in word_set:
+                    dp[i] = True
+                    break
+        return dp[n]</code></pre>
+<h3>优化版：只看 j 在合理 word length 范围</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def wordBreak(self, s: str, wordDict: List[str]) -&gt; bool:
+        word_set = set(wordDict)
+        max_len = max(map(len, wordDict)) if wordDict else 0
+        n = len(s)
+        dp = [False] * (n + 1)
+        dp[0] = True
+        for i in range(1, n + 1):
+            # 只检查长度 ≤ max_len 的后缀
+            for j in range(max(0, i - max_len), i):
+                if dp[j] and s[j:i] in word_set:
+                    dp[i] = True
+                    break
+        return dp[n]</code></pre>
+<p>把 inner loop 截到 <code>max_len</code> 内，避免无用扫描。</p>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N² × L)</strong>（朴素，N = len(s)，L = avg word length，因为 substring slice 和 hash 各 O(L)）</li><li>优化后：<strong>O(N × max_len × L)</strong></li><li>空间：O(N + total_dict_chars)</li></ul>
+<h3>替代：BFS / DFS + Memoization</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def wordBreak(self, s: str, wordDict: List[str]) -&gt; bool:
+        word_set = set(wordDict)
+        from functools import lru_cache
+        @lru_cache(maxsize=None)
+        def helper(idx: int) -&gt; bool:
+            if idx == len(s):
+                return True
+            return any(s[idx:idx+L] in word_set and helper(idx+L)
+                       for L in range(1, len(s)-idx+1))
+        return helper(0)</code></pre>
+<p>更直观但常数大。</p>
+<h3>关键技术点</h3>
+<h4>1. 为什么 break inner loop</h4>
+<p>找到任一拆分就够了，不必继续看其他 j。</p>
+<h4>2. 字典转 set</h4>
+<p><code>in wordDict</code> (list) 是 O(K)，K = 字典大小。转 set 后 O(1)。</p>
+<h4>3. Substring <code>s[j:i]</code> 的成本</h4>
+<p>Python <code>s[j:i]</code> 是 O(i-j) —— 实际复杂度比表面看多一维 L。所以理论上 N² × L。当 L 大时（如 1000），瓶颈在 substring 本身。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">assert Solution().wordBreak("leetcode", ["leet","code"]) == True
+assert Solution().wordBreak("applepenapple", ["apple","pen"]) == True
+assert Solution().wordBreak("catsandog", ["cats","dog","sand","and","cat"]) == False
+assert Solution().wordBreak("", ["a"]) == True            # 空串
+assert Solution().wordBreak("a", []) == False             # 空字典</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <code>dp</code> 大小忘了 +1（要存 dp[N]）； ❌ <code>dp[0]</code> 没置 True —— 永远 False； ❌ 字典用 list 直接 <code>s[j:i] in wordDict</code> —— O(N²×K) 慢； ❌ 转 set 后忘了考虑空字典； ❌ DFS 解忘了 memoization —— 指数时间。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>经典 1D DP："s 前 i 位"是 state，转移枚举最后一个 word 的起点 j。这套模式还能解：LC 140 word break II（返回所有切分）、LC 1255（高分单词 DP）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回所有切分方案？" → LC 140，DFS + memoization 记录所有路径；"返回最少 word 数？" → DP 改为最小值；"如果字典超大（1M+）？" → 用 Trie 替换 set，inner loop 沿 Trie 一字一字匹配；"流式输入 s？" → 不再可行，词典 Aho-Corasick 多模匹配。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (7 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Google</strong> · Junior</div>
+  <div>I was asked a slight variation of this question. The only difference was that wordDict was set of known elements of maximum length of 3. So I had to make the word using any of those parts, but those parts were only 1, 2 and 3 characters long. The solution for WordBreak works actually there.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>T</strong> · tala</div>
+  <div>Mid-level</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>It was basically Leetcode 139. i don't remember the problem description as it had it's own examples.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhab02d6838o87irm4sz.html">← Leetcode 460. LFU Cache</a>
+    <a href="cm5eguhah0425838oxxdnyjxu.html">Leetcode 2655. Find Maximal Uncovered Ranges →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

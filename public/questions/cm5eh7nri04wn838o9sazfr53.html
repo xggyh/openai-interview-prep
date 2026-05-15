@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 347. Top K Frequent Elements · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 347. Top K Frequent Elements</div>
+  <h1>Leetcode 347. Top K Frequent Elements</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/top-k-frequent-elements/cm5eh7nri04wn838o9sazfr53" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior · 📋 2 · 🕒 Late April, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an integer array and k, return the k most frequent elements — the core challenge is to count element frequencies and extract the top-k efficiently (better than O(n log n)), typically using a frequency map combined with a min-heap (O(n log k)) or bucket sort (O(n)).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 347 Top K Frequent Elements</strong>：给数组 <code>nums</code> 和整数 <code>k</code>，返回<strong>出现频率前 k 高</strong>的元素。Google 高频经典。</p>
+<h3>解题切入点</h3>
+<p>三种主流解法，按复杂度递减：</p>
+<p>| 方法 | 时间 | 空间 | 适用 | |---|---|---|---| | Sort by freq | O(N log N) | O(N) | k 接近 N | | <strong>Heap (size k)</strong> | <strong>O(N log k)</strong> | O(N + k) | k ≪ N | | <strong>Bucket sort</strong> | <strong>O(N)</strong> | O(N) | 频率范围 ≤ N（即 ≤ N 种 freq） |</p>
+<p>面试期望 <strong>heap</strong> 或 <strong>bucket sort</strong>。两个都得熟。</p>
+<h3>Python 实现 — 推荐 Bucket Sort</h3>
+<pre class="language-python"><code class="language-python">from collections import Counter
+from typing import List
+
+class Solution:
+    def topKFrequent(self, nums: List[int], k: int) -&gt; List[int]:
+        freq = Counter(nums)            # O(N) 统计频率
+        n = len(nums)
+        # buckets[i] = 出现 i 次的元素列表
+        buckets = [[] for _ in range(n + 1)]
+        for num, f in freq.items():
+            buckets[f].append(num)
+        # 从频率高到低收集 k 个
+        res = []
+        for f in range(n, 0, -1):
+            for num in buckets[f]:
+                res.append(num)
+                if len(res) == k:
+                    return res</code></pre>
+<h3>Heap 解法</h3>
+<pre class="language-python"><code class="language-python">import heapq
+from collections import Counter
+
+class Solution:
+    def topKFrequent(self, nums, k):
+        freq = Counter(nums)
+        # 用 size-k min-heap：堆顶是频率最低
+        heap = []
+        for num, f in freq.items():
+            heapq.heappush(heap, (f, num))
+            if len(heap) &gt; k:
+                heapq.heappop(heap)
+        return [num for f, num in heap]</code></pre>
+<p>或者更简单用 <code>heapq.nlargest</code>：</p>
+<pre class="language-python"><code class="language-python">return heapq.nlargest(k, freq.keys(), key=freq.get)  # O(N log k)</code></pre>
+<h3>为什么 Bucket Sort 是 O(N)</h3>
+<p>频率最大值 ≤ N（因为只有 N 个元素）。所以 buckets 数组大小 N+1，每个元素恰好被 push 一次，扫一次找 top k。总扫描量 O(N + k)。</p>
+<h3>复杂度对比</h3>
+<pre class="language-plaintext"><code class="language-plaintext">N = nums.length
+unique count u &lt;= N</code></pre>
+<p>| 方法 | 时间 | 空间 | |---|---|---| | Sort | O(u log u) | O(u) | | Heap | O(u log k) | O(u + k) | | Bucket | <strong>O(N)</strong> | O(N) |</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">assert sorted(Solution().topKFrequent([1,1,1,2,2,3], 2)) == [1, 2]
+assert Solution().topKFrequent([1], 1) == [1]
+assert sorted(Solution().topKFrequent([1,2], 2)) == [1, 2]</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 <code>heapq.heappush</code> 不限制 size —— 退化为 O(N log N)； ❌ 用 max-heap 思路（取最大）但 Python 的 <code>heapq</code> 是 min-heap —— 要么 negate priority，要么用 <code>nlargest</code>； ❌ Bucket sort 用 dict 而非 list <code>buckets[freq]</code> —— 需要 sorted keys 反而麻烦； ❌ 没考虑 freq 范围上限是 N（不是 max value）—— 数组用 max(nums) 大小会很慢。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"频率前 k" 模式：Counter → bucket (O(N)) 或 size-k heap (O(N log k))。这是面试官最爱让你<strong>说出多个方案 + 取舍</strong>的题。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"K 个频率最低？" → bucket 反向扫；"实时流式数据 top k？" → Count-Min Sketch + min-heap；"k = 1 时？" → 直接 <code>max(Counter(nums).items(), key=lambda x: x[1])[0]</code>。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (46 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>Given a non-empty array of integers, return up to k most frequent elements, in the order of frequency descending</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Given an integer array nums and an integer k, return the k most frequent elements. You may return the answer in any order.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Asked during my telephone interview round</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>phone interview</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Given an array of integers, find the k elements which are most frequent. Return them in the descending order of their frequency</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Oracle</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>SoFi</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Amazon</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Asked as it, no variant.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Smartsheet</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Meta screening interview</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Top K Frequent Elements (LeetCode 347) with follow-up for O(n) constant time solution using bucketing</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Top K Frequent Elements (LeetCode 347) with follow-up for O(n) constant time solution using bucketing</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Uber</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02s0838ouei0wtvs.html">← Leetcode 994. Rotting Oranges</a>
+    <a href="cmkq1t9uu0fij07adqaw1gapu.html">Monster Fight →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

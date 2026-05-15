@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 460. LFU Cache · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 460. LFU Cache</div>
+  <h1>Leetcode 460. LFU Cache</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/lfu-cache/cm5eguhab02d6838o87irm4sz" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior-Senior · 📋 3 · 🕒 Late March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Implement an LFU cache with O(1) average-time get and put operations that evicts the least-frequently-used key when capacity is exceeded, breaking ties by least-recently-used. The cache must update a key's frequency (and recency) on both get and put, and support inserting and updating values.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 460 LFU Cache</strong>：实现 Least Frequently Used 缓存。<code>get(key)</code> / <code>put(key, value)</code> 都 <strong>O(1)</strong>。容量满时驱逐<strong>使用次数最少</strong>的；若并列驱逐<strong>最久未用</strong>的。</p>
+<p>LFU 比 LRU 难一档，是 Google / Meta 的"hard" 经典。</p>
+<h3>数据结构设计（双 hashmap + 双链表）</h3>
+<pre class="language-plaintext"><code class="language-plaintext">key_to_node  : dict[key -&gt; Node]            ; Node 存 key/val/freq, 在某个 freq 的双链表里
+freq_to_list : dict[freq -&gt; DoublyLinkedList] ; 每个 freq 一个 list（按访问顺序，最旧在 head）
+min_freq     : int                          ; 当前最小频率（驱逐用）</code></pre>
+<p><strong>get 流程</strong>：找 node → 从其 freq 链表移除 → freq+1 → 加到 freq+1 链表的尾部 → 如果该 freq 是 min_freq 且 list 为空，min_freq++</p>
+<p><strong>put 流程</strong>：</p>
+<ul><li>key 已存在：更新 val，等同于 get</li><li>key 不存在：满了就驱逐 <code>freq_to_list[min_freq].head</code>；插入新 node 到 freq=1 链表，min_freq = 1</li></ul>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import OrderedDict, defaultdict
+
+class LFUCache:
+    def __init__(self, capacity: int):
+        self.cap = capacity
+        self.size = 0
+        self.min_freq = 0
+        # key -&gt; (val, freq)
+        self.kv: dict = {}
+        # freq -&gt; OrderedDict[key -&gt; None]，最早 insertion 在前
+        self.freq_buckets: dict[int, OrderedDict] = defaultdict(OrderedDict)
+
+    def _touch(self, key: int) -&gt; None:
+        """将 key 从当前 freq bucket 移到 freq+1 bucket，更新 min_freq."""
+        val, f = self.kv[key]
+        # remove from current freq bucket
+        del self.freq_buckets[f][key]
+        if not self.freq_buckets[f]:
+            del self.freq_buckets[f]
+            if self.min_freq == f:
+                self.min_freq += 1
+        # add to next freq bucket（OrderedDict 末尾）
+        self.kv[key] = (val, f + 1)
+        self.freq_buckets[f + 1][key] = None
+
+    def get(self, key: int) -&gt; int:
+        if key not in self.kv:
+            return -1
+        self._touch(key)
+        return self.kv[key][0]
+
+    def put(self, key: int, value: int) -&gt; None:
+        if self.cap == 0:
+            return
+        if key in self.kv:
+            self.kv[key] = (value, self.kv[key][1])
+            self._touch(key)
+            return
+        if self.size == self.cap:
+            # evict LFU + LRU 内部
+            lfu_bucket = self.freq_buckets[self.min_freq]
+            evict_key, _ = lfu_bucket.popitem(last=False)  # 最早的
+            del self.kv[evict_key]
+            if not lfu_bucket:
+                del self.freq_buckets[self.min_freq]
+            self.size -= 1
+        # 新元素 freq = 1
+        self.kv[key] = (value, 1)
+        self.freq_buckets[1][key] = None
+        self.min_freq = 1
+        self.size += 1</code></pre>
+<p><strong>为什么 OrderedDict？</strong> Python 的 <code>OrderedDict</code> 维护插入顺序，且 <code>popitem(last=False)</code> 是 O(1)。这等价于双向链表 + dict 的工程实现。</p>
+<h3>复杂度</h3>
+<ul><li><code>get</code>: <strong>O(1)</strong> 摊销</li><li><code>put</code>: <strong>O(1)</strong> 摊销</li><li>空间: O(capacity)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. min_freq 的更新时机</h4>
+<ul><li>增 (<code>_touch</code> 把 key 从 f 移到 f+1)：如果 f == min_freq 且 f 的 bucket 空了 → min_freq++</li><li>新插入：min_freq = 1（新元素 freq 永远是 1）</li><li>删除：只可能从 min_freq bucket 删（驱逐），bucket 空了不需更新（下次 put 会重设）</li></ul>
+<h4>2. 为什么 LRU 内部用 OrderedDict 而不是 list</h4>
+<p><code>list.pop(0)</code> 是 O(N)。OrderedDict / 双向链表能 O(1) 从头部删。</p>
+<h4>3. capacity == 0</h4>
+<p>特判：<code>put</code> 时直接 return；<code>get</code> 永远 miss。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 更新 freq 时忘了从旧 bucket 删 —— 旧 freq 里残留； ❌ 删除 bucket 后不删 dict key —— 死链； ❌ min_freq 更新错误：<code>_touch</code> 中只在"当前 freq == min_freq 且 bucket 空了"才 ++，不要 unconditional ++； ❌ 用 list 模拟 OrderedDict —— pop(0) O(N)，整体退化为 O(N)； ❌ capacity == 0 没特判 —— 第一次 put 就 KeyError。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>LFU = LRU + freq 计数。Python 用 <code>dict[freq] -&gt; OrderedDict</code> 比手写双向链表清晰且性能等价。同样的"双层 hash"技巧也用在 LRU 的高级实现（双 dict 模拟有序队列）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何分布式 LFU？" → 复杂，通常用 Redis ZSCORE + 双重排序（freq, recency）；"如何让 capacity 动态调整？" → resize 接口，缩小时驱逐到目标；"如何记 hit/miss 统计？" → counters；"为什么 LRU 比 LFU 更常用？" → LFU 对"突发热点 vs 长期冷数据"不友好（一旦某 key 被狂访问，freq 上去后即使后期不再用也很难被驱逐）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (16 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Apple</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Salesforce</strong> · Mid-level</div>
+  <div>Design and implement a data structure for a Least Frequently Used (LFU) cache.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Salesforce</strong> · Senior</div>
+  <div>Design LFU Cache</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Oracle</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Google</strong> · Senior</div>
+  <div>Implement both LRU and LFU caches with thread safety consideration.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Oracle</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Oracle</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>a one liner problem statement to implement LFU cache</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>Implement an LFU cache using hash maps and doubly linked lists · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04uj838od5a18zxf.html">← Leetcode 271. Encode and Decode Strings</a>
+    <a href="cm5eh7nrh04qv838o8afetv7s.html">Leetcode 139. Word Break →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

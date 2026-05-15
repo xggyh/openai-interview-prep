@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 30. Substring with Concatenation of All Words · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 30. Substring with Concatenation of All Words</div>
+  <h1>Leetcode 30. Substring with Concatenation of All Words</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/substring-concatenation-words/cm5eh7nrh04nu838o97mif3bb" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a string s and an array of equal-length words, find all starting indices of substrings in s that are a concatenation of each word exactly once in any order. The core challenge is matching a multiset of fixed-length tokens efficiently (typically with a sliding-window and frequency map) over s.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 30 Substring with Concatenation of All Words</strong>：words 是一组<strong>等长</strong>单词。在 s 中找所有起始 index，使 s 从该 index 开始的子串恰好是 words 中所有词的某个<strong>排列拼接</strong>。</p>
+<h3>解法</h3>
+<p>每个 word 长度 L 相同。<strong>滑窗 + Counter</strong>。</p>
+<p>对每个起始偏移 i ∈ [0, L)，滑窗按 L 步进，维护当前窗口的 word counter，与 words 的 counter 比较。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import Counter
+from typing import List
+
+class Solution:
+    def findSubstring(self, s: str, words: List[str]) -&gt; List[int]:
+        if not words or not s: return []
+        word_len = len(words[0])
+        word_count = len(words)
+        total_len = word_len * word_count
+        if len(s) &lt; total_len: return []
+
+        target = Counter(words)
+        result = []
+
+        # 按 word_len 个不同起始偏移，分别做滑窗
+        for offset in range(word_len):
+            left = offset
+            cur = Counter()
+            count = 0
+            for right in range(offset, len(s) - word_len + 1, word_len):
+                w = s[right:right + word_len]
+                if w not in target:
+                    cur.clear()
+                    count = 0
+                    left = right + word_len
+                    continue
+                cur[w] += 1
+                count += 1
+                # 如果某 word 超量，移除左侧直到不超
+                while cur[w] &gt; target[w]:
+                    lw = s[left:left + word_len]
+                    cur[lw] -= 1
+                    count -= 1
+                    left += word_len
+                if count == word_count:
+                    result.append(left)
+                    # 移动左指针准备下一窗口
+                    lw = s[left:left + word_len]
+                    cur[lw] -= 1
+                    count -= 1
+                    left += word_len
+        return result</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N × L)</strong>，N = len(s)，L = word_len。每偏移 O(N/L) 步，每步 O(L) substring + counter ops。总 O((N/L) × L × L) = O(N × L) 因为有 L 个偏移。</li><li>空间：O(words_count)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 等长 word 是关键约束</h4>
+<p>允许把 s 按 L 步进切成"token 序列"，然后做"sliding window over tokens"。</p>
+<h4>2. L 个起始偏移</h4>
+<p><code>offset = 0, 1, ..., L-1</code>：每个偏移独立滑窗。一个 word 跨多偏移会被多次检查，但每次 O(L) 不重叠。</p>
+<h4>3. 超量缩窗</h4>
+<p>当窗口里 word w 出现次数 &gt; target[w]，左指针右移直到 cur[w] == target[w]。这是滑窗标准做法。</p>
+<h4>4. 匹配后 advance</h4>
+<p><code>count == word_count</code> 时记 result，左指针前进 L（下一窗口的同样长度区间）。</p>
+<h3>暴力做法</h3>
+<p>对每个 i ∈ [0, N - total_len]，把 s[i:i+total_len] 切成 word_count 个 L-长 token，比较 Counter。O((N-total_len) × word_count) = O(N × word_count)。简单但不如滑窗优。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 忽略等长前提 —— 算法依赖； ❌ 一次滑窗不分 L 个偏移 —— 漏掉某些 alignment； ❌ Counter 没维护增量 —— 每步重新 build O(words)； ❌ 超量缩窗时只 -- 一次没 while —— 仍超； ❌ 移动右指针时步长用 1 而非 L —— 退化为 char-level 滑窗，错。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>等长 word 把字符串看作 token 序列。滑窗 + Counter 是字符匹配类（"找包含所有 X 的 substring"）的核心模式。同思想：LC 76 Min Window Substring、LC 438 Find All Anagrams。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"words 不等长？" → 退化为更难的版本，用 Aho-Corasick + DP；"允许 word 重叠？" → 滑窗步长改为 1，重复匹配；"返回匹配的 word 排列？" → DFS 在每个 result index 还原顺序。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Substring with Concatenation of All Words - You are given a string s and an array of strings words of the same length. Return all starting indices of substring(s) in s that is a concatenation of each word in words exactly once, in any order, and without any intervening characters.</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04vo838okqn1o6mb.html">← Leetcode 312. Burst Balloons</a>
+    <a href="cm6jw06jt0007dar91f78lua0.html">Problem About Interns and Flats Using a Greedy Approach →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

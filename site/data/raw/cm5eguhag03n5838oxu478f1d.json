@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 2115. Find All Possible Recipes from Given Supplies",
+  "shortDescription": "Given recipes whose ingredients may include other recipes and an initial set of supplies, determine which recipes can be produced; the core challenge is dependency resolution on a directed graph (topological ordering or DFS) while handling cycles and using supplies as base nodes.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 2115. Find All Possible Recipes from Given Supplies\n\nGiven recipes whose ingredients may include other recipes and an initial set of supplies, determine which recipes can be produced; the core challenge is dependency resolution on a directed graph (topological ordering or DFS) while handling cycles and using supplies as base nodes.\n\nAsked at:\n\nAmazon\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate February, 2026\n\nAmazon\n\nMid-level\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nFind All Possible Recipes from Given Supplies\n\nLate July, 2024\n\nGoogle\n\nJunior\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate February, 2026\n\nAmazon\n\nMid-level\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nFind All Possible Recipes from Given Supplies\n\nLate July, 2024\n\nGoogle\n\nJunior\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 2115. Find All Possible Recipes from Given Supplies",
+    "slug": "/community/questions/recipes-supplies/cm5eguhag03n5838oxu478f1d",
+    "url": "https://www.hellointerview.com/community/questions/recipes-supplies/cm5eguhag03n5838oxu478f1d",
+    "type": "Coding",
+    "level": "Junior-Mid-level",
+    "reportedUsers": 2,
+    "lastAsked": "Late December, 2024",
+    "description": "Given recipes whose ingredients may include other recipes and an initial set of supplies, determine which recipes can be produced; the core challenge is dependency resolution on a directed graph (topological ordering or DFS) while handling cycles and using supplies as base nodes."
+  }
+}

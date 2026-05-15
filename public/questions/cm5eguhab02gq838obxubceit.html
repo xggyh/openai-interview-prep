@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 588. Design In-Memory File System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 588. Design In-Memory File System</div>
+  <h1>Leetcode 588. Design In-Memory File System</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/file-system-design/cm5eguhab02gq838obxubceit" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Early January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an in-memory hierarchical file system that supports path parsing and operations like mkdir, ls, addContentToFile (append/create), and readContentFromFile, requiring you to model directories vs files and maintain file contents. The core challenge is choosing an efficient tree/trie structure to handle traversal, creation, and listing (often lexicographically) while correctly distinguishing files from directories.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 588 Design In-Memory File System</strong>：实现内存文件系统，支持：</p>
+<ul><li><code>ls(path)</code>：返回 path 下的子项 list（按字典序）</li><li><code>mkdir(path)</code>：创建多级目录</li><li><code>addContentToFile(path, content)</code>：追加文件内容（不存在则创建）</li><li><code>readContentFromFile(path)</code>：返回文件内容</li></ul>
+<p>经典<strong>Trie / 树结构 + 路径解析</strong>。</p>
+<h3>数据结构</h3>
+<p>每个节点是 dir 或 file：</p>
+<pre class="language-python"><code class="language-python">class Node:
+    def __init__(self, is_file=False):
+        self.is_file = is_file
+        self.children: dict[str, 'Node'] = {}  # 仅 dir 用
+        self.content: str = ''                  # 仅 file 用</code></pre>
+<p>文件系统就是一棵以 <code>Node(is_file=False)</code> 为根的 Trie。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">class Node:
+    def __init__(self, is_file=False):
+        self.is_file = is_file
+        self.children: dict[str, 'Node'] = {}
+        self.content: str = ''
+
+class FileSystem:
+    def __init__(self):
+        self.root = Node(is_file=False)
+
+    def _walk(self, path: str, create: bool = False) -&gt; tuple['Node', str | None]:
+        """Walk to the node at path.
+        Returns (node, leaf_name).
+        - If path is "/", returns (root, None)
+        - If create=True, missing dirs are created (mkdir behavior)
+        """
+        if path == "/":
+            return self.root, None
+        parts = path.strip("/").split("/")
+        cur = self.root
+        for p in parts:
+            if p not in cur.children:
+                if create:
+                    cur.children[p] = Node(is_file=False)
+                else:
+                    raise FileNotFoundError(path)
+            cur = cur.children[p]
+        return cur, parts[-1]
+
+    def ls(self, path: str) -&gt; list[str]:
+        node, _ = self._walk(path)
+        if node.is_file:
+            # ls on a file returns just the filename
+            return [path.rsplit("/", 1)[-1]]
+        return sorted(node.children.keys())
+
+    def mkdir(self, path: str) -&gt; None:
+        self._walk(path, create=True)
+
+    def addContentToFile(self, path: str, content: str) -&gt; None:
+        # Walk to parent dir, then file
+        parts = path.strip("/").split("/")
+        cur = self.root
+        for p in parts[:-1]:
+            if p not in cur.children:
+                cur.children[p] = Node(is_file=False)
+            cur = cur.children[p]
+        fname = parts[-1]
+        if fname not in cur.children:
+            cur.children[fname] = Node(is_file=True)
+        cur.children[fname].content += content
+
+    def readContentFromFile(self, path: str) -&gt; str:
+        parts = path.strip("/").split("/")
+        cur = self.root
+        for p in parts:
+            cur = cur.children[p]
+        return cur.content</code></pre>
+<h3>复杂度</h3>
+<p>| 操作 | 时间 | |---|---| | ls | O(P + K log K)，P = path 长度（分段数），K = 该目录子项数（sort） | | mkdir | O(P) | | addContentToFile | O(P + L)，L = content 长度 | | readContentFromFile | O(P + L) |</p>
+<h3>关键设计点</h3>
+<h4>1. dir vs file 统一抽象</h4>
+<p>用一个 <code>Node</code> 类，<code>is_file</code> 标记是文件还是目录。文件没 children，目录没 content。也可以分两个 class 用 base class，更 OOP 但更繁琐。</p>
+<h4>2. mkdir 多级路径</h4>
+<p><code>mkdir("/a/b/c")</code> 应该一次创建三级。<code>_walk(path, create=True)</code> 路径上遇到不存在的就建。</p>
+<h4>3. ls 在 file 上返回什么</h4>
+<p>题目：<code>ls("/a/b/file.txt")</code> 返回 <code>["file.txt"]</code>（文件名）。这是反直觉的，必须读题。</p>
+<h4>4. addContent 自动创建文件</h4>
+<p>如果不存在直接 create。但如果中间路径不存在 dir，要不要 auto-mkdir？题目说会，所以 path 上 missing dirs 也 create。</p>
+<h4>5. content 追加</h4>
+<p><code>+=</code> 追加，不是覆盖。注意这点。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">fs = FileSystem()
+assert fs.ls("/") == []
+fs.mkdir("/a/b/c")
+assert fs.ls("/") == ["a"]
+assert fs.ls("/a") == ["b"]
+assert fs.ls("/a/b") == ["c"]
+fs.addContentToFile("/a/b/c/file.txt", "hello ")
+fs.addContentToFile("/a/b/c/file.txt", "world")
+assert fs.readContentFromFile("/a/b/c/file.txt") == "hello world"
+assert sorted(fs.ls("/a/b/c")) == ["file.txt"]
+assert fs.ls("/a/b/c/file.txt") == ["file.txt"]   # 文件 ls 返回自身</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ ls 一个文件 path 返回 <code>["file.txt"]</code> —— 容易写成空 list 或 raise； ❌ addContent 覆盖 content 而非追加 —— 文档明说是 append； ❌ path 解析没处理首尾 slash —— <code>/a/b/</code>、<code>/a//b</code>、<code>//</code> 等；用 <code>strip("/")</code> + <code>filter(None, ...)</code> 保险； ❌ root "/" 用 <code>split("/")</code> 得到 <code>[""]</code>，不是空 list —— 要特判； ❌ children dict 用 <code>Counter</code> 之类排序不对 —— ls 要求字典序。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Trie 模式：dict[child_name -&gt; Node]。路径解析就是 dict 链式查找。同模板可用于：URL routing、CLI 命令树、namespace 解析。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"delete file/dir？" → 父 dict del；递归 delete 整个子树；"rename？" → 父 dict del 旧 key + 加新 key；"hard / soft link？" → 加 <code>link_to_node</code> 引用 / target string + 自定义 walk；"如何持久化？" → DFS 序列化为 JSON / pickle。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (8 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Snowflake</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Snowflake</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Snowflake</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Snowflake</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Snowflake</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Uber</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">For c++ code, traverse_or_create() method implementation is missing.</div><div class="comment">Node* traverse_or_create(Node* root, const vector&lt;string&gt;&amp; parts, bool create) { Node* node = root; for (const auto&amp; part : parts) { auto it = node-&gt;children.find(part); if (it == node-&gt;children.end()) { if (!create) return nullptr; node-&gt;children[part] = new Node(); it = node-&gt;children.find(part); } node = it-&gt;second; } return node; }</div><div class="comment">Reply PS Prakhar Srivastava Premium • 2个月前 • edited 2个月前</div><div class="comment">Why we have sorted the result in ls method, when we already have children as TreeMap?</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6k0f724000myis434q1atjv.html">← File System Size Analysis and Reporting</a>
+    <a href="cm5eguhac02ku838o1xk0c1qq.html">Leetcode 736. Parse Lisp Expression →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

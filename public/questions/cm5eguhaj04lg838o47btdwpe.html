@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 3350. Adjacent Increasing Subarrays Detection II · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 3350. Adjacent Increasing Subarrays Detection II</div>
+  <h1>Leetcode 3350. Adjacent Increasing Subarrays Detection II</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/increasing-subarray-detection/cm5eguhaj04lg838o47btdwpe" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 1 · 🕒 Late July, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Find the largest integer k such that the array contains two adjacent length-k contiguous subarrays (one immediately following the other) that are both strictly increasing. With n up to 2·10^5, this is solved by leveraging lengths of maximal increasing runs (or binary-search over k with linear feasibility checks) rather than brute force.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 3350 Adjacent Increasing Subarrays Detection II</strong>：找最大 k 使得存在两个<strong>相邻</strong>严格递增子数组，长度都为 k。返回最大 k。</p>
+<h3>解法</h3>
+<ol><li>算 <code>inc[i]</code> = 以 i 结尾的最长严格递增 run 长度</li><li>对每个位置 i，能否做 (k 长 ending at i) + (k 长 starting at i+1)</li><li>二分 k 或贪心扫描</li></ol>
+<p><strong>贪心两次扫</strong>：</p>
+<ul><li>算所有"以 i 起的递增 run 长度"为 <code>runs[i]</code></li><li>答案 = max over i of <code>max(runs[i]//2, min(runs[i], runs[i + runs[i]]))</code></li></ul>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def maxIncreasingSubarrays(self, nums: List[int]) -&gt; int:
+        n = len(nums)
+        # runs[i] = 从 i 开始严格递增 run 的长度
+        runs = [1] * n
+        for i in range(n - 2, -1, -1):
+            if nums[i] &lt; nums[i + 1]:
+                runs[i] = runs[i + 1] + 1
+        best = 0
+        for i in range(n):
+            # 选项 A：把 runs[i] 平分成两段
+            best = max(best, runs[i] // 2)
+            # 选项 B：runs[i] 这段（长 r）+ 下一段
+            r = runs[i]
+            nxt_start = i + r
+            if nxt_start &lt; n:
+                nxt_r = runs[nxt_start]
+                best = max(best, min(r, nxt_r))
+        return best</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N)</strong></li><li>空间：O(N) runs</li></ul>
+<h3>关键技术点</h3>
+<h4>1. runs[i] 含义</h4>
+<p>从 index i 开始向右连续严格递增的最长长度。倒序计算：if nums[i]&lt;nums[i+1] then runs[i]=runs[i+1]+1 else 1。</p>
+<h4>2. 两种 split 方式</h4>
+<ul><li>A. 单一递增段 runs[i] 截两半：每段 runs[i]//2</li><li>B. 当前段 + 紧邻下段：min(runs[i], runs[i + runs[i]])</li></ul>
+<p>每个 i 取两种最大。</p>
+<h4>3. 边界</h4>
+<p><code>nxt_start = i + runs[i]</code> 可能 &gt;= n（最后一段）。check 边界。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用二分 + check 是 O(N log N)，简单扫 O(N) 已足； ❌ runs 正向计算混乱 —— 倒序更自然（从右往左）； ❌ "严格" vs "非严格" 递增 —— 题目通常严格用 <code>&lt;</code>； ❌ 单一段截半时用 <code>//</code> 整除（k 是整数）。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"连续 run 长度" 是 array 题常见预处理。同模板：LC 1437 Check If All 1's Are at Least Length K Places Away、LC 2348 Number of Zero-Filled Subarrays。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回两段具体起点？" → 记录 best 时同步存 i 和 nxt_start；"求 k 段 ?" → 滑窗 + sliding max 不够，要 DP；"严格递减子数组？" → 对称改 inc 条件。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5oehnrb0002436gh9b3uzx3.html">← Design Yelp</a>
+    <a href="cm5eguhad02zh838oa4lbcq1w.html">Leetcode 1263. Minimum Moves to Move a Box to Their Target Location →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

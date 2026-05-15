@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Find Root Node in Colored Tree with Pattern Constraints · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Find Root Node in Colored Tree with Pattern Constraints</div>
+  <h1>Find Root Node in Colored Tree with Pattern Constraints</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/colored-tree-root/cm6jwv68v002zui4bm2qok4b6" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 3 · 🕒 Early January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an undirected connected acyclic graph where each node has at most 3 edges and nodes are colored (Red/Black/White or similar color patterns), find a root node such that when the graph is viewed as a binary tree from that root, it satisfies specific color pattern constraints across levels (e.g., RBWRBW repeating pattern or alternating colors). Return -1 if no valid root exists.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Find Root Node in Colored Tree with Pattern Constraints</strong>：与 <code>Convert Graph to Binary Tree with Alternating Colors</code> 同类，更强约束 —— 颜色按 <strong>6 种可能 3-color permutation</strong> 中之一循环（如 R→W→B→R→W→B 或 R→B→W 或...）。返回任一 valid root，没有返回 -1。</p>
+<h3>解法</h3>
+<p>同前题，但试<strong>所有 6 种 pattern 排列</strong>：</p>
+<pre class="language-python"><code class="language-python">from itertools import permutations
+from collections import defaultdict, deque
+
+def find_root_multi_pattern(n, edges, colors):
+    adj = defaultdict(set)
+    for u, v in edges:
+        adj[u].add(v); adj[v].add(u)
+
+    def check(r: int, pattern: tuple) -&gt; bool:
+        if len(adj[r]) &gt; 2: return False
+        depth = {r: 0}
+        q = deque([r])
+        while q:
+            u = q.popleft()
+            if colors[u] != pattern[depth[u] % 3]:
+                return False
+            for v in adj[u]:
+                if v in depth: continue
+                depth[v] = depth[u] + 1
+                q.append(v)
+        return True
+
+    color_set = sorted(set(colors))  # 假设有 3 个颜色
+    if len(color_set) &gt; 3: return -1   # 超过 3 色不在此变种范围
+    for pattern in permutations(color_set):   # 6 种排列
+        for r in range(n):
+            if check(r, pattern):
+                return r
+    return -1</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(P × V × (V + E))</strong>，P = 6 (color permutations)。</li><li>空间：O(V + E)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 枚举所有 pattern</h4>
+<p>3 色有 3! = 6 个循环排列。如果题目允许 2 色变种或 4 色，pattern 数变。</p>
+<h4>2. Adjacent layer 颜色不同</h4>
+<p>pattern 用 list of distinct colors → adjacent layer 自然不同色。如果用 <code>[R, R, B]</code>（同色相邻）则违反"adjacent must differ"约束 → 排除。</p>
+<h4>3. 6 种 of 3-color cycle</h4>
+<ul><li>(R, B, W), (R, W, B), (B, R, W), (B, W, R), (W, R, B), (W, B, R)</li><li>这 6 种 cycle 是 3! 排列，每个对应不同 root 选择</li></ul>
+<p>实际可能等价（如 (R,B,W) 起点不同 == (B,W,R) 起点偏移），但代码遍历安全。</p>
+<h4>4. 仅当颜色全有时尝试 3-pattern</h4>
+<p>如果图里只 2 色，pattern 退化为 2-cycle。代码动态用 <code>set(colors)</code>。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 假设只一种 pattern —— 漏 valid root； ❌ 没排除"同色相邻"违法 pattern（如 (R, R, B)）； ❌ permutations 会产生 size &gt; 3 的；需限制 size 3； ❌ check 函数没限制 root degree ≤ 2。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"找满足复杂模式的 root" 通过<strong>枚举模式 + 验证</strong>解决。常数因子大但 V³ 不爆。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"K 色 K-cycle？" → permutations 数 = K!，V 大时不可行；优化：观察"layer 0 颜色 = root 颜色"，固定后 pattern[1], pattern[2] 等也固定 → 减为 (K-1)! 或更少；"动态加节点？" → incremental check 难，全图重算；"返回所有 valid root？" → 收集而非 return first，注意可能多个 root 各自有不同 valid pattern。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an undirected connected acyclic graph where each node has at most 3 edges, and nodes are colored Red (R), Blue (B), or White (W), find a root such that the graph becomes a binary tree and the layers follow a fixed color sequence (e.g., RBWRBW).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find a root vertex in an undirected acyclic graph with specific color constraints: Vertices have at most 3 neighbors, are colored red/black/white, same depth vertices have same color, colors change in R-&gt;W-&gt;B-&gt;R-&gt;W-&gt;B order as depth increases, and the resulting structure forms a valid binary tree. Return -1 if no such vertex exists.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Find a valid root node in a colored tree. Given a tree with n nodes, each colored 'R', 'A', or 'W', determine if there exists a node that can serve as the root of a binary tree such that the colors follow one of six possible repeating 3-color patterns level by level. Return the index of a valid root node if it exists, or -1 if no solution exists. The tree has at most 3 neighbors per node, and the time complexity should be O(V).</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6jwv6ar0033ui4bpqke1e4w.html">← Convert Graph to Binary Tree with Alternating Colors</a>
+    <a href="cm5eguhaf03el838orjk694tw.html">Leetcode 1807. Evaluate the Bracket Pairs of a String →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

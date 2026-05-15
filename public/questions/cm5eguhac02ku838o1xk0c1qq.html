@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 736. Parse Lisp Expression · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 736. Parse Lisp Expression</div>
+  <h1>Leetcode 736. Parse Lisp Expression</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/parse-lisp-expression/cm5eguhac02ku838o1xk0c1qq" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Early January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Evaluate a Lisp-like expression string containing integers, variable references, and nested (let / add / mult) forms. The core challenge is parsing the nested syntax and maintaining lexical scoping so let bindings (which may shadow outer variables) are applied correctly while computing the final integer result.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 736 Parse Lisp Expression</strong>：解析嵌套 Lisp 表达式，支持 <code>let</code>（变量绑定）、<code>add</code>、<code>mult</code>、整数、变量。返回结果。</p>
+<p>经典<strong>递归下降解析 + 作用域栈</strong>。Hard 题。</p>
+<h3>题目语义</h3>
+<pre class="language-plaintext"><code class="language-plaintext">expression = "(let x 2 (mult x (let x 3 y 4 (add x y))))"
+// let x = 2
+//   let x = 3, y = 4
+//     add x y = 7
+//   mult x (=2) 7 = 14
+=&gt; 14</code></pre>
+<h3>解题思路</h3>
+<ol><li><strong>Tokenize</strong>：把 expr 切成 token list（括号 / 数字 / 标识符）</li><li><strong>递归 parse</strong>：</li></ol>
+<ul><li>数字 → 返回 int</li><li>变量 → 查 scope chain</li><li><code>(op ...)</code> → 按 op 分发</li></ul>
+<ol><li><strong>Scope</strong>：每个 let 一个 scope frame，求值时优先从最内 scope 查</li></ol>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def evaluate(self, expression: str) -&gt; int:
+        # Scope = list of dicts，最内 scope 在末尾
+        scope: list[dict[str, int]] = [{}]
+
+        # ---- tokenizer ----
+        def tokenize(s: str) -&gt; list[str]:
+            tokens = []
+            i = 0
+            while i &lt; len(s):
+                if s[i] in "()":
+                    tokens.append(s[i]); i += 1
+                elif s[i] == " ":
+                    i += 1
+                else:
+                    j = i
+                    while j &lt; len(s) and s[j] not in "() ":
+                        j += 1
+                    tokens.append(s[i:j])
+                    i = j
+            return tokens
+
+        toks = tokenize(expression)
+        pos = [0]   # 用 list 让闭包可修改
+
+        # ---- parse + eval ----
+        def lookup(name: str) -&gt; int:
+            for frame in reversed(scope):
+                if name in frame:
+                    return frame[name]
+            raise KeyError(name)
+
+        def parse_value() -&gt; int:
+            t = toks[pos[0]]
+            if t == "(":
+                pos[0] += 1
+                op = toks[pos[0]]; pos[0] += 1
+                if op == "add":
+                    a = parse_value()
+                    b = parse_value()
+                    assert toks[pos[0]] == ")"; pos[0] += 1
+                    return a + b
+                if op == "mult":
+                    a = parse_value()
+                    b = parse_value()
+                    assert toks[pos[0]] == ")"; pos[0] += 1
+                    return a * b
+                if op == "let":
+                    scope.append({})
+                    while True:
+                        if toks[pos[0]] == "(":
+                            # 下一个 token 是 expression
+                            val = parse_value()
+                            scope.pop()
+                            assert toks[pos[0]] == ")"; pos[0] += 1
+                            return val
+                        # peek 下一个 token：是 var (后面跟值) 还是 expr 终值？
+                        # 如果当前 token 后跟 ')'，则这就是 return 值
+                        if pos[0] + 1 &lt; len(toks) and toks[pos[0] + 1] == ")":
+                            val = parse_value()
+                            scope.pop()
+                            assert toks[pos[0]] == ")"; pos[0] += 1
+                            return val
+                        # 否则 = (var, value-expr) 对
+                        name = toks[pos[0]]; pos[0] += 1
+                        val = parse_value()
+                        scope[-1][name] = val
+            # 不是 '('：要么数字要么变量
+            pos[0] += 1
+            if t.lstrip("-").isdigit():
+                return int(t)
+            return lookup(t)
+
+        return parse_value()</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N)</strong>，N = 表达式长度（每个 token 处理 O(1) 摊销，scope lookup 是 scope 深度，最坏 O(depth)，但 depth ≤ N）。<strong>O(N²)</strong> 最坏（深度嵌套 let）。</li><li>空间：<strong>O(depth)</strong> 调用栈 + scope。</li></ul>
+<h3>关键设计点</h3>
+<h4>1. 作用域链：栈</h4>
+<p><code>let</code> 引入新作用域：push frame。结束 pop。变量查找从内到外：<code>for frame in reversed(scope)</code>。</p>
+<h4>2. let 的语法歧义</h4>
+<p><code>(let x 2 ...)</code> 中 <code>...</code> 可能是：</p>
+<ul><li>更多变量绑定（如 <code>y 4 ...</code>）</li><li>或最终表达式（如 <code>(add x 1)</code> 或 <code>x</code>）</li></ul>
+<p>判断方法：看当前 token 后面是不是 <code>)</code> 或者 <code>(</code> 紧接。简化：直接 lookahead next token —— 如果 next 是 <code>)</code> 表示当前 token 是 return value（结束 let）。</p>
+<h4>3. 数字识别</h4>
+<p><code>int(t)</code> 也能识别负数（<code>-3.4</code> 这种小数不在题目范围）。用 <code>t.lstrip("-").isdigit()</code> 判别可靠。</p>
+<h4>4. pos 用 list 闭包</h4>
+<p>Python 闭包无法重新绑定外层变量（要用 <code>nonlocal</code>）。把 pos 包成 list 用 <code>pos[0]</code> 修改简单。或用 <code>nonlocal pos</code>。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ let 不开新 scope 直接改外层 —— 内层修改影响外层； ❌ scope lookup 只看最内 —— 找不到时应该往外走； ❌ let 解析时把 return value 当成 var binding —— 复杂的 lookahead 判断； ❌ tokenizer 不处理负号 / 多空格 / 嵌套； ❌ pos 用普通 int —— 闭包内修改无效。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Lisp 解析是<strong>编译器课程的 mini 版</strong>：tokenizer → parser → evaluator。Scope 链是函数式语言核心。同模式：实现简单 calc、JSON parser、SQL WHERE 解析。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"支持函数定义 <code>(lambda x ...)</code>？" → 在 scope 里存 closure (params, body, captured scope)，调用时新 scope + 执行 body；"支持 if / cond？" → 加分支 op；"性能优化？" → AST 一次性构建后多次 eval（不必重复 parse）；"如何 detect 循环引用？" → eval 时不直接 substitute（lazy eval）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhab02gq838obxubceit.html">← Leetcode 588. Design In-Memory File System</a>
+    <a href="cm5eguhac02pr838o7h4i703f.html">Leetcode 913. Cat and Mouse →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

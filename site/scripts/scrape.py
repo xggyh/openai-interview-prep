@@ -5,7 +5,12 @@ import json, subprocess, time, ast, sys, os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+# Default JSON source can be overridden by passing a path as first non-flag arg
 QUESTIONS_JSON = ROOT / "openai-interview-questions.json"
+for arg in sys.argv[1:]:
+    if not arg.startswith("--") and arg.endswith(".json"):
+        QUESTIONS_JSON = Path(arg).resolve()
+        break
 RAW_DIR = ROOT / "site" / "data" / "raw"
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -70,9 +75,26 @@ EXTRACT_DATA_JS = r"""
 })()
 """
 
+ARC_TAB_ID = os.environ.get("ARC_TAB_ID", "")
+
 def osascript_navigate(url: str):
-    """Navigate Arc's active tab to URL."""
-    script = f'''
+    """Navigate the dedicated Arc tab to URL."""
+    if ARC_TAB_ID:
+        script = f'''
+tell application "Arc"
+    repeat with w from 1 to count windows
+        repeat with tt from 1 to count tabs of window w
+            if id of tab tt of window w is "{ARC_TAB_ID}" then
+                set URL of tab tt of window w to "{url}"
+                return "ok"
+            end if
+        end repeat
+    end repeat
+    return "TAB_NOT_FOUND"
+end tell
+'''
+    else:
+        script = f'''
 tell application "Arc"
     tell active tab of front window
         set URL to "{url}"
@@ -82,10 +104,23 @@ end tell
     subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=10)
 
 def osascript_exec(js: str) -> str:
-    """Execute JS in active Arc tab via AppleScript, return result as raw string."""
-    # AppleScript needs JS escaped inside double quotes; double quotes inside JS become \"
+    """Execute JS in the dedicated Arc tab via AppleScript, return result as raw string."""
     js_escaped = js.replace("\\", "\\\\").replace('"', '\\"')
-    script = f'''
+    if ARC_TAB_ID:
+        script = f'''
+tell application "Arc"
+    repeat with w from 1 to count windows
+        repeat with tt from 1 to count tabs of window w
+            if id of tab tt of window w is "{ARC_TAB_ID}" then
+                return execute tab tt of window w javascript "{js_escaped}"
+            end if
+        end repeat
+    end repeat
+    return "TAB_NOT_FOUND"
+end tell
+'''
+    else:
+        script = f'''
 tell application "Arc"
     tell active tab of front window
         return execute javascript "{js_escaped}"

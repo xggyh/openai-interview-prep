@@ -10,7 +10,24 @@ SITE = ROOT / "site"
 RAW_DIR = SITE / "data" / "raw"
 ANALYSES_DIR = SITE / "analyses"
 PUBLIC_DIR = ROOT / "public"  # final output goes here for GH Pages
-QUESTIONS_JSON = ROOT / "openai-interview-questions.json"
+
+# Unified multi-company source (preferred). Falls back to single-company file
+# for compatibility.
+UNIFIED_JSON = SITE / "data" / "questions.json"
+LEGACY_JSON = ROOT / "openai-interview-questions.json"
+QUESTIONS_JSON = UNIFIED_JSON if UNIFIED_JSON.exists() else LEGACY_JSON
+
+# Company display order on the index page
+COMPANY_ORDER = ["OpenAI", "Google"]
+
+# Per-company brand color (used for the company badge tint)
+COMPANY_COLOR = {
+    "OpenAI": "#10a37f",   # OpenAI green
+    "Google": "#4285f4",   # Google blue
+    "Meta":   "#1877f2",
+    "Amazon": "#ff9900",
+    "Anthropic": "#d97706",
+}
 
 # We rely on a minimal markdown subset and CDN-loaded prism.js for syntax highlighting.
 # Markdown features supported by our parser:
@@ -236,8 +253,8 @@ def parse_comments(comments_raw: str):
     return out
 
 
-def render_index(questions, type_groups, recency_sorted):
-    """Render index.html."""
+def render_index(questions, type_groups, company_groups, recency_sorted):
+    """Render index.html with company + type filters."""
     types_meta = [
         ("Coding", "Coding 题（算法 / LLD 编码）"),
         ("System Design", "System Design 题（架构设计）"),
@@ -249,58 +266,96 @@ def render_index(questions, type_groups, recency_sorted):
     for q in recency_sorted:
         slug_id = q["slug"].rsplit("/", 1)[-1]
         href = f"questions/{slug_id}.html"
-        tag = q["type"]
-        level = q["level"] or "—"
-        reports = q["reportedUsers"] or 0
-        last = q["lastAsked"] or "—"
+        qtype = q["type"]
+        companies = q.get("companies", {})
+        company_list = [c for c in COMPANY_ORDER if c in companies] + \
+                       [c for c in companies if c not in COMPANY_ORDER]
+        # Aggregate reports across companies for display
+        total_reports = sum((companies[c].get("reportedUsers") or 0) for c in companies)
+        # Most recent last-asked across companies
+        most_recent = max(
+            ((companies[c].get("lastAsked") or "") for c in companies),
+            key=lambda la: _recency_key(la),
+        )
+        # Use the union of levels seen, picking shortest as primary tag
+        levels = sorted({(companies[c].get("level") or "—") for c in companies}, key=len)
+        level_tag = levels[0] if levels else "—"
+
         desc = (q.get("description") or "").strip()
         if len(desc) > 180:
             desc = desc[:180].rsplit(" ", 1)[0] + "…"
+
+        company_badges = []
+        for c in company_list:
+            color = COMPANY_COLOR.get(c, "#57606a")
+            n = companies[c].get("reportedUsers") or 0
+            company_badges.append(
+                f'<span class="company-badge" style="--c:{color}" title="{esc(c)}: {n} 人报告">{esc(c)} {n}</span>'
+            )
+
+        data_companies = "|".join(company_list)
         card = f"""
-<div class="q-card" data-type="{esc(tag)}" data-level="{esc(level)}">
+<div class="q-card" data-type="{esc(qtype)}" data-companies="{esc(data_companies)}">
   <a class="q-title" href="{href}">{esc(q['title'])}</a>
   <div class="q-tags">
-    <span class="{tag_class(tag)}">{esc(tag)}</span>
-    <span class="tag tag-level">{esc(level)}</span>
+    <span class="{tag_class(qtype)}">{esc(qtype)}</span>
+    <span class="tag tag-level">{esc(level_tag)}</span>
+    {''.join(company_badges)}
   </div>
-  <div class="q-meta">📋 {reports} 人报告 · 🕒 {esc(last)}</div>
+  <div class="q-meta">📋 {total_reports} 人报告 · 🕒 最近 {esc(most_recent or '—')}</div>
   <div class="q-desc">{esc(desc)}</div>
 </div>"""
         cards.append(card)
 
-    type_buttons = ['<button class="active" data-filter="all">全部 ({})</button>'.format(len(questions))]
+    # Company tabs
+    company_tabs = ['<button class="active" data-cfilter="all">全部公司 ({})</button>'.format(len(questions))]
+    for cname in COMPANY_ORDER:
+        if cname in company_groups:
+            company_tabs.append(
+                f'<button data-cfilter="{esc(cname)}" style="--c:{COMPANY_COLOR.get(cname, "#57606a")}">{esc(cname)} ({len(company_groups[cname])})</button>'
+            )
+
+    # Type filter buttons
+    type_buttons = ['<button class="active" data-tfilter="all">全部类型 ({})</button>'.format(len(questions))]
     for tname, _label in types_meta:
         count = len(type_groups.get(tname, []))
         if count:
-            type_buttons.append(f'<button data-filter="{esc(tname)}">{esc(tname)} ({count})</button>')
+            type_buttons.append(f'<button data-tfilter="{esc(tname)}">{esc(tname)} ({count})</button>')
 
-    counts = ' '.join(f'<span class="stat"><strong>{len(type_groups.get(t, []))}</strong> {esc(t)}</span>' for t, _ in types_meta if type_groups.get(t))
+    counts = ' '.join(
+        f'<span class="stat"><strong>{len(type_groups.get(t, []))}</strong> {esc(t)}</span>'
+        for t, _ in types_meta if type_groups.get(t)
+    )
 
     html_doc = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenAI 面试题准备 · Hello Interview 整理</title>
-<meta name="description" content="OpenAI 全岗位 44 道面试题 · 题面 + 中文思路解析 · Python 解法 · System Design 架构思路">
+<title>面试题准备 · OpenAI / Google · Hello Interview 整理</title>
+<meta name="description" content="OpenAI / Google 面试题汇总 · 题面 + 中文思路解析 · Python 解法 · System Design 架构思路">
 <link rel="stylesheet" href="assets/style.css?v={CSS_HASH}">
 </head>
 <body>
 <header class="site-header">
   <div class="container">
-    <h1><a href="index.html">🧠 OpenAI 面试题准备</a></h1>
-    <div class="meta">来源：hellointerview.com · {len(questions)} 题</div>
+    <h1><a href="index.html">🧠 面试题准备</a></h1>
+    <div class="meta">来源：hellointerview.com · {len(questions)} 题 · OpenAI + Google</div>
   </div>
 </header>
 <main class="container">
   <div class="intro">
-    <h2>OpenAI 全岗位面试题（共 {len(questions)} 题）</h2>
-    <p>题目来自 hellointerview.com 社区的真实候选人报告，按最近问询时间倒序排列。每题包含原始题面、中文思路解析、System Design 思路 / Python 解法、易错点。</p>
+    <h2>面试题汇总（共 {len(questions)} 题）</h2>
+    <p>题目来自 hellointerview.com 社区的真实候选人报告。每题包含原始题面、中文思路解析、System Design 思路 / Python 解法、易错点。按公司 / 类型筛选，按最近问询时间倒序。</p>
     <div class="stats">{counts}</div>
   </div>
 
   <div class="filter-bar">
-    <span class="filter-label">按类型筛选：</span>
+    <span class="filter-label">公司：</span>
+    {''.join(company_tabs)}
+  </div>
+  <div class="filter-bar">
+    <span class="filter-label">类型：</span>
     {''.join(type_buttons)}
   </div>
 
@@ -308,14 +363,29 @@ def render_index(questions, type_groups, recency_sorted):
 </main>
 
 <script>
-document.querySelectorAll('.filter-bar button').forEach(btn => {{
+const state = {{ cfilter: 'all', tfilter: 'all' }};
+function applyFilters() {{
+  document.querySelectorAll('.q-card').forEach(card => {{
+    const companies = (card.dataset.companies || '').split('|');
+    const matchC = state.cfilter === 'all' || companies.includes(state.cfilter);
+    const matchT = state.tfilter === 'all' || card.dataset.type === state.tfilter;
+    card.style.display = (matchC && matchT) ? '' : 'none';
+  }});
+}}
+document.querySelectorAll('button[data-cfilter]').forEach(btn => {{
   btn.addEventListener('click', () => {{
-    document.querySelectorAll('.filter-bar button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('button[data-cfilter]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const filter = btn.dataset.filter;
-    document.querySelectorAll('.q-card').forEach(card => {{
-      card.style.display = (filter === 'all' || card.dataset.type === filter) ? '' : 'none';
-    }});
+    state.cfilter = btn.dataset.cfilter;
+    applyFilters();
+  }});
+}});
+document.querySelectorAll('button[data-tfilter]').forEach(btn => {{
+  btn.addEventListener('click', () => {{
+    document.querySelectorAll('button[data-tfilter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.tfilter = btn.dataset.tfilter;
+    applyFilters();
   }});
 }});
 </script>
@@ -324,15 +394,43 @@ document.querySelectorAll('.filter-bar button').forEach(btn => {{
     return html_doc
 
 
+_MONTH_IDX = {m: i for i, m in enumerate(
+    ["January", "February", "March", "April", "May", "June",
+     "July", "August", "September", "October", "November", "December"], 1)}
+_PHASE_IDX = {"Early": 1, "Mid": 2, "Late": 3}
+
+def _recency_key(la: str | None) -> tuple:
+    if not la: return (0, 0, 0)
+    m = re.match(r"(Early|Mid|Late)\s+(\w+),\s+(\d+)", la)
+    if not m: return (0, 0, 0)
+    return (int(m.group(3)), _MONTH_IDX.get(m.group(2), 0), _PHASE_IDX.get(m.group(1), 0))
+
+
 def render_detail(q, raw, analysis_md, prev_q, next_q):
     slug_id = q["slug"].rsplit("/", 1)[-1]
     title = q["title"]
     qtype = q["type"]
-    level = q["level"] or "—"
-    reports = q["reportedUsers"] or 0
-    last = q["lastAsked"] or "—"
+    companies = q.get("companies", {})
     source_url = q["url"]
     desc = raw.get("shortDescription") or q.get("description") or ""
+
+    # Build per-company chips
+    company_list = [c for c in COMPANY_ORDER if c in companies] + \
+                   [c for c in companies if c not in COMPANY_ORDER]
+    company_chips = []
+    for c in company_list:
+        color = COMPANY_COLOR.get(c, "#57606a")
+        info = companies[c]
+        n = info.get("reportedUsers") or 0
+        lvl = info.get("level") or "—"
+        la = info.get("lastAsked") or "—"
+        company_chips.append(
+            f'<span class="company-chip" style="--c:{color}">'
+            f'<strong>{esc(c)}</strong> · {esc(lvl)} · 📋 {n} · 🕒 {esc(la)}</span>'
+        )
+    # Primary level (shortest range across companies) for breadcrumb tag
+    levels = sorted({(info.get("level") or "—") for info in companies.values()}, key=len)
+    primary_level = levels[0] if levels else "—"
 
     # Timeline variants
     timeline = parse_timeline(raw.get("timelineRaw") or "")
@@ -405,14 +503,14 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(title)} · OpenAI 面试题</title>
+<title>{esc(title)} · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v={CSS_HASH}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
   <div class="container">
-    <h1><a href="../index.html">🧠 OpenAI 面试题准备</a></h1>
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
     <div class="meta"><a href="../index.html">← 返回列表</a></div>
   </div>
 </header>
@@ -421,11 +519,10 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
   <h1>{esc(title)}</h1>
   <div class="header-meta">
     <span class="{tag_class(qtype)}">{esc(qtype)}</span>
-    <span class="tag tag-level">{esc(level)}</span>
-    <span>📋 {reports} 人报告</span>
-    <span>🕒 最近：{esc(last)}</span>
+    <span class="tag tag-level">{esc(primary_level)}</span>
     <span class="external"><a href="{esc(source_url)}" target="_blank" rel="noopener">原题 ↗</a></span>
   </div>
+  <div class="company-chips">{''.join(company_chips)}</div>
 
   <section class="section">
     <h2>Problem Statement</h2>
@@ -457,21 +554,30 @@ def main():
     with open(QUESTIONS_JSON) as f:
         questions = json.load(f)
 
-    # Group by type
-    type_groups = {}
+    # Normalize: legacy single-company format has flat reportedUsers/lastAsked/level.
+    # Convert it into {companies: {OpenAI: {...}}} structure.
+    for q in questions:
+        if "companies" not in q:
+            q["companies"] = {
+                "OpenAI": {
+                    "level": q.get("level"),
+                    "reportedUsers": q.get("reportedUsers"),
+                    "lastAsked": q.get("lastAsked"),
+                }
+            }
+
+    # Group by type and company
+    type_groups: dict[str, list] = {}
+    company_groups: dict[str, list] = {}
     for q in questions:
         type_groups.setdefault(q["type"], []).append(q)
+        for c in q.get("companies", {}):
+            company_groups.setdefault(c, []).append(q)
 
-    # Recency sort (already done in source file, but enforce)
-    month_idx = {m: i for i, m in enumerate(
-        ["January", "February", "March", "April", "May", "June",
-         "July", "August", "September", "October", "November", "December"], 1)}
-    phase_idx = {"Early": 1, "Mid": 2, "Late": 3}
+    # Recency sort by MAX lastAsked across all companies
     def sk(q):
-        la = q.get("lastAsked") or ""
-        m = re.match(r"(Early|Mid|Late)\s+(\w+),\s+(\d+)", la)
-        if not m: return (0, 0, 0)
-        return (int(m.group(3)), month_idx.get(m.group(2), 0), phase_idx.get(m.group(1), 0))
+        keys = [_recency_key(c.get("lastAsked")) for c in q.get("companies", {}).values()]
+        return max(keys) if keys else (0, 0, 0)
     recency_sorted = sorted(questions, key=sk, reverse=True)
 
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -488,7 +594,7 @@ def main():
     globals()['CSS_HASH'] = css_hash
 
     # Write index
-    idx_html = render_index(questions, type_groups, recency_sorted)
+    idx_html = render_index(questions, type_groups, company_groups, recency_sorted)
     (PUBLIC_DIR / "index.html").write_text(idx_html, encoding="utf-8")
     print(f"wrote {PUBLIC_DIR / 'index.html'}")
 

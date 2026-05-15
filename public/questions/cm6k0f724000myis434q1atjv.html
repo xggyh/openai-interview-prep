@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>File System Size Analysis and Reporting · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / File System Size Analysis and Reporting</div>
+  <h1>File System Size Analysis and Reporting</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Intern-Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/filesystem-size-analysis/cm6k0f724000myis434q1atjv" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Intern-Mid-level · 📋 4 · 🕒 Early January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Implement functionality to analyze and report file system sizes. This includes calculating sizes of individual entities (files/folders), finding the largest files in a directory, and determining the largest folders based on their immediate file contents. The solution should handle large directory structures efficiently.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>File System Size Analysis and Reporting</strong>：实现文件系统分析工具，支持：</p>
+<ol><li>给一个 entity ID（文件/文件夹），返回其大小（文件夹=递归求和）</li><li>给一个 folder URI，返回<strong>该 folder 内（递归）</strong>最大的 10 个文件</li><li>返回 top-10 最大文件夹（按"该 folder 下<strong>直接子文件</strong>总大小"，<strong>不递归</strong>）</li></ol>
+<p>不是纯算法，是 <strong>OOP 设计 + 树遍历 + heap top-k</strong>。Google L4-L5 高频。</p>
+<h3>数据模型</h3>
+<pre class="language-python"><code class="language-python">from dataclasses import dataclass, field
+
+@dataclass
+class Entity:
+    id: str
+    name: str
+    parent_id: str | None
+    is_folder: bool
+    size_bytes: int = 0          # 文件用；文件夹忽略
+    children_ids: list[str] = field(default_factory=list)   # 文件夹用
+
+class FileSystem:
+    def __init__(self):
+        self.entities: dict[str, Entity] = {}
+        self.root_id: str | None = None</code></pre>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import heapq
+from typing import Callable
+
+class FileAnalyzer:
+    def __init__(self, fs: 'FileSystem'):
+        self.fs = fs
+
+    # ----- Task 1: entity size -----
+    def size_of(self, entity_id: str) -&gt; int:
+        """文件夹递归求和；文件直接返回 size."""
+        e = self.fs.entities[entity_id]
+        if not e.is_folder:
+            return e.size_bytes
+        total = 0
+        for cid in e.children_ids:
+            total += self.size_of(cid)
+        return total
+
+    # ----- Task 2: top-10 largest files in folder (recursive) -----
+    def top_n_files(self, folder_id: str, n: int = 10) -&gt; list[Entity]:
+        """min-heap size n 维护 top n files."""
+        heap: list[tuple[int, str]] = []   # (size, file_id)
+        def walk(eid: str):
+            e = self.fs.entities[eid]
+            if e.is_folder:
+                for c in e.children_ids:
+                    walk(c)
+            else:
+                if len(heap) &lt; n:
+                    heapq.heappush(heap, (e.size_bytes, eid))
+                elif e.size_bytes &gt; heap[0][0]:
+                    heapq.heapreplace(heap, (e.size_bytes, eid))
+        walk(folder_id)
+        # 输出按大小降序
+        return [self.fs.entities[fid] for _, fid in
+                sorted(heap, key=lambda t: -t[0])]
+
+    # ----- Task 3: top-10 largest folders by IMMEDIATE children size -----
+    def top_n_folders_immediate(self, n: int = 10) -&gt; list[Entity]:
+        """对每个 folder：求其直接子 file 大小之和（不递归子文件夹）。"""
+        heap: list[tuple[int, str]] = []
+        for eid, e in self.fs.entities.items():
+            if not e.is_folder:
+                continue
+            immediate_size = sum(
+                self.fs.entities[c].size_bytes
+                for c in e.children_ids
+                if not self.fs.entities[c].is_folder
+            )
+            if len(heap) &lt; n:
+                heapq.heappush(heap, (immediate_size, eid))
+            elif immediate_size &gt; heap[0][0]:
+                heapq.heapreplace(heap, (immediate_size, eid))
+        return [self.fs.entities[fid] for _, fid in sorted(heap, key=lambda t: -t[0])]</code></pre>
+<h3>关键设计点</h3>
+<h4>1. Size 计算：递归 vs 缓存</h4>
+<p>每次重新算 <code>size_of</code> 是 O(子树 size)。如果频繁查询，缓存：</p>
+<pre class="language-python"><code class="language-python">class FileAnalyzer:
+    def __init__(self, fs):
+        self.fs = fs
+        self._size_cache: dict[str, int] = {}
+    def size_of(self, eid):
+        if eid in self._size_cache:
+            return self._size_cache[eid]
+        # compute and cache
+        ...</code></pre>
+<p><strong>缓存失效</strong>：文件变化时（add/delete/update size），失效该节点 + 所有祖先。</p>
+<h4>2. Top-K vs Sort</h4>
+<p>用 <strong>size-K min-heap</strong> 而不是 sort-all-then-take-K：</p>
+<ul><li>N 个文件 → sort O(N log N)</li><li>heap → O(N log K)</li></ul>
+<p>K = 10, N = 1M → heap 比 sort 快 ~5x。</p>
+<h4>3. Task 3 的"immediate" 语义</h4>
+<p>题面强调"based on their <strong>immediate</strong> file contents" —— 不递归子文件夹。这是个考察点：是否仔细读题。</p>
+<p>如果误以为递归，就和 Task 2 重复。</p>
+<h3>复杂度</h3>
+<p>| 操作 | 时间 | |---|---| | size_of (no cache) | O(子树 size) | | size_of (cached) | O(1) 摊销 | | top_n_files | O(N log K) | | top_n_folders_immediate | O(F + total_files)（每文件夹遍历直接子文件 1 次） |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Task 3 误算成递归子树 size —— 题面 immediate； ❌ 没用 heap 而用 sort —— K 小时 5-10x 慢； ❌ 递归 size 没考虑文件夹空 —— 返回 0 OK 但要写清； ❌ Top-K 用 max-heap of size N 取 K —— 浪费空间；用 min-heap of size K； ❌ Cache 不在更新时失效 —— 后续查询数据陈旧。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>文件系统遍历 + top-K 是 Google L4-L5 必问。重点是 OOP 数据模型（entity dict + parent/children pointers）+ heap 用法 + 缓存策略。读题时区分 "recursive" vs "immediate"。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"分布式文件系统怎么做？" → 用 path → node 路由，每 shard 维护自己文件夹元数据 + size 周期 rollup；"如何处理 100B 文件？" → 不放内存，用 mmap + 流式 walk；"如何并发更新 size？" → 读写锁 + 更新所有祖先。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2024 · <strong>Google</strong> · Junior</div>
+  <div>Return the 10 largest folders based on the sum of immediate files inside each folder</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2024 · <strong>Google</strong> · Junior</div>
+  <div>Return the list of 10 largest files inside a given URI folder using provided helper functions</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2024 · <strong>Google</strong> · Intern</div>
+  <div>Write a function that given the file system and entity id can return the size of that entity</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">can use a trie node data structure, and use isDirectory flag and size. whenever we need to calculate the size, we go the directory or path, and recursively calculate the sum of files in each children</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04ok838oa0xi845w.html">← Leetcode 56. Merge Intervals</a>
+    <a href="cm5eguhab02gq838obxubceit.html">Leetcode 588. Design In-Memory File System →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

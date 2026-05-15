@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 489. Robot Room Cleaner · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 489. Robot Room Cleaner</div>
+  <h1>Leetcode 489. Robot Room Cleaner</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/robot-room-cleaner/cm5eguhab02dz838oq3vp7bcd" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 2 · 🕒 Mid March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Control a robot with only move/turn/clean APIs to traverse and clean every reachable cell in an unknown grid with obstacles and no global map. The challenge is to explore the entire accessible area using DFS/backtracking while tracking visited coordinates and managing orientation to avoid revisiting or getting stuck.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 489 Robot Room Cleaner</strong>：未知形状的房间，机器人通过 API 移动和清扫：<code>move()</code> (前进，被墙挡返回 False) / <code>turnLeft()</code> / <code>turnRight()</code> / <code>clean()</code>。请清扫整个房间。<strong>机器人不知道自己在哪 / 房间布局</strong>。</p>
+<p>Google 经典 hard。考点：<strong>DFS + 状态回退 + 相对坐标系跟踪</strong>。</p>
+<h3>解题切入点</h3>
+<p>机器人 API 不返回位置 → 用<strong>相对坐标系</strong> + <strong>方向 + DFS visited set</strong>：</p>
+<ol><li>起点视为 (0, 0)</li><li>维护当前方向（0=up, 1=right, 2=down, 3=left）</li><li>DFS：每到一格，clean → 试 4 个方向 → 若能 move 就递归 → 回溯（<strong>机器人需物理回退</strong>）</li><li>visited set 记录已清扫的 (x, y)</li></ol>
+<p><strong>核心难点</strong>：DFS 回溯时机器人不会自动回到上一格 —— 你必须<strong>让它走回去</strong>。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def cleanRoom(self, robot):
+        DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)]   # up, right, down, left
+        visited = set()
+
+        def go_back():
+            """让机器人物理回到调用 dfs 之前的位置 + 朝向"""
+            robot.turnRight(); robot.turnRight()    # 180°
+            robot.move()                             # 走回一格
+            robot.turnRight(); robot.turnRight()    # 再 180° 朝向恢复
+
+        def dfs(x: int, y: int, d: int):
+            robot.clean()
+            visited.add((x, y))
+            for i in range(4):
+                # 试这个方向：当前 direction 是 d，候选 = (d + i) % 4
+                new_d = (d + i) % 4
+                dx, dy = DIRS[new_d]
+                nx, ny = x + dx, y + dy
+                if (nx, ny) not in visited and robot.move():
+                    dfs(nx, ny, new_d)
+                    go_back()
+                # 转向下个尝试方向
+                robot.turnRight()
+            # 转完 4 次回到 d 朝向（4 个 right = 一圈）
+
+        dfs(0, 0, 0)</code></pre>
+<h3>关键技术细节</h3>
+<h4>1. 方向定义和 turnRight</h4>
+<p><code>turnRight</code> 把朝向顺时针旋 90°：<code>d → (d+1) % 4</code>。每次试一个方向后 turnRight，下一轮试新方向。4 次 turnRight 后恢复原朝向。</p>
+<h4>2. go_back() —— 物理回退</h4>
+<p>DFS 递归回来时，机器人物理位置在递归路径的某个 cell。我们要让它回到调用前的位置 + 朝向：</p>
+<ul><li>180° 转身（两次 right）</li><li>move 一格（这就回去了）</li><li>再 180° 回原朝向</li></ul>
+<p><strong>为什么这样？</strong> 不能直接 "turnRight 4 次 + move" —— 那只能前进，不能后退。</p>
+<h4>3. visited 的判断时机</h4>
+<p><strong>先判断 (nx, ny) not in visited 再试 move</strong>。这样：</p>
+<ul><li>已 visited 的格子不再 move 探索（节省）</li><li>但仍要 turnRight 走完 4 个方向（保持朝向逻辑）</li></ul>
+<h4>4. 不需要全局坐标</h4>
+<p>视起点为 (0, 0)，所有移动相对。<code>visited</code> 跟踪我们已<strong>访问过</strong>的格子 —— 用相对坐标足够，不需要知道房间真实形状。</p>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N − M)</strong>，N = 房间面积，M = 障碍物数。每个可达 cell 访问 1 次清扫 + 最多 4 次邻居检查</li><li>空间：<strong>O(N − M)</strong>，visited set + 递归栈</li></ul>
+<h3>调试用 mock</h3>
+<pre class="language-python"><code class="language-python">class Robot:
+    def __init__(self, grid: list[list[int]], start_x: int, start_y: int):
+        self.grid = grid
+        self.x, self.y = start_x, start_y
+        self.d = 0                        # 起始朝 up
+        self.cleaned = set()
+    def move(self) -&gt; bool:
+        DIRS = [(-1,0),(0,1),(1,0),(0,-1)]
+        dx, dy = DIRS[self.d]
+        nx, ny = self.x + dx, self.y + dy
+        if 0 &lt;= nx &lt; len(self.grid) and 0 &lt;= ny &lt; len(self.grid[0]) and self.grid[nx][ny] != 0:
+            self.x, self.y = nx, ny
+            return True
+        return False
+    def turnLeft(self): self.d = (self.d - 1) % 4
+    def turnRight(self): self.d = (self.d + 1) % 4
+    def clean(self): self.cleaned.add((self.x, self.y))</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ DFS 回溯不让机器人物理回退 —— 下次方向算错； ❌ go_back 只 180° 转身没走一格 —— 没回到位置； ❌ 没在 turnRight 4 次后保持原朝向 —— 一轮探索结束朝向乱； ❌ visited 在 DFS 时把所有方向尝试过的格子都加 —— 应该只加 clean 过的格子； ❌ 起点的坐标硬编码成 0,0 但代码里又用真实坐标 —— 必须用相对。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>经典"隐藏状态 + 物理 agent" 模式：(1) 自己建相对坐标；(2) 记朝向；(3) DFS 后必须<strong>物理回退</strong>让 agent 状态匹配递归栈。这套思路也用于：盲走迷宫、IoT 设备远控、棋盘 AI 模拟未来位置后回退。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果地图是 8 方向？" → 不行，机器人 API 只支持 turn 90°；"如果有多个机器人？" → 协同需要共享 visited，注意死锁；"如果允许 teleport 回起点？" → DFS 结束不需要 go_back；"实战机器人怎么定位？" → SLAM (Simultaneous Localization and Mapping)，但 LC 简化为相对坐标。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (8 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Similar question presented as a mouse in a maze finding the cheese.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>489 Robot Room Cleaner</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>LinkedIn</strong> · Staff</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (5 条)</h2>
+  <div class="comment">Can we try to attempt this problem on our own please ? in practice section</div><div class="comment">Reply C ComplexOliveLobster118 Premium • 1个月前</div><div class="comment">Direction state management with modular arithmetic: Maintain robot orientation as an integer index (0-3) into a direction array and use modulo operations for turns (right: (dir + 1) % 4, left: (dir + 3) % 4 or (dir - 1) % 4)</div><div class="comment">Why there is dir -1 when we have range(4)</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhah0425838oxxdnyjxu.html">← Leetcode 2655. Find Maximal Uncovered Ranges</a>
+    <a href="cm5eh7nrh04tx838olh23fjzs.html">Leetcode 249. Group Shifted Strings →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -35,8 +35,8 @@ a:hover { text-decoration: underline; }
 .intro .stat { background: #f6f8fa; border-radius: 6px; padding: 8px 14px; font-size: 14px; }
 .intro .stat strong { color: #0969da; font-weight: 600; }
 
-.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
-.filter-bar .filter-label { font-size: 13px; color: #57606a; }
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+.filter-bar .filter-label { font-size: 13px; color: #57606a; min-width: 50px; }
 .filter-bar button {
   background: #fff; border: 1px solid #d0d7de; border-radius: 16px;
   padding: 4px 12px; font-size: 13px; cursor: pointer; color: #1f2328;
@@ -44,6 +44,8 @@ a:hover { text-decoration: underline; }
 }
 .filter-bar button:hover { background: #f6f8fa; }
 .filter-bar button.active { background: #0969da; color: white; border-color: #0969da; }
+/* Company filter buttons get the brand tint when active */
+.filter-bar button[data-cfilter].active { background: var(--c, #0969da); border-color: var(--c, #0969da); }
 
 .q-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 720px) { .q-grid { grid-template-columns: 1fr 1fr; } }
@@ -70,6 +72,25 @@ a:hover { text-decoration: underline; }
 .tag-people-management, .tag-behavioral { color: #5a1e02; background: #ffebe9; border-color: #ffaba8; }
 .tag-mobile-system-design { color: #1f3a26; background: #dafbe1; border-color: #aceebb; }
 .tag-level { color: #57606a; background: #f6f8fa; border-color: #d0d7de; font-weight: 500; }
+
+/* Company badge on cards: small filled pill with brand color */
+.company-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px; line-height: 1.4;
+  color: white; background: var(--c, #57606a); border: 1px solid var(--c, #57606a);
+}
+/* Larger company chip on detail page */
+.company-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 18px; }
+.company-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px; border-radius: 14px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid var(--c, #d0d7de);
+  color: #1f2328;
+  border-left-width: 4px;
+}
+.company-chip strong { color: var(--c, #1f2328); }
 
 /* ---- Detail page ---- */
 .detail h1 { font-size: 28px; margin: 0 0 8px; }

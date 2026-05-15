@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 269. Alien Dictionary · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 269. Alien Dictionary</div>
+  <h1>Leetcode 269. Alien Dictionary</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/alien-dictionary/cm5eh7nrh04uh838o2u70bl2w" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 2 · 🕒 Mid October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a sorted list of words in an unknown alphabet, infer the relative ordering of characters by deriving precedence constraints between first differing letters, then produce a valid topological ordering of the resulting directed graph or detect that no valid order exists (cycle or invalid prefix).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 269 Alien Dictionary</strong>：给一些<strong>已按外星字典序排序</strong>的单词。推断字母的顺序。如果有多个合法顺序返回任一；如果矛盾返回 ""。</p>
+<p>经典<strong>Topological Sort</strong>。Hard 题，Google 高频。</p>
+<h3>解题思路</h3>
+<ol><li>比较相邻单词，找出<strong>第一对不同字符</strong> → 建有向边 <code>c1 → c2</code>（c1 在 c2 之前）</li><li><strong>拓扑排序</strong>这张图 → 得字母顺序</li><li>边界：如果 word1 是 word2 的前缀但 word1 比 word2 长（如 <code>["abc","ab"]</code>），矛盾，返回 ""</li></ol>
+<h3>Python 实现（Kahn 算法 BFS）</h3>
+<pre class="language-python"><code class="language-python">from collections import defaultdict, deque
+from typing import List
+
+class Solution:
+    def alienOrder(self, words: List[str]) -&gt; str:
+        # 1. 收集所有出现的字母
+        in_deg = {c: 0 for w in words for c in w}
+        adj = defaultdict(set)
+
+        # 2. 比较相邻单词建边
+        for i in range(len(words) - 1):
+            w1, w2 = words[i], words[i + 1]
+            # 找第一个不同字符
+            min_len = min(len(w1), len(w2))
+            found = False
+            for k in range(min_len):
+                if w1[k] != w2[k]:
+                    if w2[k] not in adj[w1[k]]:
+                        adj[w1[k]].add(w2[k])
+                        in_deg[w2[k]] += 1
+                    found = True
+                    break
+            if not found and len(w1) &gt; len(w2):
+                # w1 是 w2 + extra，违反字典序
+                return ""
+
+        # 3. Kahn BFS
+        q = deque([c for c, d in in_deg.items() if d == 0])
+        order = []
+        while q:
+            c = q.popleft()
+            order.append(c)
+            for nx in adj[c]:
+                in_deg[nx] -= 1
+                if in_deg[nx] == 0:
+                    q.append(nx)
+
+        if len(order) != len(in_deg):
+            return ""   # 有环
+        return "".join(order)</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(C + N × L)</strong>，C = 总字符数，N = 单词数，L = avg word length</li><li>空间：O(C + edges)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 只看相邻单词的第一个不同字符</h4>
+<p>字典序的定义就是这样：<code>abc &lt; acd</code> ⟹ <code>b &lt; c</code>，但<strong>不能</strong>推出 <code>a &lt; c</code> 或 <code>c &lt; d</code>。所以只取第一个不同。</p>
+<h4>2. 前缀冲突</h4>
+<p><code>["abc", "ab"]</code> 中 ab 是 abc 的前缀但放后面，违反字典序 → 直接 ""。</p>
+<h4>3. 用 set 去重边</h4>
+<p><code>adj[c1].add(c2)</code>：避免重复加边导致 in_degree 多算。如果用 list 加边，要先 <code>if c2 not in adj[c1]</code>。</p>
+<h4>4. 多解时随便返回一个</h4>
+<p>拓扑序不唯一。Kahn 算法的 BFS 顺序取决于初始 in_deg=0 队列的顺序。题目允许任一。</p>
+<h4>5. 环检测</h4>
+<p>最终 <code>order</code> 长度 != 总字符数 → 有未消解的依赖 → 环 → 返回 ""。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.alienOrder(["wrt","wrf","er","ett","rftt"]) == "wertf"
+assert sol.alienOrder(["z","x"]) == "zx"
+assert sol.alienOrder(["z","x","z"]) == ""   # 环 z-&gt;x-&gt;z
+assert sol.alienOrder(["abc","ab"]) == ""    # 前缀违反
+assert sol.alienOrder(["a"]) == "a"          # 单单词</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 比较单词时找到第一个差异后没 break —— 推断更多没依据的关系； ❌ 没考虑前缀冲突 case； ❌ adj 用 list 重复 add edge —— in_deg 多算； ❌ in_deg 没初始化全部字母 —— 只在 words 里出现一次的字母漏掉； ❌ 拓扑排序时没检测环 —— 返回不完整 string； ❌ 直接对 <code>set(words)</code> 操作 —— 顺序丢失。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>这是拓扑排序的经典应用。识别题型：<strong>"给一组顺序约束推断全序"</strong>。同模板：课程表 LC 207/210、任务调度 LC 1857。重点是<strong>只从相邻对建第一个差异边</strong>，不要过度推断。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"字母可包含数字 / 特殊符号？" → 把字符集泛化，逻辑不变；"返回所有合法序列？" → DFS 拓扑（回溯每个可选 root）；"动态增量加 word？" → 复杂；通常重新跑 topo；"如果 words 不一定按字典序？" → 给一组 partial-order 约束，回归普通 topo。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (10 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Uber</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Uber</strong> · Senior</div>
+  <div>simplified variation</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Uber</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">The output should be changed to "" .  This is an invalid example that contains a cycle.</div><div class="comment">If you want to test a valid input, use this instead: Input: words = ["wrt","wrf","er","ett","rftt"] t -&gt; f ; w -&gt; e; r -&gt; t; e -&gt; r Output: "wertf"</div><div class="comment">This should be '' as the input produces a cycle</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02rn838o3ttrkt0w.html">← Leetcode 981. Time Based Key-Value Store</a>
+    <a href="cm5eh7nrh04sw838o1tr5hk57.html">Leetcode 212. Word Search II →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

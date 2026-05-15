@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 56. Merge Intervals · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 56. Merge Intervals</div>
+  <h1>Leetcode 56. Merge Intervals</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/merge-intervals/cm5eh7nrh04ok838oa0xi845w" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Staff · 📋 12 · 🕒 Early January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a list of intervals, merge all overlapping (including touching endpoints) intervals and return the minimal set of non-overlapping intervals that cover them. Key pattern: sort by start and sweep/merge adjacent ranges whose starts are &lt;= current end.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 56 Merge Intervals</strong>：给一组区间，合并所有重叠的，返回不重叠的区间列表。</p>
+<p>经典中的经典。Google / Meta / Amazon 都常问。</p>
+<h3>解题思路</h3>
+<p>按 start 升序排序后，扫一遍：当前区间能和最后一个合并就合并（更新 end），不能就 push 新区间。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def merge(self, intervals: List[List[int]]) -&gt; List[List[int]]:
+        if not intervals: return []
+        intervals.sort(key=lambda x: x[0])
+        merged = [intervals[0][:]]
+        for s, e in intervals[1:]:
+            if s &lt;= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], e)
+            else:
+                merged.append([s, e])
+        return merged</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N log N)</strong> 排序主导</li><li>空间：O(N) 输出</li></ul>
+<h3>关键点</h3>
+<h4>1. 排序按 start</h4>
+<p>按 start 升序后，对任何 (s,e) 来说：如果 <code>s &lt;= 前一个的 end</code>，必合并；否则一定不重叠（因为后续 s 更大）。</p>
+<h4>2. <code>&lt;=</code> 还是 <code>&lt;</code></h4>
+<p>题目"[1,4] and [4,5]" 通常合并为 <code>[1,5]</code>（端点接触算重叠）。所以 <code>&lt;=</code>。少数变种用 <code>&lt;</code>（端点接触不合并）。澄清！</p>
+<h4>3. 不修改输入</h4>
+<p><code>intervals[0][:]</code> slice copy。否则更新 <code>merged[-1][1]</code> 会改原始数组。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.merge([[1,3],[2,6],[8,10],[15,18]]) == [[1,6],[8,10],[15,18]]
+assert sol.merge([[1,4],[4,5]]) == [[1,5]]
+assert sol.merge([]) == []
+assert sol.merge([[1,4],[2,3]]) == [[1,4]]   # 包含
+assert sol.merge([[1,4],[0,4]]) == [[0,4]]</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 按 end 排序而非 start —— 算法错； ❌ <code>merged[-1][1] = e</code> 直接覆盖而非 max —— 如果当前区间被前一个包含，结果错（例 <code>[1,5]+[2,3]</code> 应是 <code>[1,5]</code>，错算成 <code>[1,3]</code>）； ❌ 修改输入 intervals —— 调用方再用就坏； ❌ 没考虑空输入。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>区间合并模板：<strong>排序 + 单调扫</strong>。同模板可解：插入区间、会议室、删除区间、覆盖问题。"按起点排序"是区间题第一步。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"实时插入新区间？" → 用 SortedList 维护，每次 O(log N) 找位置 + 合并；"求区间的并集长度？" → 合并后累加 (e-s)；"求覆盖一个点的所有区间？" → 扫描线 + active set；"区间求 max overlap？" → 扫描线 +1/-1。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (74 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Staff</div>
+  <div>Given two lists of intervals, both sorted and non-overlapping, merge the two lists.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  <div>Part of Technical Screen</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Visa</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>FanDuel</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Notepad coding · Talk about logic. · Explain time n space complexity</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Variation: merge 2 sorted interval lists into a new list</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>A</strong> · Antithesis</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Google</strong> · Senior</div>
+  <div>Given a list of [start, end, oncall_name] produce a list of intervals containing the list of those who were oncall at that interval.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Amazon</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Apple</strong> · Mid-level</div>
+  <div>Merge Intervals on LC</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>variant where it's asked to merge 2 sorted lists of intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Given an array of intervals where intervals[i] = [starti, endi], merge all overlapping intervals, and return an array of the non-overlapping intervals that cover all the intervals in the input. · Example 1: · Input: intervals = [[1,3],[2,6],[8,10],[15,18]] · Output: [[1,6],[8,10],[15,18]] · Explanation: Since intervals [1,3] and [2,6] overlap, merge them into [1,6]. · Example 2: · Input: intervals = [[1,4],[4,5]] · Output: [[1,5]] · Explanation: Intervals [1,4] and [4,5] are considered overlapping.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>variant where it's asked to merge 2 sorted lists of intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>merge from 2 sorted inputs</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>56. Merge Intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>given array of intervals, merge them in a way that result contains array of non-overlapping intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>combine 2 sorted disjoint interval lists.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Given two sorted interval arrays, merge them. · A: [1,5], [10,14], [16,18] · B: [2,6], [8,10], [11,20]</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Junior</div>
+  <div>Implement merge function of merge sort</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Junior</div>
+  <div>Implement merge function of merge sort</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Merge intervals (similar to merging 2 sorted lists using i and j pointers but with intervals instead)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Meta</strong> · Staff</div>
+  <div>Screening phase</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>Merge Intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Merge overlapping meetings and handle DND intervals</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>straightforward leetcode merge intervals questions with space and time complexities. started with brutte force and ended with optimizations</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Merge two interval lists</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Merge and group intervals using 2 pointers and a set</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2022 · <strong>Google</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (3 条)</h2>
+  <div class="comment">vector&lt;vector&lt;int&gt;&gt; mergeIntervals(vector&lt;vector&lt;int&gt;&gt;&amp; intervals) { sort(intervals.begin(), intervals.end()); vector&lt;vector&lt;int&gt;&gt; merged;</div><div class="comment">for (const auto&amp; in : intervals) { int start = in[0]; int end   = in[1]; if (merged.empty() || start &gt; merged.back()[1]) { merged.push_back({start, end}); } else { merged.back()[1] = max(merged.back()[1], end); } } return merged;</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02z8838ohwfcbu9z.html">← Leetcode 1254. Number of Closed Islands</a>
+    <a href="cm6k0f724000myis434q1atjv.html">File System Size Analysis and Reporting →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Car Rental Optimization · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Car Rental Optimization</div>
+  <h1>Car Rental Optimization</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/rental-car-assignment/cm6jwxse800j9ui4biheeyqm2" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 4 · 🕒 Early March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given N cars and a list of rental requests (each with pickup time, return time, and ID), assign cars to requests using the minimum number of cars possible. Return a list of car assignments for each request ID.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Car Rental Optimization</strong>：两个子问题：</p>
+<ol><li>给一组 (entry_time, exit_time)，求<strong>某一天最多同时存在多少辆车</strong></li><li>给 N 辆车和一组租车请求 (pickup, return, request_id)，<strong>用最少车辆</strong>满足所有请求；返回每请求分配的车辆 ID</li></ol>
+<p>子问题 1 = 经典扫描线。子问题 2 = 区间染色 / interval graph coloring。</p>
+<h3>子问题 1：最大同时车数</h3>
+<p>扫描线 +1/-1，类似 Meeting Rooms II。</p>
+<pre class="language-python"><code class="language-python">def maxConcurrentCars(intervals):
+    events = []
+    for s, e in intervals:
+        events.append((s, +1))
+        events.append((e, -1))
+    events.sort(key=lambda x: (x[0], x[1]))  # end 优先 -1
+    cur = max_cnt = 0
+    for _, d in events:
+        cur += d
+        max_cnt = max(max_cnt, cur)
+    return max_cnt</code></pre>
+<h3>子问题 2：最少车辆分配</h3>
+<p>经典<strong>贪心 + min-heap</strong>：</p>
+<p>按 pickup 时间排序请求。维护"空闲车辆"min-heap (按下次可用时间)。每请求来到：</p>
+<ul><li>如果 heap 顶车辆 return_time ≤ 当前 pickup，复用它</li><li>否则分配新车</li></ul>
+<pre class="language-python"><code class="language-python">import heapq
+def assignCars(requests, N: int):
+    # requests = [(pickup, return, id), ...]
+    sorted_req = sorted(enumerate(requests), key=lambda x: x[1][0])
+    free = []  # min-heap of (free_at, car_id)
+    next_new_id = 0
+    assignment: dict[int, int] = {}  # request_id -&gt; car_id
+
+    for orig_idx, (p, r, rid) in sorted_req:
+        if free and free[0][0] &lt;= p:
+            _, car = heapq.heappop(free)
+        else:
+            if next_new_id &gt;= N:
+                assignment[rid] = -1  # 拒绝
+                continue
+            car = next_new_id
+            next_new_id += 1
+        assignment[rid] = car
+        heapq.heappush(free, (r, car))
+    return assignment</code></pre>
+<h3>复杂度</h3>
+<ul><li>子问题 1：O(N log N)</li><li>子问题 2：O(R log R)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 子问题 1：扫描线</h4>
+<p>事件按时间排序，tie-break 让 end (-1) 先于 start (+1)：因为 end == start 时车已离开，不算冲突。</p>
+<h4>2. 子问题 2：贪心 by pickup 时间</h4>
+<p>按 pickup 升序处理保证一旦能复用车就复用。"复用最早空闲的车" 用 min-heap 选 <code>free_at</code> 最小。</p>
+<h4>3. 与 LC 1854 / Meeting Rooms 关系</h4>
+<p>子问题 1 = LC 1854 Maximum Population Year 的连续版本。子问题 2 = LC 253 Meeting Rooms II 求最少房间 + 返回分配方案。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 事件 sort tie-break 错（start 先于 end → 算多 1 辆）； ❌ 子问题 2 heap 用 car_id 而非 return_time —— 选错 car； ❌ N 限制不检查 → 输出 car_id &gt; N； ❌ 不维护原 request_id 顺序 → 输出乱序。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Interval graph chromatic number = 最少颜色数 = 最大同时区间数。所以子问题 1 和子问题 2 答案相关：<strong>最少车数 = 最大同时车数</strong>（满足所有请求时）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回每辆车的行程列表？" → 同贪心，维护 per-car schedule；"车有不同类型（SUV / sedan）？" → 多 heap，每类型一个；"取消请求？" → 重新分配 + 调整 heap；"实时数据流？" → online 算法，新请求来时 incremental。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (5 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Given car license plate entry and exit times, find the maximum number of cars present in a day</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Google</strong> · Senior</div>
+  <div>Car Rental Optimization: Given N cars and a list of rental requests (each with pickup time, return time, and ID), assign cars to requests using the minimum number of cars possible. Return a list of car assignments for each request ID. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (22 条)</h2>
+  <div class="comment">// Reuse car or allocate new one</div><div class="comment">int carId = minHeap.isEmpty() ? nextCarId++ : minHeap.poll()[1];</div><div class="comment">This line is reusing an occupied car. It should use one of the cars previously popped (i.e, free)</div><div class="comment">Reply Prabhat Kumar Premium • 6天前</div><div class="comment">The code has bug and does not give expected result. This is my simpler approach - Sweep Line algorithm using Event Processing.</div><div class="comment">public Map&lt;Integer, Integer&gt; assignCars(int[][] requests) { List&lt;int[]&gt; events = new ArrayList&lt;&gt;(); for (int[] req : requests) { // [time, type, id] -&gt; type: 0 for Drop, 1 for Pickup events.add(new int[]{req[1], 1, req[0]}); // Pickup events.add(new int[]{req[2], 0, req[0]}); // Drop }</div><div class="comment">// Sort by time, then type (Drop before Pickup) events.sort((a, b) -&gt; a[0] == b[0] ? a[1] - b[1] : a[0] - b[0]);</div><div class="comment">Stack&lt;Integer&gt; idlePool = new Stack&lt;&gt;(); Map&lt;Integer, Integer&gt; assignment = new HashMap&lt;&gt;(); int nextNewCarId = 0;</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhac02pe838o36a7xof7.html">← Leetcode 900. RLE Iterator</a>
+    <a href="cm6jwy3cq00lbui4bm2uxmm9p.html">Knapsack Problem Variations →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

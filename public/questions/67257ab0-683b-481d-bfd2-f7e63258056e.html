@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 642. Design Search Autocomplete System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 642. Design Search Autocomplete System</div>
+  <h1>Leetcode 642. Design Search Autocomplete System</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/design-search-autocomplete-system/67257ab0-683b-481d-bfd2-f7e63258056e" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior · 📋 2 · 🕒 Early November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an online autocomplete system that processes characters one-by-one, returning the top 3 historically most frequent sentences that match the current prefix (ranked by frequency, then lexicographically), and inserts new sentences when the special character '#' is entered. The core challenge is supporting fast prefix queries and incremental updates over sentence frequencies, typically requiring a prefix-indexed structure (e.g., trie) or efficient top-k maintenance per prefix.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 642 Design Search Autocomplete System</strong>：实现搜索框自动补全。</p>
+<ul><li>初始给定一组历史搜索（sentence + hot 次数）</li><li><code>input(char)</code>：用户每输入一个字符，返回该前缀下<strong>最热门 3 个 sentence</strong>（按 hot 降序，hot 相同时字典序升序）</li><li>输入 <code>#</code>：表示用户完成输入，把当前 input 字符串加入历史（hot += 1）</li></ul>
+<p>经典<strong>Trie + Top-K</strong>。</p>
+<h3>数据结构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">TrieNode:
+  children: dict[char -&gt; TrieNode]
+  sentences: dict[full_sentence -&gt; hot_count]   # 仅在以该 prefix 开头的 sentence 上记数</code></pre>
+<p>或者更省内存：每个 node 只记 "经过此 node 的 sentences"。每次查 top-3 sort 一下。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">import heapq
+from collections import defaultdict
+
+class TrieNode:
+    def __init__(self):
+        self.children: dict[str, 'TrieNode'] = {}
+        self.counts: dict[str, int] = {}   # sentence -&gt; hot
+
+class AutocompleteSystem:
+    def __init__(self, sentences: list[str], times: list[int]):
+        self.root = TrieNode()
+        for s, t in zip(sentences, times):
+            self._insert(s, t)
+        self.cur_input = ""
+        self.cur_node: TrieNode | None = self.root
+
+    def _insert(self, sentence: str, count: int):
+        node = self.root
+        for ch in sentence:
+            if ch not in node.children:
+                node.children[ch] = TrieNode()
+            node = node.children[ch]
+            node.counts[sentence] = node.counts.get(sentence, 0) + count
+        # 注意：每个 prefix node 都记一次
+
+    def input(self, c: str) -&gt; list[str]:
+        if c == "#":
+            # finalize: add cur_input + 1 hot
+            self._insert(self.cur_input, 1)
+            self.cur_input = ""
+            self.cur_node = self.root
+            return []
+        self.cur_input += c
+        # advance trie pointer
+        if self.cur_node is None or c not in self.cur_node.children:
+            self.cur_node = None
+            return []
+        self.cur_node = self.cur_node.children[c]
+        # Top-3 from current node's counts
+        items = self.cur_node.counts.items()
+        # 按 (-hot, sentence) 排序，取前 3
+        top3 = heapq.nsmallest(3, items, key=lambda x: (-x[1], x[0]))
+        return [s for s, _ in top3]</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>__init__</code>: O(总 sentence 字符数 × avg sentence length)（每字符一个 trie node + 每 prefix 都 store sentence）</li><li><code>input(c)</code> 普通字符: O(K)，K = 当前 node 下 sentence 数（top-3 nsmallest = O(K log 3) ≈ O(K)）</li><li><code>input(#)</code>: O(L)，L = 输入长度</li></ul>
+<p><strong>Space</strong>: 大 —— 每 prefix node 存所有该 prefix 的 sentence + count。1000 sentence × avg 长度 100 → 100k 总条目，可接受。</p>
+<h3>关键设计点</h3>
+<h4>1. 在每个 prefix node 存 counts</h4>
+<p><code>node.counts[sentence] = hot</code> —— 这样查 top-3 时直接看当前 node，不必往子树扫描。</p>
+<p>代价：内存膨胀（每 sentence 出现在 trie 上 L 个 node）。但 input 操作变 O(K log 3) 很快。</p>
+<p>替代：node 只存"经过此 node 的 sentence ID 集合"，每次查时扫子树聚合 top-3。空间省，但 input 变慢。</p>
+<h4>2. Top-K 排序 trick</h4>
+<p>按 <code>(-hot, sentence)</code> 排序：</p>
+<ul><li><code>-hot</code> 降序就是 hot 升序的相反，min 取前 3 就是 hot 最大的前 3</li><li>同 hot 时 sentence 字典序升序（min）</li></ul>
+<p>用 <code>heapq.nsmallest(3, items, key=...)</code> 一行完成。</p>
+<h4>3. Trie pointer 失效</h4>
+<p>如果用户输入的字符不在当前 node 的 children 里，整个 prefix 都不会匹配任何 sentence。<code>cur_node = None</code>，后续 input 直到 # 都返回 <code>[]</code>。</p>
+<h4>4. <code>#</code> 重置</h4>
+<p><code>cur_input = ""</code>, <code>cur_node = root</code>。新一轮 input 开始。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 在 <code>#</code> 时插入 <code>_insert(sentence, 1)</code> 但没累加：要 <code>+= 1</code>，已存在的 sentence 计数累加； ❌ Top-K 排序忘了 tie-break by sentence —— 多个 hot 相同时返回顺序不定； ❌ Trie pointer 失效后还想继续匹配 —— 直接 return []； ❌ 每个 input 都从 root 重新走 prefix —— O(L) per char，慢但能 AC；保持 cur_node 增量更新更优； ❌ 用 list 存 counts 而非 dict —— 重复 sentence 累加难。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Autocomplete = Trie + top-K。Google 搜索框是这套加 ML ranking 的工业版。在 trie 上"每 prefix node 存子树聚合信息" 是空间换时间的经典 trade-off。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"支持模糊匹配 / typo？" → BK-tree / Levenshtein automaton；"实时性能（百万 sentence）？" → top-K 不在 query 时算，离线预聚合 top-K 存到每 node；"如何 personalize？" → per-user trie 或全局 trie 但 user-aware ranking；"如何动态删除 sentence？" → trie 上递减 count，count==0 时清理 node。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Pinterest</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">if not hasattr(self, 'current_prefix'): self.current_prefix = ""</div><div class="comment">why not the following simple initialization in the constructor?</div><div class="comment">Reply C ConvincingPinkBonobo168 Premium • 9天前</div><div class="comment">because we don't want to reset the current prefix we are building if we've already processed at least one character. for example, if the input method is called with "i" then "a", when we process the "i" our current prefix should be updated to be "i" but when we process the "a" we want it to be "ia". If we don't check if self.current_prefix is initialized, we lose the "i".</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6i9mhd800nz41cd0xx20r8p.html">← Design a Rate Limiter</a>
+    <a href="cm5eh7nrh04rn838oj2kq0k1k.html">Leetcode 167. Two Sum II - Input Array Is Sorted →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

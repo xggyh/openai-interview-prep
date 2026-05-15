@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 2475. Number of Unequal Triplets in Array · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 2475. Number of Unequal Triplets in Array</div>
+  <h1>Leetcode 2475. Number of Unequal Triplets in Array</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/number-unequal-triplets/cm5eguhah03x5838orhzbxjqw" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 16 · 🕒 Mid January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Count the number of index triplets (i&lt;j&lt;k) in an array whose three values are pairwise distinct. With n ≤ 100 this reduces to combinatorially counting distinct-value triples (e.g., via frequency counts) rather than heavy algorithms.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 2475 Number of Unequal Triplets in Array</strong>：求三元组 (i,j,k) 数量，满足 i&lt;j&lt;k 且 nums[i], nums[j], nums[k] 两两不同。</p>
+<h3>解法</h3>
+<p><strong>计数 + 组合</strong>：相同值的元素之间不可能组成 valid triplet（要求三者不同）。</p>
+<p>对每个 distinct value v 与其频率 freq[v]：</p>
+<ul><li>选一个 nums[i] = v</li><li>选一个 nums[j] = u (u ≠ v)</li><li>选一个 nums[k] = w (w ≠ v, w ≠ u)</li></ul>
+<p>但 i&lt;j&lt;k 顺序要求让计数变复杂。<strong>更简单：枚举中间元素 j</strong>。</p>
+<h3>更简单方法：组合数</h3>
+<p>如果有 G 个不同值，频率分别 f1, f2, ..., fG。三元组（无序）从 3 个不同 group 中各取 1 个：</p>
+<pre class="language-plaintext"><code class="language-plaintext">count = sum over all (i, j, k) triples of groups: f_i × f_j × f_k
+      = (sum f) × (sum f × from later) × (sum f × from even later) - 简化为
+      = enumeration</code></pre>
+<p>但因为题目要 i&lt;j&lt;k 的<strong>位置</strong>顺序（不是值的顺序），但 unequal triplet 数 = 三个不同值各取 1 个的方式数（位置自然有 6 种排列，但 (i,j,k) i&lt;j&lt;k 只有 1 种）。</p>
+<p>Wait — i&lt;j&lt;k 是 indices，所以三个 index 有顺序。如果三个值 v1, v2, v3 不同，那对应位置就一种 i&lt;j&lt;k 排序方式（按位置自然排序）。所以<strong>count = 三个不同值各选 1 个的方式数 = ΣΣΣ f_a × f_b × f_c (a, b, c 不同 group)</strong>。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from collections import Counter
+from typing import List
+
+class Solution:
+    def unequalTriplets(self, nums: List[int]) -&gt; int:
+        freq = list(Counter(nums).values())
+        n = len(nums)
+        total = 0
+        # 枚举中间组：left_sum × f_b × right_sum
+        left = 0
+        for i, f in enumerate(freq):
+            right = n - left - f
+            total += left * f * right
+            left += f
+        return total</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(N)</strong>（Counter + 一遍 freq）</li><li>空间：O(unique)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 等价的分组思考</h4>
+<p>题目要求<strong>值不同</strong>。所以三个 index 选自 3 个不同 group，每 group 选 1 个，方式数 = f_a × f_b × f_c。i&lt;j&lt;k 是 indices 顺序，但只要值不同，无论 group 间顺序，必定有唯一的 i&lt;j&lt;k 排列（按 indices 排序）。</p>
+<h4>2. 枚举中间 group b</h4>
+<p>按某种 group 顺序遍历 b，统计：</p>
+<ul><li>left = sum of f over 已经处理的 group（即 b 之前的所有 group）</li><li>right = sum of f over 未处理的 group</li><li>三元组以 b 为中间值的数量 = left × f_b × right</li></ul>
+<p>每个 (a, b, c) triple 三个 group 顺序唯一对应一次"b 是中间"，所以累加无重复。</p>
+<h4>3. 为什么这样不重复计数</h4>
+<p>每个无序 triple {a, b, c} 在枚举 b ∈ {a, b, c} 时只会被算一次（具体取 b 时另两个一个在 left 一个在 right）。</p>
+<p>实际上每个无序 group triple 会被算 3 次（每 group 当一次中间），但 left × right 也只数有序对，所以... 让我再核对：</p>
+<ul><li>left × f_b × right：对每个 (a 在 left, b 是中间, c 在 right) —— 那 c 在 b 之后的 group 里</li><li>a 和 c 在两侧，组合数 = left（所有 a 选法）× right（所有 c 选法）</li><li>一个 triple {a, b, c} 当 b 是中间 group 时：a 必须是 left 里的 (在 b 之前)，c 必须是 right 里的 (在 b 之后)</li><li>group 的顺序是任意的（我们按 freq.values() 遍历），但每个 unordered triple {ga, gb, gc} 中只有 1 种排列让 ga &lt; gb &lt; gc → 只被算一次</li></ul>
+<p><strong>正确</strong>，不重复。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python">sol = Solution()
+assert sol.unequalTriplets([4,4,2,4,3]) == 3
+# distinct values: {2,3,4} with freq 1,1,3 (顺序不定)
+# 枚举：选一个 2, 一个 3, 一个 4 → 1*1*3 = 3
+assert sol.unequalTriplets([1,1,1,1,1]) == 0
+assert sol.unequalTriplets([1,2,3]) == 1</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 三重 loop O(N³) —— TLE 大数据； ❌ 没意识到 i&lt;j&lt;k 是 indices 而非值的顺序 —— 公式偏差； ❌ 用 sort 后再算：sort 后值连续相同 group，可以直接 freq * left_sum * right_sum；正确； ❌ 忽略 freq=0 的情况：dict 不会有 0； ❌ left + f + right != n：常忘 right = n - left - f。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"三元组 + 不同值" 类题：先想 group by value + 组合数。这套思路应用：LC 2367 Number of Arithmetic Triplets、LC 1995 Count Special Quadruplets。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"求 K 元组？" → 枚举中间几个 group + 累积 left/right；"求至少 K 不同？" → 容斥；"如果 i&lt;j&lt;k 必须有值递增？" → 排序后用 BIT 算 LIS-style。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (16 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an array of length N, find the number of distinct triplets (A[i], A[j], A[k]) in the array where 0 &lt;= i &lt; j &lt; k &lt; N · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (5 条)</h2>
+  <div class="comment">There's a more optimized solution with tc O(M + d).</div><div class="comment">def unequalTriplets(nums: List[int]) -&gt; int: """Return the number of triplets (i &lt; j &lt; k) with pairwise distinct values. """ if not nums or len(nums) &lt; 3: return 0 counter = Counter(nums) counts = list(counter.values()) M = len(counts) if M &lt; 3: return 0</div><div class="comment">total = 0 left_sum, right_sum = 0, sum(counts) for mid in range(M): right_sum -= counts[mid] total += left_sum * counts[mid] * right_sum left_sum += counts[mid]</div><div class="comment">Reply SS shaurya singhal • 2个月前</div><div class="comment">Related Concepts and Problems to Practice</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04w8838oqbbhjhi0.html">← Leetcode 332. Reconstruct Itinerary</a>
+    <a href="cm5eguhah03wb838o5od801hg.html">Leetcode 2445. Number of Nodes With Value One →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

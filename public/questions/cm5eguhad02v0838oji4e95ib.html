@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1102. Path With Maximum Minimum Value · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1102. Path With Maximum Minimum Value</div>
+  <h1>Leetcode 1102. Path With Maximum Minimum Value</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/max-min-path/cm5eguhad02v0838oji4e95ib" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Early October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an integer grid where you can move 4-directionally from the top-left to the bottom-right, find a path that maximizes the minimum cell value along the path and return that maximized minimum; this is a maximin path problem typically solved with reachability checks (binary search + BFS/DFS) or a greedy max-heap/Dijkstra-style traversal.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1102 Path With Maximum Minimum Value</strong>：grid 上从左上到右下的路径（4 方向），求所有路径中"路径最小值"的<strong>最大</strong>值。即 max over paths of (min over cells on path of grid[i][j])。</p>
+<h3>解法</h3>
+<p><strong>最大化 minimum</strong> 类问题 → 二分 / 贪心。</p>
+<h4>方法 1：Max-Heap + BFS（推荐）</h4>
+<p>像 Dijkstra：每次扩展当前最大可达 cell。</p>
+<pre class="language-python"><code class="language-python">import heapq
+from typing import List
+
+class Solution:
+    def maximumMinimumPath(self, grid: List[List[int]]) -&gt; int:
+        R, C = len(grid), len(grid[0])
+        seen = [[False]*C for _ in range(R)]
+        # max-heap by cell value
+        heap = [(-grid[0][0], 0, 0)]
+        seen[0][0] = True
+        best = grid[0][0]
+        DIRS = [(-1,0),(1,0),(0,-1),(0,1)]
+        while heap:
+            v, r, c = heapq.heappop(heap)
+            best = min(best, -v)
+            if (r, c) == (R-1, C-1):
+                return best
+            for dr, dc in DIRS:
+                nr, nc = r+dr, c+dc
+                if 0 &lt;= nr &lt; R and 0 &lt;= nc &lt; C and not seen[nr][nc]:
+                    seen[nr][nc] = True
+                    heapq.heappush(heap, (-grid[nr][nc], nr, nc))
+        return best</code></pre>
+<h4>方法 2：Union-Find（更高效）</h4>
+<p>按值降序处理 cell。每个 cell 加入"激活集"，与已激活的邻居 union。当 (0,0) 和 (R-1, C-1) 同一连通分量时，<strong>当前阈值</strong>就是答案。</p>
+<h3>复杂度</h3>
+<p>| 方法 | 时间 | |---|---| | Max-heap | O(R × C × log(R×C)) | | Union-Find | O(R × C × α(R×C)) ≈ O(R×C) |</p>
+<h3>关键技术点</h3>
+<h4>1. 为什么 Max-Heap 正确</h4>
+<p>总是从"剩下未访问 cell 中值最大者"扩展。当终点被弹出时，当前路径上 min 值就是 best。</p>
+<p>因为路径上的 cell 都是先于终点被弹出的（按值降序），路径 min 就是路径中<strong>最后弹出</strong>的（即最小）。</p>
+<h4>2. seen 在 enqueue 时标</h4>
+<p>避免重复入队同一 cell（不同优先级版本）。</p>
+<h4>3. Initial best = grid[0][0]</h4>
+<p>进入 (0,0) 时就要包含其值。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 普通 BFS / DFS —— 不能保证最大 min； ❌ 用普通 Dijkstra 累加 —— 题目是 min 不是 sum； ❌ Heap 用 (value, ...) 不 negate —— Python heapq 是 min-heap，要 negate； ❌ seen 在 dequeue 时标 —— 重复入队浪费。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"最大化 minimum" / "最小化 maximum" 模式：用 max-heap BFS 或 Union-Find 加边按权重排序。这套思路：LC 778 Swim in Rising Water、LC 1631 Path with Minimum Effort（最小化 max）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"二分答案？" → <code>can_reach(threshold)</code> 用 BFS 只走 ≥ threshold cell；二分 threshold；"加权 cell？" → 把 value 当通行成本，最大流 / max-bottleneck path；"8 方向？" → DIRS 扩展。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04u1838orn6jicpz.html">← Leetcode 253. Meeting Rooms II</a>
+    <a href="cmbskxz3y004n07adimbogre1.html">Unix Cd Command with Symbolic Link Resolution →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

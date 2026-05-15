@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 733. Flood Fill · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 733. Flood Fill</div>
+  <h1>Leetcode 733. Flood Fill</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/flood-fill-733/cm5eguhac02kr838olwvfh9me" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Mid November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an m×n grid and a starting pixel (sr, sc), repaint all 4-directionally connected cells that have the same color as the starting pixel to the new color and return the updated image. If the new color equals the starting pixel's original color, leave the image unchanged.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 733 Flood Fill</strong>：网格的某像素 <code>(sr, sc)</code> 当前颜色 = X。把所有与之 <strong>4 方向相连且也是颜色 X 的像素</strong>改为 <code>newColor</code>。返回修改后网格。Easy 题但 Google 入门常考。</p>
+<h3>解题思路</h3>
+<p>DFS 或 BFS，从起点扩散，同色才继续。</p>
+<h3>Python 实现（DFS）</h3>
+<pre class="language-python"><code class="language-python">from typing import List
+
+class Solution:
+    def floodFill(self, image: List[List[int]], sr: int, sc: int, newColor: int) -&gt; List[List[int]]:
+        original = image[sr][sc]
+        if original == newColor:
+            return image   # 防死循环
+        R, C = len(image), len(image[0])
+        def dfs(r, c):
+            if not (0 &lt;= r &lt; R and 0 &lt;= c &lt; C) or image[r][c] != original:
+                return
+            image[r][c] = newColor
+            dfs(r-1, c); dfs(r+1, c); dfs(r, c-1); dfs(r, c+1)
+        dfs(sr, sc)
+        return image</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(R × C)</strong>，最坏整张图同色</li><li>空间：O(R × C) 递归栈</li></ul>
+<h3>关键点</h3>
+<h4>1. 防死循环</h4>
+<p>如果 <code>newColor == original</code>，DFS 永远见到"同色"继续递归 → 栈溢出。<strong>第一行就返回</strong>。</p>
+<h4>2. In-place vs new image</h4>
+<p>题目要求修改原图。代码直接改。如果要保留原图，先 <code>image = [row[:] for row in image]</code>。</p>
+<h4>3. 4 方向 vs 8 方向</h4>
+<p>题目是 4 方向。8 方向就加对角。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 没防死循环 newColor == original → 栈溢出； ❌ 边界 check 顺序错（先访问 image[r][c] 再 check 边界 → IndexError）； ❌ 用 BFS 但 visited 没标 — 重复入队； ❌ 把 image[sr][sc] 改了再读 original —— 读到 newColor。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Flood fill 是连通分量染色的最简形式。同模板适用于：油漆桶工具、岛屿染色、地图染色游戏。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回受影响的 cell 数？" → DFS 累加；"如果只染色边界 cell？" → 先 DFS 标内部，再扫边界；"分多线程？" → 把图按区域切，跨区域时同步队列（实际收益低）；"GPU 加速？" → 用 union-find / paint algorithm；shader 像素并行染色。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>C3 AI</strong> · Mid-level</div>
+  
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02xn838o2q3dvi00.html">← Leetcode 1197. Minimum Knight Moves</a>
+    <a href="cm6i9mhd800nz41cd0xx20r8p.html">Design a Rate Limiter →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

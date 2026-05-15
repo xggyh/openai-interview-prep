@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 222. Count Complete Tree Nodes · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 222. Count Complete Tree Nodes</div>
+  <h1>Leetcode 222. Count Complete Tree Nodes</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/count-complete-tree-nodes/cm5eh7nrh04t6838oiumjgavv" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late December, 2024</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given a complete binary tree, return its node count in less than O(n) time by exploiting the tree’s completeness (all full levels except a left-filled last level) to compute subtree heights and identify/count perfect subtrees without visiting every node.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 222 Count Complete Tree Nodes</strong>：完全二叉树（complete tree）的节点数。<strong>不能 O(N) 暴力遍历</strong>，需要利用完全树性质做 <strong>O(log² N)</strong>。</p>
+<h3>解法</h3>
+<p>完全二叉树定义：除最后一层，所有层满；最后一层从左填。</p>
+<p>利用性质：<strong>左/右子树至少有一个是 perfect tree</strong>（深度 h 的完全树的左或右子树是 perfect）。</p>
+<ul><li>算左子树最左路径深度 dl</li><li>算右子树最左路径深度 dr</li><li>如果 dl == dr：左子树 perfect (size = 2^dl - 1)，递归 right</li><li>否则：右子树 perfect (size = 2^dr - 1)，递归 left</li></ul>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from typing import Optional
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+class Solution:
+    def countNodes(self, root: Optional[TreeNode]) -&gt; int:
+        if not root:
+            return 0
+        # 左走到底
+        lh = self._left_height(root)
+        rh = self._right_height(root)
+        if lh == rh:
+            return (1 &lt;&lt; lh) - 1   # perfect tree
+        return 1 + self.countNodes(root.left) + self.countNodes(root.right)
+
+    def _left_height(self, node):
+        h = 0
+        while node:
+            h += 1
+            node = node.left
+        return h
+
+    def _right_height(self, node):
+        h = 0
+        while node:
+            h += 1
+            node = node.right
+        return h</code></pre>
+<h3>复杂度</h3>
+<ul><li>每层递归：算两次高度 O(log N)</li><li>递归深度：O(log N)</li><li>总：<strong>O(log² N)</strong></li></ul>
+<h3>关键技术点</h3>
+<h4>1. Perfect tree 判定</h4>
+<p><code>左走到底深度 == 右走到底深度</code> ⟺ 是 perfect tree。size = <code>2^h - 1</code>。</p>
+<h4>2. 否则递归两边</h4>
+<p>非 perfect 时，<strong>左右子树至少有一个仍是完全树</strong>。递归同算法。</p>
+<h4>3. 计数公式</h4>
+<p><code>(1 &lt;&lt; h) - 1</code>：h 层 perfect tree 节点数 = 2^h - 1。</p>
+<h3>边界 case</h3>
+<pre class="language-python"><code class="language-python"># 空树 → 0
+# 单节点 → 1
+# 满 3 层：7 个节点
+# 不满 3 层：算法分摊 O(log² N)</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 O(N) DFS 数节点 —— 不利用完全树性质； ❌ Perfect tree 检测只看左高度 —— 必须左 == 右； ❌ <code>1 &lt;&lt; h - 1</code> 不加括号 —— 优先级问题（实际 <code>1 &lt;&lt; (h-1)</code> 是错的，应 <code>(1 &lt;&lt; h) - 1</code>）； ❌ 递归到 None 没 return 0。</p></div>
+<h3>进阶：迭代版（O(log² N) 不变）</h3>
+<pre class="language-python"><code class="language-python">def countNodes(root):
+    if not root: return 0
+    h = 0
+    node = root
+    while node.left:
+        h += 1; node = node.left
+    # 二分最后一层有多少节点 ∈ [0, 2^h]
+    lo, hi = 0, (1 &lt;&lt; h) - 1
+    while lo &lt;= hi:
+        mid = (lo + hi) // 2
+        if exists(root, mid, h):
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    # 总 = perfect 上层 + 最后一层节点数
+    return ((1 &lt;&lt; h) - 1) + lo
+
+def exists(root, idx, h):
+    """检查最后一层 idx 处是否有节点（按完全树 binary 索引）"""
+    lo, hi = 0, (1 &lt;&lt; h) - 1
+    for _ in range(h):
+        mid = (lo + hi) // 2
+        if idx &lt;= mid:
+            root = root.left; hi = mid
+        else:
+            root = root.right; lo = mid + 1
+    return root is not None</code></pre>
+<p>二分最后一层节点数。</p>
+<div class="callout callout-key"><strong>核心要点</strong><p>"完全二叉树" 的关键就在它"分摊性质"：每次递归都有一边是 perfect tree，能 O(1) 数清。Recursion T(N) = T(N/2) + O(log N) = O(log² N)。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"二叉搜索树（BST）的 size？" → 与本题无关，BST 没完全树保证，必须 O(N)；"用 augmented tree 维护 size 字段？" → 每次 insert/delete 同步 size，count 是 O(1)；"完全树的高度计算？" → 同 left_height；"完全树的 array 表示？" → A[1..n]，左子=2i，右子=2i+1。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Count Nodes in a tree</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Amazon</strong> · Junior</div>
+  <div>Complete Binary Tree Node Count: Find the total number of nodes in a given complete binary tree efficiently.</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nri04xy838oo3y3ra9b.html">← Leetcode 394. Decode String</a>
+    <a href="cm5eguhac02kv838o77sz29i5.html">Leetcode 737. Sentence Similarity II →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

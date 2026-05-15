@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1381. Design a Stack With Increment Operation · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1381. Design a Stack With Increment Operation</div>
+  <h1>Leetcode 1381. Design a Stack With Increment Operation</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/stack-increment/cm5eguhae032r838owfplgsi3" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Mid May, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Implement a bounded stack (maxSize) supporting push, pop (returning -1 if empty), and increment(k, val) which adds val to the bottom k elements; the core challenge is applying these bottom-k increments efficiently (avoiding O(k) per increment) using lazy/differential bookkeeping so operations are O(1).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1381 Design a Stack With Increment Operation</strong>：实现栈：</p>
+<ul><li><code>push(x)</code>：超过 maxSize 不 push</li><li><code>pop()</code>：弹出栈顶；空时返回 -1</li><li><code>increment(k, val)</code>：栈底 k 个元素都 +val</li></ul>
+<p>直接增加每元素是 O(K) per call。如何 O(1) 摊销？</p>
+<h3>解法 — Lazy Propagation</h3>
+<p>维护辅助数组 <code>inc[i]</code>：表示"位置 i 及以下的所有元素都要再加 inc[i]"。<code>increment(k, val)</code> 只更新 <code>inc[min(k, size) - 1] += val</code>，O(1)。</p>
+<p><code>pop</code> 时：弹出元素值 = stack[top] + inc[top]；然后把 <code>inc[top]</code> 累加到 <code>inc[top-1]</code>（lazy 向下传递）；最后清 inc[top]。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">class CustomStack:
+    def __init__(self, maxSize: int):
+        self.max = maxSize
+        self.stack: list[int] = []
+        self.inc: list[int] = []   # 同长度，inc[i] 影响 stack[0..i]
+
+    def push(self, x: int) -&gt; None:
+        if len(self.stack) &lt; self.max:
+            self.stack.append(x)
+            self.inc.append(0)
+
+    def pop(self) -&gt; int:
+        if not self.stack: return -1
+        i = len(self.stack) - 1
+        result = self.stack.pop() + self.inc[i]
+        delta = self.inc.pop()
+        if i &gt; 0:
+            self.inc[i - 1] += delta
+        return result
+
+    def increment(self, k: int, val: int) -&gt; None:
+        if not self.stack: return
+        idx = min(k, len(self.stack)) - 1
+        self.inc[idx] += val</code></pre>
+<h3>复杂度</h3>
+<p>| 操作 | 时间 | |---|---| | push | O(1) | | pop | O(1) | | increment | O(1) |</p>
+<h3>关键技术点</h3>
+<h4>1. Lazy Propagation 思想</h4>
+<p>不立即把 +val 分发给所有 k 个元素，而是只标记"以下都 +val"。读取时累计。</p>
+<h4>2. Pop 时下传</h4>
+<p>弹出栈顶后，原来作用于 [0..top] 的 inc 现在只该作用于 [0..top-1]。把 <code>inc[top]</code> 加到 <code>inc[top-1]</code>，然后 pop。</p>
+<h4>3. min(k, size)</h4>
+<p>k 可能 &gt; 当前 size，截断到 size。</p>
+<h4>4. 边界：栈空</h4>
+<p><code>pop</code> 返回 -1；<code>increment</code> no-op。</p>
+<h3>暴力做法（O(K) increment）</h3>
+<pre class="language-python"><code class="language-python">class CustomStack:
+    def increment(self, k, val):
+        for i in range(min(k, len(self.stack))):
+            self.stack[i] += val</code></pre>
+<p>清晰但 increment 是 O(K)。LC 数据足够，但 lazy 是面试加分。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Increment 直接加每个元素 —— 单次 O(K)，多次累加 TLE 数据； ❌ pop 时忘了把 inc 传给下一个； ❌ inc 数组长度和 stack 不同步 —— off-by-one； ❌ increment 当 k &gt; size 时不截断 —— index 越界。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Lazy propagation 是 segment tree、BIT、splay tree 的精髓。也用于：区间染色（painting）、区间 add+查询 sum、分布式 cache invalidation。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Increment 顶 k 个而非底？" → 维护 inc[i] 反义；"Increment 中间一段 [l, r]？" → 差分数组；"返回当前栈底/顶？" → peek 类似 pop 但不弹。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Leetcode 1381. Design a Stack With Increment Operation</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhae02zx838oeshehcvt.html">← Leetcode 1279. Traffic Light Controlled Intersection</a>
+    <a href="cmbsl2nhd005107adsfu8ohme.html">Multithreaded Web Crawler →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Convert Graph to Binary Tree with Alternating Colors · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Convert Graph to Binary Tree with Alternating Colors</div>
+  <h1>Convert Graph to Binary Tree with Alternating Colors</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Intern, Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/graph-binary-tree/cm6jwv6ar0033ui4bpqke1e4w" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Intern, Mid-level · 📋 3 · 🕒 Early January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given an undirected connected acyclic graph where each node has at most 3 edges, and nodes are colored (either Black/White or Red/Black), find a root vertex such that when the graph is suspended from that vertex, it becomes a binary tree where all nodes at the same level have the same color, and adjacent levels have different colors. Return -1 if no such vertex exists.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Convert Graph to Binary Tree with Alternating Colors</strong>：给一个<strong>连通无环无向图</strong>，每节点最多 3 个邻居，节点有颜色（Black/White 或 Red/Black/White）。找一个节点作 root，使得"挂"起来后：</p>
+<ul><li>每节点最多 2 个子（成为 binary tree）</li><li>同层节点同色</li><li>相邻层颜色交替（如 R→B→W→R...）</li></ul>
+<h3>解法</h3>
+<h4>Step 1: 找候选 root</h4>
+<p>每节点最多 3 邻居。如果作 root，其邻居都成它的 children → 但 binary tree 最多 2 children，所以 <strong>root 必须是邻居数 ≤ 2</strong> 的节点。</p>
+<p>非 root 节点：除了 parent 之外还有最多 2 个 children，所以 <strong>degree ≤ 3</strong> (parent + 2 children) → 题目已保证。</p>
+<p>但如果 root 是某节点 v，v 的所有邻居都是 children。所以 deg(v) ≤ 2 否则 binary tree 违反（root 没有 parent）。</p>
+<h4>Step 2: 验证颜色约束</h4>
+<p>对每个候选 root v，BFS 从 v：</p>
+<ul><li>层数 d 的所有节点必须同色</li><li>颜色循环模式（R, B, W 重复 if 3-color；R, B 重复 if 2-color）</li></ul>
+<pre class="language-python"><code class="language-python">from collections import defaultdict, deque
+
+def find_root(n: int, edges: list[tuple[int,int]], colors: list[str],
+              pattern: list[str]) -&gt; int:
+    """
+    pattern: e.g. ['R','B','W'] 表示 layer 0 是 R, layer 1 是 B, layer 2 是 W, layer 3 是 R...
+    Returns 一个 valid root index 或 -1
+    """
+    adj = defaultdict(set)
+    for u, v in edges:
+        adj[u].add(v)
+        adj[v].add(u)
+
+    def try_root(r: int) -&gt; bool:
+        if len(adj[r]) &gt; 2:
+            return False
+        # BFS check
+        depth = {r: 0}
+        q = deque([r])
+        while q:
+            u = q.popleft()
+            expected = pattern[depth[u] % len(pattern)]
+            if colors[u] != expected:
+                return False
+            for v in adj[u]:
+                if v in depth: continue
+                # v 的 depth = u 的 depth + 1
+                # v 的 children 数 ≤ 2 (parent u + 至多 2 children) → degree ≤ 3，已保证
+                depth[v] = depth[u] + 1
+                q.append(v)
+        # 还要保证每节点除 parent 外最多 2 邻居（即 degree ≤ 3 with parent counted），题目已保证
+        return True
+
+    for r in range(n):
+        if try_root(r):
+            return r
+    return -1</code></pre>
+<h3>复杂度</h3>
+<ul><li>每个候选 root 的 BFS: O(V + E)</li><li>总：<strong>O(V × (V + E))</strong></li></ul>
+<p>V ≤ 1000 → 1M × edges，OK。</p>
+<h3>关键技术点</h3>
+<h4>1. Root 候选限制</h4>
+<p>只有 degree ≤ 2 的节点能作 root（否则它的邻居超过 2 个 child）。</p>
+<h4>2. Binary tree 约束 (deg ≤ 3)</h4>
+<p>非 root 节点 degree ≤ 3 = parent + 2 children。题目已经保证（每节点 ≤ 3 邻居）。</p>
+<h4>3. 颜色模式由 pattern 给定</h4>
+<p>不同变种 pattern 可能是 ['R','W','B'] 或更长循环。代码用 <code>pattern[depth % len(pattern)]</code> 通用化。</p>
+<h4>4. BFS 自然分层</h4>
+<p>无向无环图（树）的 BFS 给出唯一分层。从某 root 出发的 BFS 中，每节点的 depth 唯一确定。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 没限制 root degree ≤ 2 —— 算到不可能的 root； ❌ Color pattern 假设固定长度（如总 3 色） —— 不一定，看题目； ❌ 把图作"有向"BFS —— 无向，要避免回头（depth set 记 visited）； ❌ 颜色 enumeration：题目给的 colors 列表是 char 列表，直接索引； ❌ 有环时 BFS 无限 —— 题目保证 acyclic。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>"找满足约束的 root" 类题：枚举候选 + 验证。约束分两类（结构性 like degree、属性性 like color）。同思路：LC 310 Minimum Height Trees、LC 834 Sum of Distances in Tree。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"返回所有 valid root？" → 收集而非 return first；"K 色循环？" → pattern 长 K；"动态加边？" → 需要 incremental algo（复杂）；"找 root 使深度最小？" → LC 310，topo-trim leaves。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Given an undirected connected acyclic graph where each node has at most 3 edges, and nodes are colored Black or White, find a root such that the graph becomes a binary tree and alternates in color across layers.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Intern</div>
+  <div>In an undirected acyclic graph with a maximum of 3 neighbors per node, find a vertex such that, when suspended from that vertex, the graph becomes a binary tree.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Intern</div>
+  <div>In an undirected acyclic graph with a maximum of 3 neighbors per node, where each node has a value and a specific color, find a vertex such that, when suspended from that vertex, the graph becomes a binary tree satisfying: all adjacent nodes must be of different colors (Red/Black), all nodes at the same level must be of the same color. Return -1 if no such node can be found.</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6jwvh80005vui4b4epro213.html">← Song Shuffler</a>
+    <a href="cm6jwv68v002zui4bm2qok4b6.html">Find Root Node in Colored Tree with Pattern Constraints →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

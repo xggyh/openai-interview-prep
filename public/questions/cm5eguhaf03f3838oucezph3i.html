@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1825. Finding MK Average · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1825. Finding MK Average</div>
+  <h1>Leetcode 1825. Finding MK Average</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/mk-average/cm5eguhaf03f3838oucezph3i" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 2 · 🕒 Mid January, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Maintain a sliding window of the last m stream elements and, after discarding the smallest k and largest k values, return the integer average of the remaining elements (return -1 if fewer than m elements). The core challenge is to support addElement and calculateMKAverage efficiently by keeping ordered partitions and their sums (e.g., via balanced BSTs/multisets or heaps with counts).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1825 Finding MK Average</strong>：实时数据流。<code>addElement(num)</code>：append。<code>calculateMKAverage()</code>：取最近 m 个数，移除最小 k 个和最大 k 个，剩 m - 2k 个数的平均（向下取整）；若 stream 未到 m，返回 -1。</p>
+<p>经典 <strong>三个 SortedList</strong>（low / mid / high）维护。Hard。</p>
+<h3>解法</h3>
+<p>把最近 m 个数分三段：</p>
+<ul><li>low: 最小 k 个</li><li>mid: 中间 m - 2k 个</li><li>high: 最大 k 个</li></ul>
+<p><code>mk_sum</code> = mid 的和。<code>calculateMKAverage()</code> 返回 <code>mk_sum // (m - 2k)</code>。</p>
+<p>添加新数 / 移除最旧数时调整三个 set 的 boundary 元素。用 <strong>SortedList</strong> (from <code>sortedcontainers</code>) 或 <strong>TreeMap-like</strong> 数据结构。</p>
+<h3>Python 实现</h3>
+<pre class="language-python"><code class="language-python">from sortedcontainers import SortedList
+from collections import deque
+
+class MKAverage:
+    def __init__(self, m: int, k: int):
+        self.m = m
+        self.k = k
+        self.mid_size = m - 2 * k
+        self.low = SortedList()
+        self.mid = SortedList()
+        self.high = SortedList()
+        self.mid_sum = 0
+        self.queue: deque[int] = deque()
+
+    def _add_to_buckets(self, x: int):
+        # Insert x into proper bucket (low/mid/high)
+        if not self.low or x &lt;= self.low[-1]:
+            self.low.add(x)
+        elif not self.high or x &lt; self.high[0]:
+            self.mid.add(x)
+            self.mid_sum += x
+        else:
+            self.high.add(x)
+        # Rebalance: low must have exactly k (when full)
+        # high must have exactly k
+        self._rebalance()
+
+    def _remove_from_buckets(self, x: int):
+        if x in self.low:
+            self.low.remove(x)
+        elif x in self.mid:
+            self.mid.remove(x)
+            self.mid_sum -= x
+        else:
+            self.high.remove(x)
+        self._rebalance()
+
+    def _rebalance(self):
+        if len(self.queue) &lt; self.m:
+            return
+        # low overflow → 给 mid
+        while len(self.low) &gt; self.k:
+            v = self.low.pop()
+            self.mid.add(v)
+            self.mid_sum += v
+        while len(self.low) &lt; self.k:
+            v = self.mid.pop(0)
+            self.low.add(v)
+            self.mid_sum -= v
+        # high overflow → mid
+        while len(self.high) &gt; self.k:
+            v = self.high.pop(0)
+            self.mid.add(v)
+            self.mid_sum += v
+        while len(self.high) &lt; self.k:
+            v = self.mid.pop()
+            self.high.add(v)
+            self.mid_sum -= v
+
+    def addElement(self, num: int) -&gt; None:
+        self.queue.append(num)
+        self._add_to_buckets(num)
+        if len(self.queue) &gt; self.m:
+            old = self.queue.popleft()
+            self._remove_from_buckets(old)
+
+    def calculateMKAverage(self) -&gt; int:
+        if len(self.queue) &lt; self.m:
+            return -1
+        return self.mid_sum // self.mid_size</code></pre>
+<h3>复杂度</h3>
+<ul><li><code>addElement</code>：<strong>O(log m)</strong> SortedList 操作</li><li><code>calculateMKAverage</code>：<strong>O(1)</strong></li><li>空间：O(m)</li></ul>
+<h3>关键技术点</h3>
+<h4>1. 三段分治</h4>
+<p>low / mid / high 各自有 size 限制：low 和 high 各 k 个，mid 是 m - 2k 个。Rebalance 保持。</p>
+<h4>2. mid_sum 增量维护</h4>
+<p>不要每次重算 mid 总和。每次元素进出 mid 时 += / -= 。</p>
+<h4>3. SortedList O(log)</h4>
+<p><code>sortedcontainers.SortedList</code> 提供 O(log n) 插入/删除/索引。Python 自带 <code>bisect</code> + list 是 O(n) 插入。</p>
+<h4>4. Edge: 还没到 m 个</h4>
+<p><code>len(queue) &lt; m</code> 时 calculate 返回 -1。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 每次 calculate 重新排序 m 个元素 —— O(m log m) per call，慢； ❌ 没维护 mid_sum 增量； ❌ Rebalance 漏了某种 case（low 不足，high 不足，mid overflow）； ❌ 删除元素时找不到 bucket —— 必须遍历或预先知道在哪个 bucket。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>流式 top-K + sliding window 的复合：用三个有序结构维护"min k / mid / max k"。同思想：LC 480 Sliding Window Median (two heaps)、LC 295 Find Median from Data Stream。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果 m 很大（百万）？" → SortedList 仍 OK，但内存大；可用 BIT + 值域离散化；"动态调 m, k？" → 重建 buckets；"中位数代替 mean？" → 两 heap 即可。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Mid-level</div>
+  <div>Calculate average server latency for last K values, ignoring top X values in a window of size K+X</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Finding MK Average</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6jw3mad004ddar9au16elts.html">← Remove Bad Pairs from a String</a>
+    <a href="cm5eh7nrh04r5838o6xrbsdjd.html">Leetcode 149. Max Points on a Line →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

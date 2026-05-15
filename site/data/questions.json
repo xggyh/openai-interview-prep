@@ -1,0 +1,1659 @@
+[
+  {
+    "slug": "/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "title": "Design Online Chess",
+    "type": "System Design",
+    "description": "Design a real-time chess platform similar to Chess.com that supports gameplay across multiple devices, move validation, matchmaking, leaderboards, and key features like move undo functionality.",
+    "url": "https://www.hellointerview.com/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff, Manager-Senior Manager",
+        "reportedUsers": 58,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/payment-batch-processing/cmavpegdk0067ad08ujhdbrjk",
+    "title": "Design a Payment System",
+    "type": "System Design",
+    "description": "Design a payment system that processes transactions through an external payment service for approval/denial, holds approved amounts, and batches all transactions daily for final processing while handling 10,000 transactions per second.",
+    "url": "https://www.hellointerview.com/community/questions/payment-batch-processing/cmavpegdk0067ad08ujhdbrjk",
+    "companies": {
+      "OpenAI": {
+        "level": "Junior-Staff, Manager-Senior Manager",
+        "reportedUsers": 53,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/devbox-cloud-containers/cmlmzqhv503px08adrpjczqzc",
+    "title": "Design a devbox system",
+    "type": "System Design",
+    "description": "Design a cloud-based development environment system that allows developers to create, configure, and manage isolated development containers with pre-installed tools and dependencies.",
+    "url": "https://www.hellointerview.com/community/questions/devbox-cloud-containers/cmlmzqhv503px08adrpjczqzc",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 12,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/flower-disease-spread/cmhykoavb02w108adtuubkyzp",
+    "title": "Disease Spread in Flower Grid",
+    "type": "Coding",
+    "description": "Implement algorithms to simulate and analyze the spread of disease through flowers arranged in a grid structure. Solve multiple related problems involving infection patterns, timing, and containment strategies.",
+    "url": "https://www.hellointerview.com/community/questions/flower-disease-spread/cmhykoavb02w108adtuubkyzp",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 12,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/kv-serialize-deserialize/cm6xw6unw00003b6qz67bpfaj",
+    "title": "KV Store Serialize/Deserialize",
+    "type": "Coding",
+    "description": "Code a simple KV with serialize/deserialize functions, where key/value are strings and can contain any character.",
+    "url": "https://www.hellointerview.com/community/questions/kv-serialize-deserialize/cm6xw6unw00003b6qz67bpfaj",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 34,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/chatbot-design/cmg6up3jj030x08adrb73umuk",
+    "title": "Design ChatGPT",
+    "type": "System Design",
+    "description": "Design a conversational AI system similar to ChatGPT that allows users to have natural language conversations and receive intelligent responses. Focus on a simple version that can handle basic chat functionality for a limited number of users.",
+    "url": "https://www.hellointerview.com/community/questions/chatbot-design/cmg6up3jj030x08adrb73umuk",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff, Manager-Senior Manager",
+        "reportedUsers": 24,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/token-balance-tracking/cmlod3rnm0pj107adhum3e477",
+    "title": "Design a credit tracking service for user token balances",
+    "type": "Coding",
+    "description": "Design a system that tracks user token credits and can efficiently query the number of tokens a user has at any given timestamp. The service should handle credit additions, deductions, and historical balance lookups.",
+    "url": "https://www.hellointerview.com/community/questions/token-balance-tracking/cmlod3rnm0pj107adhum3e477",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 11,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/crossword-solver-service/cmlod05pd0p4z08adovgk5l1h",
+    "title": "Design a crossword puzzle service",
+    "type": "System Design",
+    "description": "Design a crossword puzzle solving service that can efficiently solve large crossword puzzles at scale, handling multiple puzzle requests simultaneously.",
+    "url": "https://www.hellointerview.com/community/questions/crossword-solver-service/cmlod05pd0p4z08adovgk5l1h",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 6,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/pipeline-tasks-stages/cmazmemqc00013b6wnvg3uz1y",
+    "title": "Design a Ci/Cd Pipeline",
+    "type": "System Design",
+    "description": "Design a CI/CD pipeline system that can execute variable-length tasks organized in stages, where each deployment event triggers a sequence of tasks that must be processed through the pipeline stages.",
+    "url": "https://www.hellointerview.com/community/questions/pipeline-tasks-stages/cmazmemqc00013b6wnvg3uz1y",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 5,
+        "lastAsked": "Early May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "title": "Design a Chat/Messaging System",
+    "type": "System Design",
+    "description": "Design a real-time messaging system like WhatsApp or Facebook Messenger that supports 1:1 and group conversations, message delivery status tracking, user presence features, conversation history, and can scale to handle millions of users.",
+    "url": "https://www.hellointerview.com/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "title": "Leetcode 994. Rotting Oranges",
+    "type": "Coding",
+    "description": "Given an m×n grid with empty cells, fresh (1) and rotten (2) oranges, compute the minimum minutes until all fresh oranges become rotten as rot spreads 4-directionally each minute, returning -1 if any fresh orange is unreachable. This is a multi-source BFS/level-order propagation problem starting from all initial rotten oranges.",
+    "url": "https://www.hellointerview.com/community/questions/rotting-oranges/cm5eguhad02s0838ouei0wtvs",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/monster-battle-simulator/cmkq1t9uu0fij07adqaw1gapu",
+    "title": "Monster Fight",
+    "type": "Coding",
+    "description": "Implement a system to simulate combat between monsters with different attributes and abilities. Design the logic to handle turn-based fighting mechanics and determine the winner.",
+    "url": "https://www.hellointerview.com/community/questions/monster-battle-simulator/cmkq1t9uu0fij07adqaw1gapu",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Mid April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/group-chat-threads/cm6ffodsw00003b6paxwmrf57",
+    "title": "Design Slack",
+    "type": "System Design",
+    "description": "Design a messaging platform like Slack that supports real-time messaging through direct messages and channels (public/private), message threads, new message indicators, and persistent message storage.",
+    "url": "https://www.hellointerview.com/community/questions/group-chat-threads/cm6ffodsw00003b6paxwmrf57",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Senior Manager",
+        "reportedUsers": 52,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/github-cicd-workflow/cmc7x7xjb00023b6fihsk8apf",
+    "title": "Design Github Actions",
+    "type": "System Design",
+    "description": "Design a CI/CD platform like GitHub Actions that automatically triggers workflow execution when code is pushed to repositories, with real-time monitoring and observability features. The system should handle 10 million repositories with 10 pushes per second on average, including burst traffic scenarios.",
+    "url": "https://www.hellointerview.com/community/questions/github-cicd-workflow/cmc7x7xjb00023b6fihsk8apf",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff, Manager",
+        "reportedUsers": 63,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/memory-database-sql/cmbsl00wk004v07adwuorveqo",
+    "title": "In-Memory Database: Implement SQL-Like Operations",
+    "type": "Coding",
+    "description": "Build an in-memory database that supports basic SQL-like operations including insert, query with WHERE clauses, and ORDER BY functionality. Implement efficient data storage structures, query parsing for condition evaluation, and inverted indexes to optimize search performance.",
+    "url": "https://www.hellointerview.com/community/questions/memory-database-sql/cmbsl00wk004v07adwuorveqo",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 11,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/encode-decode-strings/cm5eh7nrh04uj838od5a18zxf",
+    "title": "Leetcode 271. Encode and Decode Strings",
+    "type": "Coding",
+    "description": "Design a pair of functions to serialize a list of strings into a single string and deserialize it back losslessly, handling arbitrary characters and empty strings so decoding always reproduces the original list. The solution should be stateless, robust to delimiter collisions, and efficient in time/space.",
+    "url": "https://www.hellointerview.com/community/questions/encode-decode-strings/cm5eh7nrh04uj838od5a18zxf",
+    "companies": {
+      "OpenAI": {
+        "level": "Intern, Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/ipv4-address-iterator/cmg8pwhzz00hh08adsezwfgvw",
+    "title": "IPv4 Address Iterator",
+    "type": "Coding",
+    "description": "Implement an iterator that traverses IPv4 addresses starting from a given address, supporting forward iteration, reverse iteration, and CIDR block iteration.",
+    "url": "https://www.hellointerview.com/community/questions/ipv4-address-iterator/cmg8pwhzz00hh08adsezwfgvw",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/prompt-playground/cmjd4xmkg04nf08adwd3m0bvs",
+    "title": "Design a prompt playground",
+    "type": "System Design",
+    "description": "Design a prompt playground platform that allows users to create, test, and iterate on AI prompts with different models and parameters.",
+    "url": "https://www.hellointerview.com/community/questions/prompt-playground/cmjd4xmkg04nf08adwd3m0bvs",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/biggest-failure/cm6ffozaw00023b6pwf95drvs",
+    "title": "What's your biggest failure",
+    "type": "People Management",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/biggest-failure/cm6ffozaw00023b6pwf95drvs",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Senior, Manager",
+        "reportedUsers": 5,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/coding-interview-platform/cmhi1hhbh05wt08ad2knqdyh2",
+    "title": "Design CoderPad",
+    "type": "System Design",
+    "description": "Design a collaborative coding platform similar to CoderPad that allows users to write, edit, and execute code in real-time with features like syntax highlighting, multiple language support, and live collaboration for technical interviews.",
+    "url": "https://www.hellointerview.com/community/questions/coding-interview-platform/cmhi1hhbh05wt08ad2knqdyh2",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Mid February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4",
+    "title": "Leetcode 1797. Design Authentication Manager",
+    "type": "Coding",
+    "description": "Manage tokens that expire timeToLive seconds after creation/renewal, supporting generate, renew (only if the token is still unexpired), and countUnexpiredTokens (with expirations at time t processed before actions at t). The core challenge is efficiently tracking and removing expired tokens — typically handled with a token->expiry map plus a min-heap/queue for lazy expiration cleanup.",
+    "url": "https://www.hellointerview.com/community/questions/authentication-manager/cm5eguhaf03eb838o3e9x2gu4",
+    "companies": {
+      "OpenAI": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/authentication-session/cmlod4ttu0pa608ad89vm8qkj",
+    "title": "Authentication Manager",
+    "type": "Coding",
+    "description": "Design and implement an authentication manager system that can handle user login, logout, and session management operations. The system should validate credentials and maintain active user sessions with appropriate security measures.",
+    "url": "https://www.hellointerview.com/community/questions/authentication-session/cmlod4ttu0pa608ad89vm8qkj",
+    "companies": {
+      "OpenAI": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/url-shortener-design/cm5svnaco01dqxszbok7e1lk1",
+    "title": "Design a URL Shortener",
+    "type": "System Design",
+    "description": "Design a URL shortening service similar to TinyURL that allows users to convert long URLs into short, shareable links and manage their shortened URLs.",
+    "url": "https://www.hellointerview.com/community/questions/url-shortener-design/cm5svnaco01dqxszbok7e1lk1",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff, Senior Manager",
+        "reportedUsers": 6,
+        "lastAsked": "Early February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/cluster-node-count/cmfc459e4046608adgfjpzzio",
+    "title": "N- ary tree",
+    "type": "Coding",
+    "description": "Each node of the tree represents a real machine in a cluster. Each machine in the cluster can only communicate with its parent and child nodes through \"nodeld\" using the following two methods: sendAsyncRequest(toNodeId. message) and receiveRequest(fromNodeId, message) . When a request reaches a machine, the receiveRequest method of that machine will be triggered automatically. Suppose root machine (node 1 in the above tree) needs to have the ability to count and print out the total number of machines in the cluster, can you implement the node/machine class and its receiveRequest(fromNodeId, message) method to handle this case? There's no need to implement sendAsyncRequest (toNodeId, message), but you can call this method when needed.",
+    "url": "https://www.hellointerview.com/community/questions/cluster-node-count/cmfc459e4046608adgfjpzzio",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/openai-work-motivation/cmhf5kjws00vx08ad4b1e37z2",
+    "title": "Why do you want to work at OpenAI?",
+    "type": "Behavioral",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/openai-work-motivation/cmhf5kjws00vx08ad4b1e37z2",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Senior, Principal",
+        "reportedUsers": 6,
+        "lastAsked": "Late January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/monster-game-system/cmkq1swdr0fh807adwlyp760o",
+    "title": "Monster Game",
+    "type": "Coding",
+    "description": "Design and implement a monster game system with appropriate data structures and game mechanics. Focus on object-oriented design principles and efficient algorithms for game state management.",
+    "url": "https://www.hellointerview.com/community/questions/monster-game-system/cmkq1swdr0fh807adwlyp760o",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/advent-code-day7/cmjrr2k5v07zc08ado2pqgd2l",
+    "title": "Advent of Code Day 7 Variation",
+    "type": "Coding",
+    "description": "Solve a modified version of Advent of Code Day 7 problem. Implement an algorithm to handle the specific requirements and constraints of this coding challenge.",
+    "url": "https://www.hellointerview.com/community/questions/advent-code-day7/cmjrr2k5v07zc08ado2pqgd2l",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/metrics-aggregator/cm78h7tyk02kgl7b16admv2nz",
+    "title": "Design a Metrics Aggregator",
+    "type": "System Design",
+    "description": "Design a metrics aggregation system that collects count-based metrics (like user signups, system errors, ad clicks) from services via a client library and displays them as histogram data on a dashboard. The system should support querying aggregated metrics within specific time frames for monitoring and analytics purposes.",
+    "url": "https://www.hellointerview.com/community/questions/metrics-aggregator/cm78h7tyk02kgl7b16admv2nz",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/webhook-callbacks/cm6i9kl1h00px6jlds6pn1hi5",
+    "title": "Design a Webhook Callback System",
+    "type": "System Design",
+    "description": "Design a webhook system that allows applications to register callback URLs and automatically receive HTTP POST notifications when specific events occur in other applications.",
+    "url": "https://www.hellointerview.com/community/questions/webhook-callbacks/cm6i9kl1h00px6jlds6pn1hi5",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 10,
+        "lastAsked": "Mid December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/distributed-rate-limiter/cm6i9mhd800nz41cd0xx20r8p",
+    "title": "Design a Rate Limiter",
+    "type": "System Design",
+    "description": "Design a rate limiting system that can control and throttle API requests to prevent system overload and ensure fair resource allocation. The system should be able to handle distributed scenarios, track requests across multiple servers, and enforce limits per user/client or between internal services to prevent abuse and maintain system performance.",
+    "url": "https://www.hellointerview.com/community/questions/distributed-rate-limiter/cm6i9mhd800nz41cd0xx20r8p",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior, Senior Manager",
+        "reportedUsers": 3,
+        "lastAsked": "Early November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/creator-viewer-paths/cm6wu2x3y0000356pl299toa0",
+    "title": "Design YouTube",
+    "type": "System Design",
+    "description": "Design a video streaming platform like YouTube where creators can upload and share videos, viewers can stream content on-demand, and users receive personalized recommendations based on their viewing history and preferences.",
+    "url": "https://www.hellointerview.com/community/questions/creator-viewer-paths/cm6wu2x3y0000356pl299toa0",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/time-key-value-store/cm5eguhad02rn838o3ttrkt0w",
+    "title": "Leetcode 981. Time Based Key-Value Store",
+    "type": "Coding",
+    "description": "Design a time-based key-value store that records multiple values per key with timestamps and returns the value whose timestamp is the largest <= the queried timestamp. With timestamps per key strictly increasing and up to 2e5 operations, the typical solution uses per-key ordered timestamp/value lists and binary search to find the floor timestamp efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/time-key-value-store/cm5eguhad02rn838o3ttrkt0w",
+    "companies": {
+      "OpenAI": {
+        "level": "Junior, Senior-Staff",
+        "reportedUsers": 3,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/resumable-iterator/cmbskz7ck004r07ad6f1jxlni",
+    "title": "Resumable Iterator",
+    "type": "Coding",
+    "description": "Design an iterator that can pause and resume its execution state through get_state and set_state methods, extending support to handle multiple files and asynchronous operations. The implementation involves managing composite iterators that can run concurrently while maintaining their individual states. Handle asynchronous iteration using coroutines to enable non-blocking operations across multiple data sources.",
+    "url": "https://www.hellointerview.com/community/questions/resumable-iterator/cmbskz7ck004r07ad6f1jxlni",
+    "companies": {
+      "OpenAI": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/unix-cd-resolution/cmbskxz3y004n07adimbogre1",
+    "title": "Unix Cd Command with Symbolic Link Resolution",
+    "type": "Coding",
+    "description": "Simulate the Unix cd command by implementing path resolution for relative paths ('.' and '..'), absolute paths, and symbolic links while detecting potential cycles. Use stack-based directory traversal for path management and depth-first search to handle symbolic link mappings and cycle detection. Handle edge cases including redundant slashes and invalid path references.",
+    "url": "https://www.hellointerview.com/community/questions/unix-cd-resolution/cmbskxz3y004n07adimbogre1",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 2,
+        "lastAsked": "Late September, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/design-sql-2408/cm5eguhah03va838ozuanzsde",
+    "title": "Leetcode 2408. Design SQL",
+    "type": "Coding",
+    "description": "Given one or more relational tables and a target result set, write a SQL query that produces the specified output—typically requiring joins, grouping/aggregation, conditional logic, and often window functions for per-group ordering or selection. Pay attention to edge cases such as NULLs, duplicates, and efficient use of subqueries or indexes.",
+    "url": "https://www.hellointerview.com/community/questions/design-sql-2408/cm5eguhah03va838ozuanzsde",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Late August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/describe-job-role/cm6ffodsw00013b6pt5izxwps",
+    "title": "Tell me about your job and role",
+    "type": "People Management",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/describe-job-role/cm6ffodsw00013b6pt5izxwps",
+    "companies": {
+      "OpenAI": {
+        "level": "Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Late August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/review-platform/cm5oehnrb0002436gh9b3uzx3",
+    "title": "Design Yelp",
+    "type": "System Design",
+    "description": "Design a location-based service like Yelp that allows users to search for nearby businesses using latitude/longitude coordinates, with support for global scale and high query volumes.",
+    "url": "https://www.hellointerview.com/community/questions/review-platform/cm5oehnrb0002436gh9b3uzx3",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior-Staff, Manager",
+        "reportedUsers": 6,
+        "lastAsked": "Early August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/meeting-rooms-2/cm5eh7nrh04u1838orn6jicpz",
+    "title": "Leetcode 253. Meeting Rooms II",
+    "type": "Coding",
+    "description": "Given a list of meeting time intervals, determine the minimum number of conference rooms required so that no meetings overlap. The core challenge is computing the maximum number of concurrent intervals (e.g., via sorting with a min-heap of end times or a sweep-line of start/end events).",
+    "url": "https://www.hellointerview.com/community/questions/meeting-rooms-2/cm5eh7nrh04u1838orn6jicpz",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Early June, 2025"
+      },
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/multithreaded-web-crawler/cmbsl2nhd005107adsfu8ohme",
+    "title": "Multithreaded Web Crawler",
+    "type": "Coding",
+    "description": "Create a web crawler that starts from a given URL and crawls all reachable URLs within the same domain using breadth-first search traversal. Implement multithreading to fetch URLs concurrently for improved efficiency while ensuring thread safety when accessing shared resources like the URL queue and visited set.",
+    "url": "https://www.hellointerview.com/community/questions/multithreaded-web-crawler/cmbsl2nhd005107adsfu8ohme",
+    "companies": {
+      "OpenAI": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid April, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/chatbot-thread-management/cmac1dd1s0049ad08o29ajxbs",
+    "title": "Design a Chatbot with Multiple Threads",
+    "type": "Mobile System Design",
+    "description": "Create a design for a chatbot system that can handle multiple conversation threads simultaneously. Consider aspects such as user interaction, thread management, and scalability.",
+    "url": "https://www.hellointerview.com/community/questions/chatbot-thread-management/cmac1dd1s0049ad08o29ajxbs",
+    "companies": {
+      "OpenAI": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Early March, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/engineer-promotion-story/cm6ffp48000033b6prbe7nexz",
+    "title": "Tell me a time you helped an engineer promote",
+    "type": "People Management",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/engineer-promotion-story/cm6ffp48000033b6prbe7nexz",
+    "companies": {
+      "OpenAI": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/engineer-promo-signals/cm6ffpfij00043b6pben6f0r8",
+    "title": "What are the signals you're looking for if an engineer is ready for a promo",
+    "type": "People Management",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/engineer-promo-signals/cm6ffpfij00043b6pben6f0r8",
+    "companies": {
+      "OpenAI": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/spreadsheet-formulas-graph/cmbsl1b4r004x07ad388lxwci",
+    "title": "Design Spreadsheet with Formulas",
+    "type": "Coding",
+    "description": "Design a spreadsheet API where cells can contain values or formulas that reference other cells, automatically handling updates when dependencies change. Implement dependency graph tracking to manage cell relationships, cycle detection to prevent infinite loops from circular references, and memoization to cache computed values for efficient recalculation.",
+    "url": "https://www.hellointerview.com/community/questions/spreadsheet-formulas-graph/cmbsl1b4r004x07ad388lxwci",
+    "companies": {
+      "OpenAI": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/nearest-pois-api/cm717jaa200danzcu8goffalw",
+    "title": "Design a Foursquare-like App",
+    "type": "System Design",
+    "description": "Design a location-based mobile app similar to Foursquare that allows users to discover nearby Points of Interest (POIs) by submitting their coordinates and receiving a list of the nearest locations.",
+    "url": "https://www.hellointerview.com/community/questions/nearest-pois-api/cm717jaa200danzcu8goffalw",
+    "companies": {
+      "OpenAI": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid August, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/escape-spreading-fire/cm5eguhag03r4838oxwinb1f1",
+    "title": "Leetcode 2258. Escape the Spreading Fire",
+    "type": "Coding",
+    "description": "Given a grid with grass, fire, and impassable walls, determine the maximum minutes you can wait at (0,0) before starting to move so that you can still reach (m-1,n-1) safely (return -1 if impossible, 1e9 if always safe). The core challenge is reasoning about two competing time-evolving spreads — multi-source fire propagation vs. your timed path — to decide feasibility for different start delays.",
+    "url": "https://www.hellointerview.com/community/questions/escape-spreading-fire/cm5eguhag03r4838oxwinb1f1",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/maximum-population-year/cm5eguhaf03fw838ov742qh4i",
+    "title": "Leetcode 1854. Maximum Population Year",
+    "type": "Coding",
+    "description": "Given birth-death intervals where a person is alive in years [birth, death-1], find the year with the maximum number of overlapping intervals (people alive) and return the earliest such year — a classic sweep-line / prefix-sum over the small 1950–2050 range.",
+    "url": "https://www.hellointerview.com/community/questions/maximum-population-year/cm5eguhaf03fw838ov742qh4i",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/top-k-frequent-elements/cm5eh7nri04wn838o9sazfr53",
+    "title": "Leetcode 347. Top K Frequent Elements",
+    "type": "Coding",
+    "description": "Given an integer array and k, return the k most frequent elements — the core challenge is to count element frequencies and extract the top-k efficiently (better than O(n log n)), typically using a frequency map combined with a min-heap (O(n log k)) or bucket sort (O(n)).",
+    "url": "https://www.hellointerview.com/community/questions/top-k-frequent-elements/cm5eh7nri04wn838o9sazfr53",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/lfu-cache/cm5eguhab02d6838o87irm4sz",
+    "title": "Leetcode 460. LFU Cache",
+    "type": "Coding",
+    "description": "Implement an LFU cache with O(1) average-time get and put operations that evicts the least-frequently-used key when capacity is exceeded, breaking ties by least-recently-used. The cache must update a key's frequency (and recency) on both get and put, and support inserting and updating values.",
+    "url": "https://www.hellointerview.com/community/questions/lfu-cache/cm5eguhab02d6838o87irm4sz",
+    "companies": {
+      "Google": {
+        "level": "Junior-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/leetcode-word-break/cm5eh7nrh04qv838o8afetv7s",
+    "title": "Leetcode 139. Word Break",
+    "type": "Coding",
+    "description": "Determine whether the string s can be segmented into a sequence of one or more words from wordDict (words may be reused). The core challenge is prefix segmentation/reachability over string indices, typically solved with DP or BFS using the dictionary (max word length ≤ 20 limits checks).",
+    "url": "https://www.hellointerview.com/community/questions/leetcode-word-break/cm5eh7nrh04qv838o8afetv7s",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/maximal-uncovered-ranges/cm5eguhah0425838oxxdnyjxu",
+    "title": "Leetcode 2655. Find Maximal Uncovered Ranges",
+    "type": "Coding",
+    "description": "Given a set of possibly overlapping, unsorted intervals within a domain (e.g., [lower, upper]), compute the maximal uncovered ranges—the complement segments not covered by any interval. This requires merging/sorting the input intervals and then finding the gaps (including boundary gaps) between merged intervals.",
+    "url": "https://www.hellointerview.com/community/questions/maximal-uncovered-ranges/cm5eguhah0425838oxxdnyjxu",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/robot-room-cleaner/cm5eguhab02dz838oq3vp7bcd",
+    "title": "Leetcode 489. Robot Room Cleaner",
+    "type": "Coding",
+    "description": "Control a robot with only move/turn/clean APIs to traverse and clean every reachable cell in an unknown grid with obstacles and no global map. The challenge is to explore the entire accessible area using DFS/backtracking while tracking visited coordinates and managing orientation to avoid revisiting or getting stuck.",
+    "url": "https://www.hellointerview.com/community/questions/robot-room-cleaner/cm5eguhab02dz838oq3vp7bcd",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/group-shifted-strings/cm5eh7nrh04tx838olh23fjzs",
+    "title": "Leetcode 249. Group Shifted Strings",
+    "type": "Coding",
+    "description": "Group strings that are equivalent under a uniform alphabetical shift (e.g., \"abc\" → \"bcd\", with wrap-around) by identifying a shift-invariant signature for each string and grouping those with the same signature.",
+    "url": "https://www.hellointerview.com/community/questions/group-shifted-strings/cm5eh7nrh04tx838olh23fjzs",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/number-lines-string/cm5eguhac02ms838oy2au8k7t",
+    "title": "Leetcode 806. Number of Lines To Write String",
+    "type": "Coding",
+    "description": "Given an array widths mapping each lowercase letter to its pixel width and a string s, pack characters sequentially into lines with a maximum width of 100 pixels and return [number_of_lines, width_of_last_line]. This is solved by greedily scanning s, accumulating letter widths and starting a new line whenever adding the next letter would exceed 100.",
+    "url": "https://www.hellointerview.com/community/questions/number-lines-string/cm5eguhac02ms838oy2au8k7t",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 4,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/rle-iterator/cm5eguhac02pe838o36a7xof7",
+    "title": "Leetcode 900. RLE Iterator",
+    "type": "Coding",
+    "description": "Create an iterator over a run-length encoded array that, on each next(n) call, consumes n elements by advancing through (count, value) pairs and returns the last value consumed or -1 if the sequence is exhausted. The solution must maintain state across calls and efficiently skip/consume counts (n can be large).",
+    "url": "https://www.hellointerview.com/community/questions/rle-iterator/cm5eguhac02pe838o36a7xof7",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/rental-car-assignment/cm6jwxse800j9ui4biheeyqm2",
+    "title": "Car Rental Optimization",
+    "type": "Coding",
+    "description": "Given N cars and a list of rental requests (each with pickup time, return time, and ID), assign cars to requests using the minimum number of cars possible. Return a list of car assignments for each request ID.",
+    "url": "https://www.hellointerview.com/community/questions/rental-car-assignment/cm6jwxse800j9ui4biheeyqm2",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 4,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/knapsack-binary-profits/cm6jwy3cq00lbui4bm2uxmm9p",
+    "title": "Knapsack Problem Variations",
+    "type": "Coding",
+    "description": "Solve variations of the classic 0/1 knapsack problem, such as when profits are binary (1 or 2) or when weights are fractional (up to 2 decimal places) but items cannot be partially selected. Apply dynamic programming techniques while handling the specific constraints of each variation.",
+    "url": "https://www.hellointerview.com/community/questions/knapsack-binary-profits/cm6jwy3cq00lbui4bm2uxmm9p",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/closed-islands-count/cm5eguhad02z8838ohwfcbu9z",
+    "title": "Leetcode 1254. Number of Closed Islands",
+    "type": "Coding",
+    "description": "Count the number of 4-directionally connected components of 0s in a binary grid that are completely surrounded by 1s (i.e., the component does not touch the grid boundary). This is a flood-fill/DFS-BFS style problem on an up to 100x100 grid.",
+    "url": "https://www.hellointerview.com/community/questions/closed-islands-count/cm5eguhad02z8838ohwfcbu9z",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff, Manager",
+        "reportedUsers": 3,
+        "lastAsked": "Late January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/merge-intervals/cm5eh7nrh04ok838oa0xi845w",
+    "title": "Leetcode 56. Merge Intervals",
+    "type": "Coding",
+    "description": "Given a list of intervals, merge all overlapping (including touching endpoints) intervals and return the minimal set of non-overlapping intervals that cover them. Key pattern: sort by start and sweep/merge adjacent ranges whose starts are <= current end.",
+    "url": "https://www.hellointerview.com/community/questions/merge-intervals/cm5eh7nrh04ok838oa0xi845w",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 12,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/filesystem-size-analysis/cm6k0f724000myis434q1atjv",
+    "title": "File System Size Analysis and Reporting",
+    "type": "Coding",
+    "description": "Implement functionality to analyze and report file system sizes. This includes calculating sizes of individual entities (files/folders), finding the largest files in a directory, and determining the largest folders based on their immediate file contents. The solution should handle large directory structures efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/filesystem-size-analysis/cm6k0f724000myis434q1atjv",
+    "companies": {
+      "Google": {
+        "level": "Intern-Mid-level",
+        "reportedUsers": 4,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/file-system-design/cm5eguhab02gq838obxubceit",
+    "title": "Leetcode 588. Design In-Memory File System",
+    "type": "Coding",
+    "description": "Design an in-memory hierarchical file system that supports path parsing and operations like mkdir, ls, addContentToFile (append/create), and readContentFromFile, requiring you to model directories vs files and maintain file contents. The core challenge is choosing an efficient tree/trie structure to handle traversal, creation, and listing (often lexicographically) while correctly distinguishing files from directories.",
+    "url": "https://www.hellointerview.com/community/questions/file-system-design/cm5eguhab02gq838obxubceit",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/parse-lisp-expression/cm5eguhac02ku838o1xk0c1qq",
+    "title": "Leetcode 736. Parse Lisp Expression",
+    "type": "Coding",
+    "description": "Evaluate a Lisp-like expression string containing integers, variable references, and nested (let / add / mult) forms. The core challenge is parsing the nested syntax and maintaining lexical scoping so let bindings (which may shadow outer variables) are applied correctly while computing the final integer result.",
+    "url": "https://www.hellointerview.com/community/questions/parse-lisp-expression/cm5eguhac02ku838o1xk0c1qq",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/cat-mouse-game/cm5eguhac02pr838o7h4i703f",
+    "title": "Leetcode 913. Cat and Mouse",
+    "type": "Coding",
+    "description": "Two players alternate moves along edges of an undirected graph: the mouse starts at 1, the cat at 2 (cat cannot enter node 0), and the game ends if the mouse reaches hole 0 (mouse wins), the cat lands on the mouse (cat wins), or a position repeats (draw). Determine which of the three outcomes occurs under optimal play — essentially resolving a finite game-state graph (mouse, cat, turn) with cycles/draws via retrograde analysis/BFS.",
+    "url": "https://www.hellointerview.com/community/questions/cat-mouse-game/cm5eguhac02pr838o7h4i703f",
+    "companies": {
+      "Google": {
+        "level": "Mid-level, Staff",
+        "reportedUsers": 2,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/count-islands-binary-trees/cm6jzrva4000gyis4tbslkc0q",
+    "title": "Count Islands in Binary Trees",
+    "type": "Coding",
+    "description": "Given a binary tree where nodes have values (typically 0 or 1), analyze the 'islands' (connected components of similar values) within the tree. Tasks include counting the total number of islands, identifying unique island types based on their structure and size, and analyzing different patterns of island formations. An island is defined as a connected group of nodes with the same value.",
+    "url": "https://www.hellointerview.com/community/questions/count-islands-binary-trees/cm6jzrva4000gyis4tbslkc0q",
+    "companies": {
+      "Google": {
+        "level": "Intern, Mid-level",
+        "reportedUsers": 9,
+        "lastAsked": "Early December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/meeting-rooms-iii/cm5eguhah03v4838o6lf58qge",
+    "title": "Leetcode 2402. Meeting Rooms III",
+    "type": "Coding",
+    "description": "Assign each meeting (with unique start times) to the lowest-numbered available room or delay it (keeping its duration and prioritizing earlier original start times) until a room frees, and return the index of the room that hosted the most meetings. The core challenge is simulating this scheduling efficiently using priority queues to track free room indices and next-free times while counting assignments.",
+    "url": "https://www.hellointerview.com/community/questions/meeting-rooms-iii/cm5eguhah03v4838o6lf58qge",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/minimum-knight-moves/cm5eguhad02xn838o2q3dvi00",
+    "title": "Leetcode 1197. Minimum Knight Moves",
+    "type": "Coding",
+    "description": "Given target coordinates (x, y), find the minimum number of knight moves required to reach that square from (0,0) on an infinite chessboard. This is a shortest-path problem on an implicit unweighted grid graph (solveable with BFS/bi‑directional BFS or A*), often simplified by exploiting symmetry to the first quadrant.",
+    "url": "https://www.hellointerview.com/community/questions/minimum-knight-moves/cm5eguhad02xn838o2q3dvi00",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/flood-fill-733/cm5eguhac02kr838olwvfh9me",
+    "title": "Leetcode 733. Flood Fill",
+    "type": "Coding",
+    "description": "Given an m×n grid and a starting pixel (sr, sc), repaint all 4-directionally connected cells that have the same color as the starting pixel to the new color and return the updated image. If the new color equals the starting pixel's original color, leave the image unchanged.",
+    "url": "https://www.hellointerview.com/community/questions/flood-fill-733/cm5eguhac02kr838olwvfh9me",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/design-search-autocomplete-system/67257ab0-683b-481d-bfd2-f7e63258056e",
+    "title": "Leetcode 642. Design Search Autocomplete System",
+    "type": "Coding",
+    "description": "Design an online autocomplete system that processes characters one-by-one, returning the top 3 historically most frequent sentences that match the current prefix (ranked by frequency, then lexicographically), and inserts new sentences when the special character '#' is entered. The core challenge is supporting fast prefix queries and incremental updates over sentence frequencies, typically requiring a prefix-indexed structure (e.g., trie) or efficient top-k maintenance per prefix.",
+    "url": "https://www.hellointerview.com/community/questions/design-search-autocomplete-system/67257ab0-683b-481d-bfd2-f7e63258056e",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/two-sum-sorted/cm5eh7nrh04rn838oj2kq0k1k",
+    "title": "Leetcode 167. Two Sum II - Input Array Is Sorted",
+    "type": "Coding",
+    "description": "Given a sorted (non-decreasing) 1-indexed array, find two distinct elements whose sum equals a target and return their 1-based indices. Because the array is sorted and there is exactly one solution, this is typically solved in constant extra space using a two-pointer scan from both ends.",
+    "url": "https://www.hellointerview.com/community/questions/two-sum-sorted/cm5eh7nrh04rn838oj2kq0k1k",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/alien-dictionary/cm5eh7nrh04uh838o2u70bl2w",
+    "title": "Leetcode 269. Alien Dictionary",
+    "type": "Coding",
+    "description": "Given a sorted list of words in an unknown alphabet, infer the relative ordering of characters by deriving precedence constraints between first differing letters, then produce a valid topological ordering of the resulting directed graph or detect that no valid order exists (cycle or invalid prefix).",
+    "url": "https://www.hellointerview.com/community/questions/alien-dictionary/cm5eh7nrh04uh838o2u70bl2w",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 2,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/leetcode-212-word-search/cm5eh7nrh04sw838o1tr5hk57",
+    "title": "Leetcode 212. Word Search II",
+    "type": "Coding",
+    "description": "Given an m×n letter grid and a list of words, find all words that can be formed by sequentially adjacent (horizontal/vertical) non-repeating cells. The core challenge is efficiently searching many candidate words on the board using DFS/backtracking with prefix pruning (e.g., a Trie) to handle up to 12×12 boards and tens of thousands of words.",
+    "url": "https://www.hellointerview.com/community/questions/leetcode-212-word-search/cm5eh7nrh04sw838o1tr5hk57",
+    "companies": {
+      "Google": {
+        "level": "Intern, Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/max-min-path/cm5eguhad02v0838oji4e95ib",
+    "title": "Leetcode 1102. Path With Maximum Minimum Value",
+    "type": "Coding",
+    "description": "Given an integer grid where you can move 4-directionally from the top-left to the bottom-right, find a path that maximizes the minimum cell value along the path and return that maximized minimum; this is a maximin path problem typically solved with reachability checks (binary search + BFS/DFS) or a greedy max-heap/Dijkstra-style traversal.",
+    "url": "https://www.hellointerview.com/community/questions/max-min-path/cm5eguhad02v0838oji4e95ib",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/increasing-subarray-detection/cm5eguhaj04lg838o47btdwpe",
+    "title": "Leetcode 3350. Adjacent Increasing Subarrays Detection II",
+    "type": "Coding",
+    "description": "Find the largest integer k such that the array contains two adjacent length-k contiguous subarrays (one immediately following the other) that are both strictly increasing. With n up to 2·10^5, this is solved by leveraging lengths of maximal increasing runs (or binary-search over k with linear feasibility checks) rather than brute force.",
+    "url": "https://www.hellointerview.com/community/questions/increasing-subarray-detection/cm5eguhaj04lg838o47btdwpe",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late July, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/minimum-moves-box/cm5eguhad02zh838oa4lbcq1w",
+    "title": "Leetcode 1263. Minimum Moves to Move a Box to Their Target Location",
+    "type": "Coding",
+    "description": "Given a grid with one player S, one box B, and one target T, find the minimum number of pushes (player moving into the box to move it one cell) to get B to T, where the player can walk on empty cells but cannot pass through the box. This is a shortest-path search in the state space of (box position, player position), requiring checks of player reachability to valid push positions; return -1 if unreachable.",
+    "url": "https://www.hellointerview.com/community/questions/minimum-moves-box/cm5eguhad02zh838oa4lbcq1w",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Late June, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/traffic-light-intersection/cm5eguhae02zx838oeshehcvt",
+    "title": "Leetcode 1279. Traffic Light Controlled Intersection",
+    "type": "Coding",
+    "description": "Given arrival times/orders of cars and a traffic light that cycles through states, simulate the intersection to determine which cars can pass (and when) under the light's timing constraints. This is an easy event-driven simulation/queueing problem that tests correct handling of timing, ordering, and light state transitions.",
+    "url": "https://www.hellointerview.com/community/questions/traffic-light-intersection/cm5eguhae02zx838oeshehcvt",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/stack-increment/cm5eguhae032r838owfplgsi3",
+    "title": "Leetcode 1381. Design a Stack With Increment Operation",
+    "type": "Coding",
+    "description": "Implement a bounded stack (maxSize) supporting push, pop (returning -1 if empty), and increment(k, val) which adds val to the bottom k elements; the core challenge is applying these bottom-k increments efficiently (avoiding O(k) per increment) using lazy/differential bookkeeping so operations are O(1).",
+    "url": "https://www.hellointerview.com/community/questions/stack-increment/cm5eguhae032r838owfplgsi3",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/number-unequal-triplets/cm5eguhah03x5838orhzbxjqw",
+    "title": "Leetcode 2475. Number of Unequal Triplets in Array",
+    "type": "Coding",
+    "description": "Count the number of index triplets (i<j<k) in an array whose three values are pairwise distinct. With n ≤ 100 this reduces to combinatorially counting distinct-value triples (e.g., via frequency counts) rather than heavy algorithms.",
+    "url": "https://www.hellointerview.com/community/questions/number-unequal-triplets/cm5eguhah03x5838orhzbxjqw",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 16,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/kth-smallest-bst/cm5eh7nrh04te838oog2p509p",
+    "title": "Leetcode 230. Kth Smallest Element in a BST",
+    "type": "Coding",
+    "description": "Return the k-th smallest value (1-indexed) in a BST — exploit that an in-order traversal yields values in sorted order and pick the k-th visited node. For frequent updates/queries, augment the BST with subtree sizes (an order-statistic tree) to support O(log n) queries and updates.",
+    "url": "https://www.hellointerview.com/community/questions/kth-smallest-bst/cm5eh7nrh04te838oog2p509p",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early February, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/nodes-value-one/cm5eguhah03wb838o5od801hg",
+    "title": "Leetcode 2445. Number of Nodes With Value One",
+    "type": "Coding",
+    "description": "Given a tree (or graph) whose nodes are labeled 0 or 1 and a set of rules/operations that change node values based on ancestors or path flips, determine how many nodes end up with value 1. This typically requires a DFS/BFS that carries a cumulative flip/XOR state (or other propagated state) and careful bookkeeping to apply updates efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/nodes-value-one/cm5eguhah03wb838o5od801hg",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/remove-bad-pairs/cm6jw3mad004ddar9au16elts",
+    "title": "Remove Bad Pairs from a String",
+    "type": "Coding",
+    "description": "Remove bad pairs from a string. A bad pair is defined as adjacent characters that are the same letter in different cases (e.g., 'xX'). Implement a solution to remove these bad pairs.",
+    "url": "https://www.hellointerview.com/community/questions/remove-bad-pairs/cm6jw3mad004ddar9au16elts",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/moving-average-stream/cm5eh7nri04wm838ohohaia3c",
+    "title": "Leetcode 346. Moving Average from Data Stream",
+    "type": "Coding",
+    "description": "Design a data structure that, given a continuous stream of numbers and a fixed window size k, returns the moving average of the last k values each time a new value arrives. The challenge is to maintain the sliding window efficiently (constant-time update and query) while using only O(k) space.",
+    "url": "https://www.hellointerview.com/community/questions/moving-average-stream/cm5eh7nri04wm838ohohaia3c",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/burst-balloons/cm5eh7nrh04vo838okqn1o6mb",
+    "title": "Leetcode 312. Burst Balloons",
+    "type": "Coding",
+    "description": "Choose an order to remove elements from an array where bursting index i yields coins equal to nums[i-1]*nums[i]*nums[i+1] (treat out-of-bounds as 1), and return the maximum total coins. The reward depends on dynamic neighbors, so the core challenge is exploiting optimal substructure (interval/segment DP over subarrays) to search the best bursting sequence for n up to 300.",
+    "url": "https://www.hellointerview.com/community/questions/burst-balloons/cm5eh7nrh04vo838okqn1o6mb",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/substring-concatenation-words/cm5eh7nrh04nu838o97mif3bb",
+    "title": "Leetcode 30. Substring with Concatenation of All Words",
+    "type": "Coding",
+    "description": "Given a string s and an array of equal-length words, find all starting indices of substrings in s that are a concatenation of each word exactly once in any order. The core challenge is matching a multiset of fixed-length tokens efficiently (typically with a sliding-window and frequency map) over s.",
+    "url": "https://www.hellointerview.com/community/questions/substring-concatenation-words/cm5eh7nrh04nu838o97mif3bb",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/interns-flats-greedy/cm6jw06jt0007dar91f78lua0",
+    "title": "Problem About Interns and Flats Using a Greedy Approach",
+    "type": "Coding",
+    "description": "This problem involves assigning interns to flats using a greedy algorithm. The goal is to optimize the allocation based on certain criteria, such as minimizing the distance between interns and their assigned flats or maximizing the satisfaction of the interns with their assignments. The problem requires a strategic approach to ensure the best possible outcome given the constraints.",
+    "url": "https://www.hellointerview.com/community/questions/interns-flats-greedy/cm6jw06jt0007dar91f78lua0",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 2,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/distinct-difference-array/cm5eguhah042k838onxx6sl6i",
+    "title": "Leetcode 2670. Find the Distinct Difference Array",
+    "type": "Coding",
+    "description": "Given an array nums, return diff where diff[i] = (number of distinct elements in nums[0..i]) minus (number of distinct elements in nums[i+1..n-1]). This is solved by tracking distinct counts for prefixes and suffixes (e.g., with sets) to compute all differences efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/distinct-difference-array/cm5eguhah042k838onxx6sl6i",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/mk-average/cm5eguhaf03f3838oucezph3i",
+    "title": "Leetcode 1825. Finding MK Average",
+    "type": "Coding",
+    "description": "Maintain a sliding window of the last m stream elements and, after discarding the smallest k and largest k values, return the integer average of the remaining elements (return -1 if fewer than m elements). The core challenge is to support addElement and calculateMKAverage efficiently by keeping ordered partitions and their sums (e.g., via balanced BSTs/multisets or heaps with counts).",
+    "url": "https://www.hellointerview.com/community/questions/mk-average/cm5eguhaf03f3838oucezph3i",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/leetcode-pour-water/cm5eguhac02ld838ohbze23r0",
+    "title": "Leetcode 755. Pour Water",
+    "type": "Coding",
+    "description": "Given an array of terrain heights, V droplets are poured one by one at index K and each droplet greedily rolls to the leftmost lowest reachable position (otherwise to the right) before settling; return the final heights after all drops. The core challenge is correctly simulating these local greedy flows (left-then-right scan) and updating heights efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/leetcode-pour-water/cm5eguhac02ld838ohbze23r0",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 4,
+        "lastAsked": "Mid December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/reconstruct-itinerary/cm5eh7nrh04w8838oqbbhjhi0",
+    "title": "Leetcode 332. Reconstruct Itinerary",
+    "type": "Coding",
+    "description": "Given a list of directed flight tickets, reconstruct an itinerary starting at \"JFK\" that uses every ticket exactly once and, among all valid itineraries, returns the lexicographically smallest sequence. The core challenge is finding an Eulerian path in a directed graph while prioritizing lexicographically smaller outgoing destinations.",
+    "url": "https://www.hellointerview.com/community/questions/reconstruct-itinerary/cm5eh7nrh04w8838oqbbhjhi0",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/playlist-shuffle/cm6jwvh80005vui4b4epro213",
+    "title": "Song Shuffler",
+    "type": "Coding",
+    "description": "Design an algorithm to shuffle a playlist of songs such that each song is played once in a random order. The algorithm should ensure that the shuffle is unbiased and each permutation of the playlist is equally likely.",
+    "url": "https://www.hellointerview.com/community/questions/playlist-shuffle/cm6jwvh80005vui4b4epro213",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/minimum-cost-cooking-time/cm5eguhag03og838o1xo4leeg",
+    "title": "Leetcode 2162. Minimum Cost to Set Cooking Time",
+    "type": "Coding",
+    "description": "Given start digit, moveCost, pushCost and targetSeconds, find the minimum fatigue to enter up to four digits (zero-padded to MMSS) whose minutes*60 + seconds = targetSeconds, where each digit press costs pushCost and moving the finger between different digits costs moveCost (starting at startAt). The problem reduces to checking all valid minute/second splits that sum to targetSeconds and computing the minimal move+push cost for their digit sequences.",
+    "url": "https://www.hellointerview.com/community/questions/minimum-cost-cooking-time/cm5eguhag03og838o1xo4leeg",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/max-points-line/cm5eh7nrh04r5838o6xrbsdjd",
+    "title": "Leetcode 149. Max Points on a Line",
+    "type": "Coding",
+    "description": "Given up to 300 unique 2D points, return the maximum number that lie on the same straight line. The core challenge is grouping points by slope from each pivot (handling vertical lines and slope precision) to compute the answer in O(n^2) time using normalized slope keys.",
+    "url": "https://www.hellointerview.com/community/questions/max-points-line/cm5eh7nrh04r5838o6xrbsdjd",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/separate-squares-i/55ab7839-b63b-494b-b842-d3bf74dde1c9",
+    "title": "Leetcode 3453. Separate Squares I",
+    "type": "Coding",
+    "description": "Given axis-aligned squares (xi, yi, li) whose overlaps count multiply, find the smallest horizontal line y such that the sum of areas of all squares above y equals the sum below. The core approach is to exploit that the area difference is monotonic in y and binary-search the y-coordinate, computing each square's above/below contribution by its vertical overlap.",
+    "url": "https://www.hellointerview.com/community/questions/separate-squares-i/55ab7839-b63b-494b-b842-d3bf74dde1c9",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/graph-binary-tree/cm6jwv6ar0033ui4bpqke1e4w",
+    "title": "Convert Graph to Binary Tree with Alternating Colors",
+    "type": "Coding",
+    "description": "Given an undirected connected acyclic graph where each node has at most 3 edges, and nodes are colored (either Black/White or Red/Black), find a root vertex such that when the graph is suspended from that vertex, it becomes a binary tree where all nodes at the same level have the same color, and adjacent levels have different colors. Return -1 if no such vertex exists.",
+    "url": "https://www.hellointerview.com/community/questions/graph-binary-tree/cm6jwv6ar0033ui4bpqke1e4w",
+    "companies": {
+      "Google": {
+        "level": "Intern, Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/colored-tree-root/cm6jwv68v002zui4bm2qok4b6",
+    "title": "Find Root Node in Colored Tree with Pattern Constraints",
+    "type": "Coding",
+    "description": "Given an undirected connected acyclic graph where each node has at most 3 edges and nodes are colored (Red/Black/White or similar color patterns), find a root node such that when the graph is viewed as a binary tree from that root, it satisfies specific color pattern constraints across levels (e.g., RBWRBW repeating pattern or alternating colors). Return -1 if no valid root exists.",
+    "url": "https://www.hellointerview.com/community/questions/colored-tree-root/cm6jwv68v002zui4bm2qok4b6",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/evaluate-bracket-pairs/cm5eguhaf03el838orjk694tw",
+    "title": "Leetcode 1807. Evaluate the Bracket Pairs of a String",
+    "type": "Coding",
+    "description": "Given a string containing non-nested bracketed keys and a list of key→value pairs, replace each \"(key)\" with its corresponding value or \"?\" if the key is unknown. The core challenge is to build a lookup map and perform an efficient single-pass parse (linear time) to reconstruct the resulting string for inputs up to 10^5 characters.",
+    "url": "https://www.hellointerview.com/community/questions/evaluate-bracket-pairs/cm5eguhaf03el838orjk694tw",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/android-unlock-patterns/cm5eh7nri04wr838o909fw8eh",
+    "title": "Leetcode 351. Android Unlock Patterns",
+    "type": "Coding",
+    "description": "Count the number of valid Android lock patterns on a 3x3 grid with length between m and n, where a move that jumps over a key is allowed only if the intermediate key has already been used. This requires combinatorial search with constraint checking (commonly solved via DFS/backtracking and symmetry-based pruning).",
+    "url": "https://www.hellointerview.com/community/questions/android-unlock-patterns/cm5eh7nri04wr838o909fw8eh",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/array-hopping-score/cm5eguhaj04hf838os0d60q68",
+    "title": "Leetcode 3205. Maximum Array Hopping Score I",
+    "type": "Coding",
+    "description": "Given an integer array, compute the maximum score obtainable by starting at index 0 and repeatedly hopping forward under a constraint (e.g., a maximum jump distance), where your score is the sum of visited elements; this reduces to DP with dp[i] = arr[i] + max(dp[j]) over reachable j and is typically solved with a sliding-window maximum structure (monotonic deque or max-heap) for efficiency.",
+    "url": "https://www.hellointerview.com/community/questions/array-hopping-score/cm5eguhaj04hf838os0d60q68",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/change-root-binary-tree/cm5eguhaf03ao838o9lw323kn",
+    "title": "Leetcode 1666. Change the Root of a Binary Tree",
+    "type": "Coding",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/change-root-binary-tree/cm5eguhaf03ao838o9lw323kn",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/least-unique-integers/cm5eguhae035j838oyf44h695",
+    "title": "Leetcode 1481. Least Number of Unique Integers after K Removals",
+    "type": "Coding",
+    "description": "Remove exactly k elements from an integer array to minimize the number of distinct values remaining. This reduces to counting element frequencies and greedily eliminating values with the smallest counts until k is used.",
+    "url": "https://www.hellointerview.com/community/questions/least-unique-integers/cm5eguhae035j838oyf44h695",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/substring-map-backtracking/cm6jwxvny00juui4b1f03avuw",
+    "title": "String Template Substitution with Variable Replacement",
+    "type": "Coding",
+    "description": "Implement a string substitution system that replaces placeholders or parts of a string with corresponding values from a given mapping. The solution should handle complex substitution scenarios including nested substitutions where replacement values may contain additional placeholders that need further resolution. Consider using backtracking or iterative approaches to handle all substitution cases correctly.",
+    "url": "https://www.hellointerview.com/community/questions/substring-map-backtracking/cm6jwxvny00juui4b1f03avuw",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Early January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/pivot-index/cm5eguhac02ki838ogxhczapt",
+    "title": "Leetcode 724. Find Pivot Index",
+    "type": "Coding",
+    "description": "Find the leftmost index in an integer array where the sum of elements strictly to its left equals the sum strictly to its right, or return -1 if none exists. This is a prefix/suffix-sum problem (solvable in O(n) time by comparing a running left sum to the total).",
+    "url": "https://www.hellointerview.com/community/questions/pivot-index/cm5eguhac02ki838ogxhczapt",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/word-search-board/cm5eh7nrh04p7838oqkjadex3",
+    "title": "Leetcode 79. Word Search",
+    "type": "Coding",
+    "description": "Determine whether a target word can be formed by a path of horizontally or vertically adjacent cells in an m×n letter grid without reusing a cell. The core challenge is performing DFS/backtracking on the grid with visited tracking (and optional pruning) to efficiently explore valid paths.",
+    "url": "https://www.hellointerview.com/community/questions/word-search-board/cm5eh7nrh04p7838oqkjadex3",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/repeated-dna-sequences/cm5eh7nrh04s7838o0yeutvb3",
+    "title": "Leetcode 187. Repeated DNA Sequences",
+    "type": "Coding",
+    "description": "Find all distinct 10-letter substrings of a DNA string that occur more than once. This is typically solved by scanning with a sliding window and detecting repeats efficiently using hashing or compact 2-bit encoding to handle lengths up to 10^5.",
+    "url": "https://www.hellointerview.com/community/questions/repeated-dna-sequences/cm5eh7nrh04s7838o0yeutvb3",
+    "companies": {
+      "Google": {
+        "level": "Principal",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/text-editor-design/cm5eguhag03s6838omwgkgle3",
+    "title": "Leetcode 2296. Design a Text Editor",
+    "type": "Coding",
+    "description": "Implement a text editor with a movable cursor that supports inserting text at the cursor, deleting up to k characters to the left (backspace), moving the cursor left/right by k, and returning up to the last 10 characters to the left of the cursor; design a data structure to maintain and update the cursor position and surrounding text efficiently.",
+    "url": "https://www.hellointerview.com/community/questions/text-editor-design/cm5eguhag03s6838omwgkgle3",
+    "companies": {
+      "Google": {
+        "level": "Principal",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/count-good-triplets/cm5eguhae0370838ohe83yfdd",
+    "title": "Leetcode 1534. Count Good Triplets",
+    "type": "Coding",
+    "description": "Count the number of index triplets (i < j < k) in arr such that the pairwise absolute differences satisfy |arr[i]-arr[j]| ≤ a, |arr[j]-arr[k]| ≤ b, and |arr[i]-arr[k]| ≤ c. With arr.length ≤ 100, the constraints make a direct check over all triplets efficient.",
+    "url": "https://www.hellointerview.com/community/questions/count-good-triplets/cm5eguhae0370838ohe83yfdd",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/employee-free-time/cm5eguhac02lh838otstq4n40",
+    "title": "Leetcode 759. Employee Free Time",
+    "type": "Coding",
+    "description": "Given each employee's list of working intervals, compute the finite time intervals when every employee is free by merging/combining overlapping busy intervals across multiple sorted lists and reporting the gaps; this typically uses interval-merge or sweep-line (heap) techniques to handle overlaps across employees.",
+    "url": "https://www.hellointerview.com/community/questions/employee-free-time/cm5eguhac02lh838otstq4n40",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/read-n-characters-read4/cm5eh7nrh04rd838oagyvu2zw",
+    "title": "Leetcode 157. Read N Characters Given Read4",
+    "type": "Coding",
+    "description": "Given an API read4 that reads up to 4 characters from a file into a temporary buffer, implement read(buf, n) to copy up to n characters into the destination buffer using repeated read4 calls, correctly handling partial reads at EOF and returning the actual number of characters read.",
+    "url": "https://www.hellointerview.com/community/questions/read-n-characters-read4/cm5eh7nrh04rd838oagyvu2zw",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/binary-tree-leaves/cm5eh7nri04x6838o1f4f8f5b",
+    "title": "Leetcode 366. Find Leaves of Binary Tree",
+    "type": "Coding",
+    "description": "Given a binary tree, repeatedly remove all current leaf nodes and record their values until the tree is empty, returning a list of lists where each inner list contains the leaves removed in that round. The key challenge is grouping nodes by their removal round (i.e., their height from the bottom), which can be computed via a post-order traversal.",
+    "url": "https://www.hellointerview.com/community/questions/binary-tree-leaves/cm5eh7nri04x6838o1f4f8f5b",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/recipes-supplies/cm5eguhag03n5838oxu478f1d",
+    "title": "Leetcode 2115. Find All Possible Recipes from Given Supplies",
+    "type": "Coding",
+    "description": "Given recipes whose ingredients may include other recipes and an initial set of supplies, determine which recipes can be produced; the core challenge is dependency resolution on a directed graph (topological ordering or DFS) while handling cycles and using supplies as base nodes.",
+    "url": "https://www.hellointerview.com/community/questions/recipes-supplies/cm5eguhag03n5838oxu478f1d",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/valid-parentheses/cm5eh7nrh04nk838on7tqow3r",
+    "title": "Leetcode 20. Valid Parentheses",
+    "type": "Coding",
+    "description": "Check whether a string of parentheses/brackets is valid by ensuring every closing bracket matches the most recent unmatched opening bracket and the types and nesting order are correct. This is typically solved by tracking openings (e.g., with a stack) and verifying matching pairs.",
+    "url": "https://www.hellointerview.com/community/questions/valid-parentheses/cm5eh7nrh04nk838on7tqow3r",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/most-recently-used-queue/cm5eguhaf03d6838oe6bqla6h",
+    "title": "Leetcode 1756. Design Most Recently Used Queue",
+    "type": "Coding",
+    "description": "Design a queue-like data structure that maintains items ordered by most-recent access, supporting operations to enqueue, dequeue/remove, and \"touch\" an item to move it to the most-recent position. The challenge is to keep these updates and queries efficient (ideally O(1)) while correctly handling duplicates or capacity constraints if specified.",
+    "url": "https://www.hellointerview.com/community/questions/most-recently-used-queue/cm5eguhaf03d6838oe6bqla6h",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/safest-path-grid/cm5eguhai046i838o6759xdrx",
+    "title": "Leetcode 2812. Find the Safest Path in a Grid",
+    "type": "Coding",
+    "description": "Compute each cell's Manhattan distance to the nearest thief, then find a path from (0,0) to (n-1,n-1) that maximizes the minimum of those distances along the path — a max‑min (bottleneck) path problem on a grid.",
+    "url": "https://www.hellointerview.com/community/questions/safest-path-grid/cm5eguhai046i838o6759xdrx",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/leetcode-decode-string/cm5eh7nri04xy838oo3y3ra9b",
+    "title": "Leetcode 394. Decode String",
+    "type": "Coding",
+    "description": "Decode a string containing nested repeat patterns of the form k[encoded_string], expanding each bracketed segment k times (k may be multi-digit) possibly with multiple nesting levels. Core challenge: parse and evaluate the nested structure correctly and efficiently (e.g., via stack or recursion) to produce the fully decoded string.",
+    "url": "https://www.hellointerview.com/community/questions/leetcode-decode-string/cm5eh7nri04xy838oo3y3ra9b",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/count-complete-tree-nodes/cm5eh7nrh04t6838oiumjgavv",
+    "title": "Leetcode 222. Count Complete Tree Nodes",
+    "type": "Coding",
+    "description": "Given a complete binary tree, return its node count in less than O(n) time by exploiting the tree’s completeness (all full levels except a left-filled last level) to compute subtree heights and identify/count perfect subtrees without visiting every node.",
+    "url": "https://www.hellointerview.com/community/questions/count-complete-tree-nodes/cm5eh7nrh04t6838oiumjgavv",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/sentence-similarity-2/cm5eguhac02kv838o77sz29i5",
+    "title": "Leetcode 737. Sentence Similarity II",
+    "type": "Coding",
+    "description": "Given two equal-length word arrays and a list of similar word pairs where similarity is transitive, determine whether each pair of words at the same index are equivalent (identical or connected through a chain of similarities); this is typically solved by building connectivity (union-find or graph traversal) among words.",
+    "url": "https://www.hellointerview.com/community/questions/sentence-similarity-2/cm5eguhac02kv838o77sz29i5",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/shortest-common-supersequence/cm5eguhad02uq838o25eqv0mb",
+    "title": "Leetcode 1092. Shortest Common Supersequence",
+    "type": "Coding",
+    "description": "Find the shortest string that contains both input strings as subsequences — essentially merge them minimizing length by maximizing their overlap. This is solved by dynamic programming to compute the longest common subsequence and reconstruct the shortest common supersequence (O(n*m) time, where n and m ≤ 1000).",
+    "url": "https://www.hellointerview.com/community/questions/shortest-common-supersequence/cm5eguhad02uq838o25eqv0mb",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/longest-increasing-subsequence/cm5eguhah03v9838oz609h5ji",
+    "title": "Leetcode 2407. Longest Increasing Subsequence II",
+    "type": "Coding",
+    "description": "Find the length of the longest strictly increasing subsequence of nums such that each adjacent difference is ≤ k. With n up to 1e5 and values bounded, this reduces to DP where dp[x] = 1 + max dp[y] for y in [x-k, x-1], requiring a range-maximum data structure (segment tree / Fenwick) for efficiency.",
+    "url": "https://www.hellointerview.com/community/questions/longest-increasing-subsequence/cm5eguhah03v9838oz609h5ji",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/rectangle-area/cm5eh7nrh04t7838o0xfc0y2q",
+    "title": "Leetcode 223. Rectangle Area",
+    "type": "Coding",
+    "description": "Given coordinates of two axis-aligned rectangles, compute the total area covered by both. The key is to sum their individual areas and subtract the area of their intersection (zero if they don't overlap).",
+    "url": "https://www.hellointerview.com/community/questions/rectangle-area/cm5eh7nrh04t7838o0xfc0y2q",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/partition-subset-sum/cm5eguhab02by838oo9ii95gh",
+    "title": "Leetcode 416. Partition Equal Subset Sum",
+    "type": "Coding",
+    "description": "Determine whether the array can be partitioned into two subsets with equal sum — equivalently, check if there exists a subset that sums to half the total. This is a classic 0/1 subset-sum / knapsack problem solvable with DP or bitset techniques since total sum ≤ 200*100.",
+    "url": "https://www.hellointerview.com/community/questions/partition-subset-sum/cm5eguhab02by838oo9ii95gh",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2024"
+      }
+    }
+  }
+]

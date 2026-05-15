@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 2258. Escape the Spreading Fire",
+  "shortDescription": "Given a grid with grass, fire, and impassable walls, determine the maximum minutes you can wait at (0,0) before starting to move so that you can still reach (m-1,n-1) safely (return -1 if impossible, 1e9 if always safe). The core challenge is reasoning about two competing time-evolving spreads — multi-source fire propagation vs. your timed path — to decide feasibility for different start delays.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 2258. Escape the Spreading Fire\n\nGiven a grid with grass, fire, and impassable walls, determine the maximum minutes you can wait at (0,0) before starting to move so that you can still reach (m-1,n-1) safely (return -1 if impossible, 1e9 if always safe). The core challenge is reasoning about two competing time-evolving spreads — multi-source fire propagation vs. your timed path — to decide feasibility for different start delays.\n\nAsked at:\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nMid May, 2026\n\nGoogle\n\nSenior\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nMid May, 2026\n\nGoogle\n\nSenior\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 2258. Escape the Spreading Fire",
+    "slug": "/community/questions/escape-spreading-fire/cm5eguhag03r4838oxwinb1f1",
+    "url": "https://www.hellointerview.com/community/questions/escape-spreading-fire/cm5eguhag03r4838oxwinb1f1",
+    "type": "Coding",
+    "level": "Senior",
+    "reportedUsers": 1,
+    "lastAsked": "Mid May, 2026",
+    "description": "Given a grid with grass, fire, and impassable walls, determine the maximum minutes you can wait at (0,0) before starting to move so that you can still reach (m-1,n-1) safely (return -1 if impossible, 1e9 if always safe). The core challenge is reasoning about two competing time-evolving spreads — multi-source fire propagation vs. your timed path — to decide feasibility for different start delays."
+  }
+}

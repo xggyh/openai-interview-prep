@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 230. Kth Smallest Element in a BST · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 230. Kth Smallest Element in a BST</div>
+  <h1>Leetcode 230. Kth Smallest Element in a BST</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Junior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/kth-smallest-bst/cm5eh7nrh04te838oog2p509p" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior · 📋 1 · 🕒 Early February, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Return the k-th smallest value (1-indexed) in a BST — exploit that an in-order traversal yields values in sorted order and pick the k-th visited node. For frequent updates/queries, augment the BST with subtree sizes (an order-statistic tree) to support O(log n) queries and updates.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 230 Kth Smallest Element in a BST</strong>：BST 中第 k 小元素。</p>
+<h3>解法</h3>
+<p><strong>中序遍历是升序</strong>。遍历到第 k 个时返回。</p>
+<h3>Python 实现（迭代中序）</h3>
+<pre class="language-python"><code class="language-python">from typing import Optional
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val; self.left = left; self.right = right
+
+class Solution:
+    def kthSmallest(self, root: Optional[TreeNode], k: int) -&gt; int:
+        stack = []
+        cur = root
+        while cur or stack:
+            while cur:
+                stack.append(cur)
+                cur = cur.left
+            cur = stack.pop()
+            k -= 1
+            if k == 0:
+                return cur.val
+            cur = cur.right</code></pre>
+<h3>复杂度</h3>
+<ul><li>时间：<strong>O(H + k)</strong>，H = 树高（一开始要走到最左 = H 步）</li><li>空间：O(H) 栈</li></ul>
+<p>最坏（skewed tree）H = O(N)。Balanced 时 O(log N + k)。</p>
+<h3>递归版（更短但易写错）</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def kthSmallest(self, root, k):
+        self.k = k
+        self.res = None
+        def inorder(node):
+            if not node or self.res is not None: return
+            inorder(node.left)
+            self.k -= 1
+            if self.k == 0:
+                self.res = node.val
+                return
+            inorder(node.right)
+        inorder(root)
+        return self.res</code></pre>
+<h3>Follow-up：BST 频繁修改 + 频繁 query kth</h3>
+<p>每次 O(H + k) 不够。在每个 node 多维护 <code>size = 左子树 + 右子树 + 1</code>：</p>
+<pre class="language-python"><code class="language-python">def kthSmallest(root, k):
+    cur = root
+    while cur:
+        left_size = cur.left.size if cur.left else 0
+        if k &lt;= left_size:
+            cur = cur.left
+        elif k == left_size + 1:
+            return cur.val
+        else:
+            k -= left_size + 1
+            cur = cur.right</code></pre>
+<p>每次 O(H)。修改时同步 size。这就是 <strong>augmented BST / order-statistic tree</strong>。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 中序变前序/后序 —— 不再升序； ❌ k 从 1 还是 0 开始：题目通常 1-indexed； ❌ k 减到 0 后没 return —— 继续遍历完整树； ❌ 递归版 self.res 不用早停 —— TLE 大树。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>BST + 中序 = 升序遍历。同思路：找 BST 第 k 大（反向中序，先 right 后 left）、BST 验证（中序检查严格单调）、BST 中位数。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"BST 经常变动 (insert/delete)？" → augmented BST 维护 size；"找 [k1, k2] 范围所有元素？" → 修改中序记录 count 之间的；"BST 自平衡？" → AVL / RBT，size 维护逻辑一样；"非 BST 普通树？" → 不能用中序，要 heap-of-k 或 quickselect。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (18 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Google</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Find the kth smallest element in a BST</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmac1dd1s0049ad08o29ajxbs.html">← Design a Chatbot with Multiple Threads</a>
+    <a href="cm5eh7nri04wm838ohohaia3c.html">Leetcode 346. Moving Average from Data Stream →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

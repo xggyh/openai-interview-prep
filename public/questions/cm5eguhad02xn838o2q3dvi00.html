@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leetcode 1197. Minimum Knight Moves · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=ec323064">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Coding / Leetcode 1197. Minimum Knight Moves</div>
+  <h1>Leetcode 1197. Minimum Knight Moves</h1>
+  <div class="header-meta">
+    <span class="tag tag-coding">Coding</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/minimum-knight-moves/cm5eguhad02xn838o2q3dvi00" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior · 📋 3 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Given target coordinates (x, y), find the minimum number of knight moves required to reach that square from (0,0) on an infinite chessboard. This is a shortest-path problem on an implicit unweighted grid graph (solveable with BFS/bi‑directional BFS or A*), often simplified by exploiting symmetry to the first quadrant.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>LC 1197 Minimum Knight Moves</strong>：国际象棋骑士从 <code>(0,0)</code> 出发，每步走 L 形（±2, ±1 或 ±1, ±2）。求到 <code>(x, y)</code> 的最少步数。无限棋盘。</p>
+<p>经典<strong>BFS</strong> + 利用<strong>对称性</strong>优化。</p>
+<h3>解题思路</h3>
+<h4>朴素 BFS</h4>
+<p>8 个方向 BFS，visited set。<code>-300 ≤ x, y ≤ 300</code>，状态空间 ~360k，可解。</p>
+<h4>对称性优化</h4>
+<p>骑士跳跃在 4 象限对称。只考虑 <code>(|x|, |y|)</code>（折叠到第一象限），visited set 只存正数坐标，大幅减少搜索。</p>
+<h3>Python 实现（带对称性）</h3>
+<pre class="language-python"><code class="language-python">from collections import deque
+
+class Solution:
+    def minKnightMoves(self, x: int, y: int) -&gt; int:
+        x, y = abs(x), abs(y)
+        if x == 0 and y == 0:
+            return 0
+        # 8 个 L 移动
+        DIRS = [(2,1),(2,-1),(-2,1),(-2,-1),(1,2),(1,-2),(-1,2),(-1,-2)]
+        q = deque([(0, 0, 0)])
+        seen = {(0, 0)}
+        while q:
+            cx, cy, steps = q.popleft()
+            for dx, dy in DIRS:
+                nx, ny = cx + dx, cy + dy
+                if nx == x and ny == y:
+                    return steps + 1
+                # 折叠到第一象限：只允许 (nx, ny) &gt;= (-2, -2)（防止跨过原点）
+                if nx &lt; -2 or ny &lt; -2:
+                    continue
+                key = (nx, ny)
+                if key not in seen:
+                    seen.add(key)
+                    q.append((nx, ny, steps + 1))</code></pre>
+<p><strong>为什么 -2？</strong> 折叠到 <code>(|x|, |y|)</code> 后，骑士最远跳 2 步会到 -2。允许小负数能让目标在轴上时通过原点附近 detour。完全严格 ≥ 0 会算偏。</p>
+<h3>朴素 BFS（不优化）</h3>
+<pre class="language-python"><code class="language-python">class Solution:
+    def minKnightMoves(self, x: int, y: int) -&gt; int:
+        DIRS = [(2,1),(2,-1),(-2,1),(-2,-1),(1,2),(1,-2),(-1,2),(-1,-2)]
+        target = (x, y)
+        q = deque([(0, 0, 0)])
+        seen = {(0, 0)}
+        while q:
+            cx, cy, s = q.popleft()
+            if (cx, cy) == target:
+                return s
+            for dx, dy in DIRS:
+                nx, ny = cx+dx, cy+dy
+                if (nx, ny) not in seen and -310 &lt;= nx &lt;= 310 and -310 &lt;= ny &lt;= 310:
+                    seen.add((nx, ny))
+                    q.append((nx, ny, s+1))
+        return -1</code></pre>
+<h3>双向 BFS（更快）</h3>
+<p>从 (0,0) 和目标同时 BFS，相遇时返回 step 和。<strong>搜索空间 √2 倍优化</strong>。LC 数据下不必要。</p>
+<h3>公式法（O(1)）</h3>
+<p>骑士到 (x, y) 的最少步数有闭式公式（基于 max(|x|, |y|) 和 (|x|+|y|) 的关系），但<strong>面试不期望背公式</strong>。BFS 是标准答案。</p>
+<h3>复杂度</h3>
+<ul><li>朴素 BFS：O(N²)，N = 坐标范围</li><li>对称性：O((N/2)²) ≈ 4x 加速</li><li>双向 BFS：O(N²/2)</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不限制搜索范围 —— 无限棋盘 BFS 永远跑； ❌ 折叠对称性用严格 <code>nx &gt;= 0, ny &gt;= 0</code> —— 漏掉某些路径； ❌ 8 方向 list 写错（漏 / 写 (1,1)）； ❌ Visited 在 enqueue 时不加 —— 重复入队 TLE； ❌ 用 DFS 而非 BFS —— 不能保证最短。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>单源最短路径 + 无权图 = BFS 必杀。对称性优化是这道题的"亮点"，能在面试上加分。LC 1197 数据范围 ±300 比较温和，朴素 BFS 也过。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"有限棋盘（如 8x8）？" → BFS 加 bounds check；"加障碍？" → BFS 跳过障碍；"求所有最短路径数量？" → BFS 时累加 count；"3D 棋盘？" → 12 个 L 方向。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (5 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Senior</div>
+  <div>slight variant with some locations are not accessible</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2022 · <strong>Google</strong> · Mid-level</div>
+  <div>Find minimum number of moves for a knight to reach a given end point on an infinite chess board with blocked points</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2022 · <strong>Google</strong> · Mid-level</div>
+  <div>Find minimum number of moves for a knight to reach a given end point on an infinite chess board · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Great explanation, thanks for sharing!</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhah03v4838o6lf58qge.html">← Leetcode 2402. Meeting Rooms III</a>
+    <a href="cm5eguhac02kr838olwvfh9me.html">Leetcode 733. Flood Fill →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

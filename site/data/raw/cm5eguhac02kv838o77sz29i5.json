@@ -1,0 +1,18 @@
+{
+  "title": "Leetcode 737. Sentence Similarity II",
+  "shortDescription": "Given two equal-length word arrays and a list of similar word pairs where similarity is transitive, determine whether each pair of words at the same index are equivalent (identical or connected through a chain of similarities); this is typically solved by building connectivity (union-find or graph traversal) among words.",
+  "bodyText": "Limited Time Offer:\nUp to 10% off select mock interviews\n🎉\nYour Dashboard\nLearn\nSystem Design\nML System Design\nLow Level Design\nCode\nBehavioral\nNew\nAI Coding\nNew\nSalary Negotiation\nInterview Guides\nBlog\nPractice\nSystem Design\nLow Level Design\nAI Coding\nBehavioral\nNew\nInterview Coaching\nMock Interviews\n1:1 Mentorship\nCommunity\nInterview Questions\nSuccess Stories\nPeer Design Library\nSystem Design\nLow-Level Design\nNew\nAsk The Community\nInterview Experiences\nDiscord\nRefer a Friend\nw\nwoaidiyia\n0 Recognition\nSearch\n⌘K\nPricing\n\nTutor\n\nAll Questions\nWere You Asked This?\nLeetcode 737. Sentence Similarity II\n\nGiven two equal-length word arrays and a list of similar word pairs where similarity is transitive, determine whether each pair of words at the same index are equivalent (identical or connected through a chain of similarities); this is typically solved by building connectivity (union-find or graph traversal) among words.\n\nAsked at:\n\nGoogle\n\nQuestion Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nSentence Similarity II\n\nComments\nComment\nAnonymous\nPosting as woaidiyia\nQuestions\nMeta SWE Interview Questions\nAmazon SWE Interview Questions\nGoogle SWE Interview Questions\nOpenAI SWE Interview Questions\nEngineering Manager (EM) Interview Questions\nLearn\nLearn System Design\nLearn DSA\nLearn Behavioral\nLearn ML System Design\nLearn Low Level Design\nGuided Practice\nLinks\nFAQ\nPricing\nGift Premium\nHello Interview Premium\nLegal\nTerms and Conditions\nPrivacy Policy\nSecurity\nContact\nAbout Us\nProduct Support\n\n7511 Greenwood Ave North\nUnit #4238 Seattle\nWA 98103\n\n© 2026 Optick Labs Inc. All rights reserved.",
+  "timelineRaw": "Question Timeline\n\nSee when this question was last asked and where, including any notes left by other candidates.\n\nCompany\nCompany\nLevel\n​\nLevel\nRegion\nAll Regions\nRegion\n\nLate December, 2024\n\nGoogle\n\nMid-level\n\nSentence Similarity II\n\n",
+  "commentsRaw": "Comments\nComment\nAnonymous\nPosting as woaidiyia\n",
+  "externalLinks": [],
+  "meta": {
+    "title": "Leetcode 737. Sentence Similarity II",
+    "slug": "/community/questions/sentence-similarity-2/cm5eguhac02kv838o77sz29i5",
+    "url": "https://www.hellointerview.com/community/questions/sentence-similarity-2/cm5eguhac02kv838o77sz29i5",
+    "type": "Coding",
+    "level": "Mid-level",
+    "reportedUsers": 1,
+    "lastAsked": "Late December, 2024",
+    "description": "Given two equal-length word arrays and a list of similar word pairs where similarity is transitive, determine whether each pair of words at the same index are equivalent (identical or connected through a chain of similarities); this is typically solved by building connectivity (union-find or graph traversal) among words."
+  }
+}

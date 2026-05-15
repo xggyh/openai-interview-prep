@@ -1,22 +1,31 @@
-# OpenAI Interview Prep
+# Interview Prep
 
-OpenAI 面试题准备库 —— 44 道真实候选人报告题（来源：hellointerview.com），每题含：
-- 原始英文题面 + 报告人数 + 最近问询时间
-- 中文思路解析（系统设计的方法/架构，Coding 题的详细分析）
+面试题准备库 —— **118 道**真实候选人报告题（来源：hellointerview.com，OpenAI + Google），每题含：
+- 原始英文题面 + 报告人数 + 最近问询时间 + 跨公司汇总
+- 中文思路解析（System Design 的架构思路，Coding 题的详细分析）
 - Python 解法（Coding 题）
 - 易错点 & 延伸追问
 
 ## 在线浏览
 
-➡️ https://xggyh.github.io/openai-interview-prep/
+➡️ https://xggyh.github.io/interview-prep/
 
 ## 题目分布
 
-- **Coding**：20 题（算法 + LLD + 系统编程）
-- **System Design**：18 题（含 ChatGPT、devbox、URL shortener、Slack 等）
-- **People Management**：4 题
-- **Behavioral**：1 题
-- **Mobile System Design**：1 题
+| 公司 | 题数 |
+|---|---|
+| **OpenAI** | 44 题（全岗位） |
+| **Google** | 75 题（Coding 前 3 页） |
+| 共有 | 1 题（Leetcode 253. Meeting Rooms II） |
+| **总计** | 118 题 unique |
+
+| 类型 | 题数 |
+|---|---|
+| Coding | 94 |
+| System Design | 18 |
+| People Management | 4 |
+| Behavioral | 1 |
+| Mobile System Design | 1 |
 
 ## 仓库结构
 
