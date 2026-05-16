@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Leetcode 2296. Design a Text Editor · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -69,7 +69,7 @@
             return ''.join(self.left[-10:])
         return ''.join(self.left)</code></pre>
 <h3>复杂度</h3>
-<p>| 操作 | 时间 | |---|---| | addText | O(L)，L = text 长度 | | deleteText | O(K) 摊销 | | cursorLeft/Right | O(K) 移动 | | _last10 | O(1) 切片（最多 10 字符） |</p>
+<table class="md-table"><thead><tr><th>操作</th><th>时间</th></tr></thead><tbody><tr><td>addText</td><td>O(L)，L = text 长度</td></tr><tr><td>deleteText</td><td>O(K) 摊销</td></tr><tr><td>cursorLeft/Right</td><td>O(K) 移动</td></tr><tr><td>_last10</td><td>O(1) 切片（最多 10 字符）</td></tr></tbody></table>
 <h3>关键技术点</h3>
 <h4>1. 双栈表示光标位置</h4>
 <p><code>left</code> 末尾 = 光标紧左字符；<code>right</code> 末尾 = 光标紧右字符。移动光标 = pop 一栈 push 另一栈。</p>

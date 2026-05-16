@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Metrics Aggregator · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -115,7 +115,7 @@
 <ul><li>接收 batch → 直接写 Kafka，不做任何聚合（保持低延迟）</li><li>验证 metric name + tag 合法（避免高基数 cardinality 攻击）</li><li>限速：每 client / 每 metric_name 上限</li></ul>
 <h4>3. Stream Processor（核心聚合）</h4>
 <p>按分辨率分层聚合：</p>
-<p>| 分辨率 | 保留期 | 用途 | |---|---|---| | 5 秒 | 1 天 | 实时 alert + 短时排查 | | 1 分钟 | 7 天 | dashboard 默认 | | 1 小时 | 90 天 | 历史趋势 | | 1 天 | 永久 | 归档 |</p>
+<table class="md-table"><thead><tr><th>分辨率</th><th>保留期</th><th>用途</th></tr></thead><tbody><tr><td>5 秒</td><td>1 天</td><td>实时 alert + 短时排查</td></tr><tr><td>1 分钟</td><td>7 天</td><td>dashboard 默认</td></tr><tr><td>1 小时</td><td>90 天</td><td>历史趋势</td></tr><tr><td>1 天</td><td>永久</td><td>归档</td></tr></tbody></table>
 <p>每条 raw event 同时累计到自己所在的 5s、1m、1h、1d 桶：</p>
 <pre class="language-python"><code class="language-python"># Flink-ish pseudocode
 events.key_by(lambda e: (e.name, frozenset(e.tags.items()))) \
@@ -149,7 +149,7 @@ WHERE name = 'http.request'
 GROUP BY interval(1m), tags.status</code></pre>
 <p>实现：按 series_id 列出所有匹配 tag 的 series → 各自查 timeline → group/sum/avg。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 传输 | UDP / Kafka batch | 同步 HTTP per event：延迟高 | | 聚合时机 | 写时聚合（pre-aggregation） | 查时聚合：查询慢 | | 多分辨率 | 同时维护 5s/1m/1h/1d | 单分辨率：查长时段慢 | | Tag cardinality | 限制（&lt; 10k unique per name） | 不限：series 数爆 → DB 撑不住 | | 一致性 | 最终一致（监控数据，允许小延迟） | 强一致：吞吐撑不住 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>传输</td><td>UDP / Kafka batch</td><td>同步 HTTP per event：延迟高</td></tr><tr><td>聚合时机</td><td>写时聚合（pre-aggregation）</td><td>查时聚合：查询慢</td></tr><tr><td>多分辨率</td><td>同时维护 5s/1m/1h/1d</td><td>单分辨率：查长时段慢</td></tr><tr><td>Tag cardinality</td><td>限制（&lt; 10k unique per name）</td><td>不限：series 数爆 → DB 撑不住</td></tr><tr><td>一致性</td><td>最终一致（监控数据，允许小延迟）</td><td>强一致：吞吐撑不住</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1M events/s × 100 字节 = 100 MB/s 上行</li><li>假设 平均 100 unique series 处理 (high cardinality 例外) → 5s 桶 = 100 写/5s/series = 20 QPS/series</li><li>1 月数据保留 5s 粒度 → 100 series × 17280 buckets/day × 30 day × 16 B = ~830 MB （单 metric）</li></ul>
 <p>整体算下来 1 月精细数据 TB 级，1 年聚合保留 &lt; 1 TB。</p>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Top-K System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -94,7 +94,7 @@
 <p>如果要"最近 5 分钟 top-K"而非"all-time"：每分钟一个 sub-window CMS + heap，5 个 sub-window union 计算。</p>
 <p>老 sub-window expire 自然滑动。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Exact vs approx | Approx for high cardinality | Exact：内存爆 | | Algo | CMS + heavy hitters | Sort all every interval：O(N log N) | | Partition | by item hash | by random：top-K shuffle 不准 | | Window | sliding | tumbling：bursty 不平滑 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Exact vs approx</td><td>Approx for high cardinality</td><td>Exact：内存爆</td></tr><tr><td>Algo</td><td>CMS + heavy hitters</td><td>Sort all every interval：O(N log N)</td></tr><tr><td>Partition</td><td>by item hash</td><td>by random：top-K shuffle 不准</td></tr><tr><td>Window</td><td>sliding</td><td>tumbling：bursty 不平滑</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 HashMap counter for 10M cardinality —— OOM； ❌ CMS 不加 heavy hitters → 没法快速 enumerate top-K； ❌ 全 global single counter —— 写热点； ❌ Sliding window 不 expire 老数据 —— count 累计成 all-time； ❌ Approx error 不告知用户 —— UI 不应表达"准确"。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>Top-K 高基数 = <strong>CMS + heavy hitters + sliding window</strong>。LC 风格的 top-K 题（Top K Frequent Elements）是 in-memory exact 版；分布式 streaming 版用 approximate。</p></div>

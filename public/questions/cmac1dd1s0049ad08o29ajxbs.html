@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Chatbot with Multiple Threads · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -159,7 +159,7 @@ App 收到 token：
 <h4>7. Push Notification</h4>
 <p>App 后台 / 关闭时：server FCM/APN push 新消息。Tap 推送 → 跳到对应 thread。</p>
 <h3>移动端特有的取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 数据本地化 | SQLite（强 offline） | 仅内存：app kill 后丢 | | 状态管理 | MVI / Redux | imperative：难维护 | | 网络 | HTTP + SSE | WebSocket：穿透差，电池耗 | | Sync 时机 | App 前台 + 后台 limited（iOS background fetch） | 实时长连：电池 / 数据流量耗 | | 加密 | 客户端 + 服务器透明 | E2EE：服务端不能做内容审核 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>数据本地化</td><td>SQLite（强 offline）</td><td>仅内存：app kill 后丢</td></tr><tr><td>状态管理</td><td>MVI / Redux</td><td>imperative：难维护</td></tr><tr><td>网络</td><td>HTTP + SSE</td><td>WebSocket：穿透差，电池耗</td></tr><tr><td>Sync 时机</td><td>App 前台 + 后台 limited（iOS background fetch）</td><td>实时长连：电池 / 数据流量耗</td></tr><tr><td>加密</td><td>客户端 + 服务器透明</td><td>E2EE：服务端不能做内容审核</td></tr></tbody></table>
 <h3>关键技术细节</h3>
 <ul><li><strong>打字延迟</strong>：用户输入到 UI 显示必须 &lt; 16ms（一帧）。本地 DB 写要异步，不阻塞 UI 线程</li><li><strong>历史滚动性能</strong>：LazyColumn / RecyclerView 虚拟化，只渲染可见 + buffer</li><li><strong>图片</strong>：使用 Coil/Glide 缓存，避免重复下载</li><li><strong>Backstack</strong>：thread 切换走 Navigation，记住每 thread 滚动位置</li><li><strong>数据流量节省</strong>：消息列表 GZIP；图片低分辨率预览，点 enlarge 再下载原图</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>核心是 <strong>offline-first</strong> —— 所有 UI 都读本地 DB，sync engine 在后台处理网络。这样：(1) 启动快（本地数据立即显示）；(2) 离线可用；(3) UI 永远响应快。</p></div>

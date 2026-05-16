@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Proximity Alert System for Apple Tags · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -69,7 +69,7 @@
 <h4>5. Privacy guarantees</h4>
 <ul><li>Apple server: 只见加密 blob + opaque public key</li><li>Relay device: 不知道是哪个 tag / 谁的</li><li>Public key rotation: 防长期 tracking by adversary observing BLE</li><li>Anti-stalking: tag away from owner for X hours → 主动 beep + iPhone 通知附近 user "an AirTag is following you"</li></ul>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Network | Crowdsourced via Apple devices | Cellular tag：贵 + battery 短 | | Crypto | E2E with key rotation | Server-known location：privacy fail | | Range | BLE | Cellular：5x battery drain | | Anti-stalk | Auto-beep + alert | None：abuse risk |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Network</td><td>Crowdsourced via Apple devices</td><td>Cellular tag：贵 + battery 短</td></tr><tr><td>Crypto</td><td>E2E with key rotation</td><td>Server-known location：privacy fail</td></tr><tr><td>Range</td><td>BLE</td><td>Cellular：5x battery drain</td></tr><tr><td>Anti-stalk</td><td>Auto-beep + alert</td><td>None：abuse risk</td></tr></tbody></table>
 <h3>关键技术细节</h3>
 <ul><li>ECC P-224 + AES encryption</li><li>Key derivation: T_i = HKDF(master_key, time_i)</li><li>Per-tag periodic key rotation period ~15 min</li><li>BLE advertisement: includes public key fragment</li></ul>
 <h3>易错点</h3>

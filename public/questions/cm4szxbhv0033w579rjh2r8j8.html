@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design Netflix/Video Streaming Platform · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -35,7 +35,7 @@
 <p>设计 <strong>Netflix / Video Streaming Platform</strong>：videos 上传 → encode 多分辨率 → CDN 分发 → ABR 客户端播放。亿用户级。</p>
 <p>参考 [[cm6wu2x3y0000356pl299toa0]] (YouTube) - 整体框架同。这里 angle 是<strong>长尾内容 + 个性化推荐</strong>而非 UGC scale。</p>
 <h3>与 YouTube 区别</h3>
-<p>| 维度 | Netflix | YouTube | |---|---|---| | 内容 | 自制 + licensed (~10k titles) | UGC (billions) | | Upload 频率 | 慢 / 高质 | 高频 / 杂 | | Encoding | 顶级（4K HDR per-title optimization） | Mass scale fast encode | | 推荐 | 重 personalization (CF + content) | recency + engagement | | 离线 | downloads | 大 limit | | Live | 少 | 大 |</p>
+<table class="md-table"><thead><tr><th>维度</th><th>Netflix</th><th>YouTube</th></tr></thead><tbody><tr><td>内容</td><td>自制 + licensed (~10k titles)</td><td>UGC (billions)</td></tr><tr><td>Upload 频率</td><td>慢 / 高质</td><td>高频 / 杂</td></tr><tr><td>Encoding</td><td>顶级（4K HDR per-title optimization）</td><td>Mass scale fast encode</td></tr><tr><td>推荐</td><td>重 personalization (CF + content)</td><td>recency + engagement</td></tr><tr><td>离线</td><td>downloads</td><td>大 limit</td></tr><tr><td>Live</td><td>少</td><td>大</td></tr></tbody></table>
 <h3>核心组件</h3>
 <h4>1. Per-title encoding</h4>
 <p>Netflix 著名"per-title encoding" —— 不是固定 bitrate ladder。Action movie 复杂场景 high bitrate；卡通 low bitrate 也 OK。每 title encode 时 optimize 参数。</p>
@@ -58,7 +58,7 @@
 <h4>6. 离线下载</h4>
 <p>下载 = encode 一份特殊格式 (DRM wrap + offline-friendly)，client 缓存 SD card / local。播放时 license server verify。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Encoding | Per-title optimized | Fixed ladder：浪费 | | CDN | OpenConnect (ISP-local) | Generic CDN：高 backbone cost | | 推荐 | 重 personalization | Top trending：低 retention | | DRM | Widevine / FairPlay | None：被盗 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Encoding</td><td>Per-title optimized</td><td>Fixed ladder：浪费</td></tr><tr><td>CDN</td><td>OpenConnect (ISP-local)</td><td>Generic CDN：高 backbone cost</td></tr><tr><td>推荐</td><td>重 personalization</td><td>Top trending：低 retention</td></tr><tr><td>DRM</td><td>Widevine / FairPlay</td><td>None：被盗</td></tr></tbody></table>
 <h3>关键 metric</h3>
 <ul><li>Bits per pixel per second</li><li>Stall rate (re-buffering occurrences)</li><li>Time-to-first-frame</li><li>Hours watched per user</li><li>Subscription retention</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>Netflix vs YouTube：<strong>前者重 quality + personalization + CDN penetration，后者重 scale + speed</strong>。Per-title encoding + OpenConnect 是 Netflix unique。</p></div>

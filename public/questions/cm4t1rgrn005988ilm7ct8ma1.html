@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design an Image Uploader · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -100,7 +100,7 @@ e.g. .../abc123/def456/medium.webp</code></pre>
 <h4>7. Deduplication（可选）</h4>
 <p>计算 image hash (perceptual hash)。如果用户上传重复 image，直接 link 已有 record 而非重新存储。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Upload path | Client → S3 direct | 走 backend：带宽爆 | | Processing | Async after upload | Sync：上传慢 | | Format | 多 variant (thumb/med/large/orig) | 单一：客户端浪费 | | Format change | WebP optional + JPEG fallback | All WebP：老设备 | | Storage | S3 + CDN | DB blob：贵 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Upload path</td><td>Client → S3 direct</td><td>走 backend：带宽爆</td></tr><tr><td>Processing</td><td>Async after upload</td><td>Sync：上传慢</td></tr><tr><td>Format</td><td>多 variant (thumb/med/large/orig)</td><td>单一：客户端浪费</td></tr><tr><td>Format change</td><td>WebP optional + JPEG fallback</td><td>All WebP：老设备</td></tr><tr><td>Storage</td><td>S3 + CDN</td><td>DB blob：贵</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Upload 走 backend —— scale 不上去； ❌ 不做 multipart —— 50 MB 一次性 fail 全重； ❌ Sync processing —— 用户等 30 秒； ❌ Variant URL hardcoded —— 加新 size 时 schema break；用 JSONB； ❌ 不做 moderation —— legal 风险。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Client 直传 S3 + presigned URL</strong> 把流量从 backend 摘开；(2) <strong>Async pipeline + S3 events</strong> 解耦上传 / 处理；(3) <strong>多 variant + CDN</strong> 优化 client 加载。</p></div>

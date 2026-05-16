@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Authentication Manager · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -173,7 +173,7 @@ class AuthenticationManager:
 <h4>7. 密码改了 → 撤销所有 session</h4>
 <p><code>logout_all(username)</code> 必须在密码 reset 之后调用。</p>
 <h3>工业级延伸</h3>
-<p>| 特性 | 说明 | |---|---| | <strong>JWT</strong> | 自包含 token，无需 DB 查询。但<strong>不易撤销</strong>（需 deny-list） | | <strong>Refresh + Access token</strong> | Access token 短 TTL（15 分钟），refresh token 长 TTL（30 天）。Access 不可撤销但短命，refresh 可撤销 | | <strong>2FA</strong> | 登录时除密码还要 TOTP 或 WebAuthn | | <strong>Rate limit</strong> | 同 IP / 同 username 一分钟内 5 次失败后锁定 / captcha | | <strong>Login alert</strong> | 异地登录通知邮件 | | <strong>Device fingerprint</strong> | 记录 user_agent + ip + browser 指纹，可疑设备 step-up |</p>
+<table class="md-table"><thead><tr><th>特性</th><th>说明</th></tr></thead><tbody><tr><td><strong>JWT</strong></td><td>自包含 token，无需 DB 查询。但<strong>不易撤销</strong>（需 deny-list）</td></tr><tr><td><strong>Refresh + Access token</strong></td><td>Access token 短 TTL（15 分钟），refresh token 长 TTL（30 天）。Access 不可撤销但短命，refresh 可撤销</td></tr><tr><td><strong>2FA</strong></td><td>登录时除密码还要 TOTP 或 WebAuthn</td></tr><tr><td><strong>Rate limit</strong></td><td>同 IP / 同 username 一分钟内 5 次失败后锁定 / captcha</td></tr><tr><td><strong>Login alert</strong></td><td>异地登录通知邮件</td></tr><tr><td><strong>Device fingerprint</strong></td><td>记录 user_agent + ip + browser 指纹，可疑设备 step-up</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 密码哈希用 SHA256 不加 salt —— rainbow table 秒破； ❌ Session token 用 <code>uuid4().hex</code> —— 仍有 122 bit 熵，但语义上不是 cryptographically random；用 <code>secrets</code>； ❌ <code>==</code> 比较哈希 —— 时序攻击； ❌ Logout 只清客户端 cookie —— 服务端不撤销，token 仍然有效； ❌ 密码改了不 invalidate 其他设备 —— 旧密码泄漏的攻击者可以继续登录。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>实现 auth 不是"写完 CRUD"，是<strong>展示对密码哈希、token 熵、安全比较、session 撤销的理解</strong>。这些是 OpenAI 面试官想看的安全敏感度。</p></div>

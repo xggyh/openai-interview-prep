@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Job Scheduler · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -94,7 +94,7 @@
 <h4>10. Audit + history</h4>
 <p>每 execution record: started_at, finished_at, status, output, error. Last N days searchable。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Schedule store | Heap / wheel | DB scan：慢 | | Distribution | Leader / shard ownership | Single instance：bottleneck | | Execution | Container / serverless | In-process：noisy neighbor | | Idempotency | execution_id + dedup | None：double execute |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Schedule store</td><td>Heap / wheel</td><td>DB scan：慢</td></tr><tr><td>Distribution</td><td>Leader / shard ownership</td><td>Single instance：bottleneck</td></tr><tr><td>Execution</td><td>Container / serverless</td><td>In-process：noisy neighbor</td></tr><tr><td>Idempotency</td><td>execution_id + dedup</td><td>None：double execute</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1M jobs × avg 1 fire/hour = 277 firings/sec</li><li>Worker pool: avg job 30s → ~8000 workers</li><li>Storage: 1M × 10 history × 5KB = 50 GB</li></ul>
 <h3>易错点</h3>

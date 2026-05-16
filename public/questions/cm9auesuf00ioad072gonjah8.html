@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Distributed Blocking/Denylist System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -33,7 +33,7 @@
     <h2>我的思路与解法</h2>
     <h3>0. 在开始之前 — 你需要知道的概念</h3>
 <p>如果你是 System Design 新手，先理解下面几个名词，后面就好懂了。</p>
-<p>| 名词 | 一句话解释 | 类比 | |---|---|---| | <strong>Denylist / Blocklist</strong> | 黑名单 —— 一个列表，记录哪些 IP / user / URL 不能访问 | 门卫的"禁止入内"名单 | | <strong>API Gateway / Edge</strong> | 用户请求进入系统的"前门"。所有流量先到它，它再决定转给后面哪个服务 | 大楼前台 | | <strong>Cache</strong> | 临时存"热"数据的快速存储。读起来比真 DB 快 100x | 你桌上的便条 vs 档案室 | | <strong>Redis</strong> | 一个流行的内存 cache，常用作"分布式 cache" | 整层楼共用的白板 | | <strong>Bloom filter</strong> | 一个超省内存的"集合"数据结构。能快速判断"X <strong>可能</strong>在集合里" 还是 "X <strong>绝对</strong>不在集合里" | 邮筒口的网格 —— 大物件肯定塞不进 | | <strong>CDN</strong> | Content Delivery Network。把数据<strong>复制到全球多个机房</strong>，用户从最近的取 | 麦当劳全球开店 | | <strong>DB (Database)</strong> | 永久存储数据的地方。慢，但靠谱 | 档案室 | | <strong>CDC</strong> | Change Data Capture —— DB 变化了自动通知其他系统 | "档案改了打电话给我" | | <strong>Kafka</strong> | 一个超快的消息队列。生产者 push 进去，消费者从里面 pull | 流水线传送带 | | <strong>Audit Log</strong> | 审计日志，记录"谁做了什么"，不可修改 | 银行的录像监控 |</p>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Denylist / Blocklist</strong></td><td>黑名单 —— 一个列表，记录哪些 IP / user / URL 不能访问</td><td>门卫的"禁止入内"名单</td></tr><tr><td><strong>API Gateway / Edge</strong></td><td>用户请求进入系统的"前门"。所有流量先到它，它再决定转给后面哪个服务</td><td>大楼前台</td></tr><tr><td><strong>Cache</strong></td><td>临时存"热"数据的快速存储。读起来比真 DB 快 100x</td><td>你桌上的便条 vs 档案室</td></tr><tr><td><strong>Redis</strong></td><td>一个流行的内存 cache，常用作"分布式 cache"</td><td>整层楼共用的白板</td></tr><tr><td><strong>Bloom filter</strong></td><td>一个超省内存的"集合"数据结构。能快速判断"X <strong>可能</strong>在集合里" 还是 "X <strong>绝对</strong>不在集合里"</td><td>邮筒口的网格 —— 大物件肯定塞不进</td></tr><tr><td><strong>CDN</strong></td><td>Content Delivery Network。把数据<strong>复制到全球多个机房</strong>，用户从最近的取</td><td>麦当劳全球开店</td></tr><tr><td><strong>DB (Database)</strong></td><td>永久存储数据的地方。慢，但靠谱</td><td>档案室</td></tr><tr><td><strong>CDC</strong></td><td>Change Data Capture —— DB 变化了自动通知其他系统</td><td>"档案改了打电话给我"</td></tr><tr><td><strong>Kafka</strong></td><td>一个超快的消息队列。生产者 push 进去，消费者从里面 pull</td><td>流水线传送带</td></tr><tr><td><strong>Audit Log</strong></td><td>审计日志，记录"谁做了什么"，不可修改</td><td>银行的录像监控</td></tr></tbody></table>
 <p>读到具体段落时遇到不懂的名词，回来这里查。</p>
 <hr />
 <h3>1. 题目本质 — 这是什么问题</h3>
@@ -290,7 +290,7 @@ Layer 3: Spanner (source of truth)
   - 延迟：10-50ms (跨 region 可能更高)</code></pre>
 <h4>5.5 为什么 Spanner 做 source of truth</h4>
 <p>可能的选择：Postgres, MySQL, Cassandra, DynamoDB, Spanner.</p>
-<p>| 选项 | 强一致 | 全球分布 | 写吞吐 | 取舍 | |---|---|---|---|---| | Postgres | ✓ | ✗ | 中 | 单 region 强，跨 region 弱 | | MySQL + 读副本 | 主写强一致 | 副本弱 | 中 | 读副本读 stale 数据 | | Cassandra | ✗（最终一致） | ✓ | 高 | admin block 后 dashboard 短期看不到 | | DynamoDB | ✓ | 单 region 强；多 region 异步 | 高 | AWS 锁定 | | <strong>Spanner</strong> | <strong>✓（全球强一致）</strong> | <strong>✓</strong> | <strong>高</strong> | 贵但符合需求 |</p>
+<table class="md-table"><thead><tr><th>选项</th><th>强一致</th><th>全球分布</th><th>写吞吐</th><th>取舍</th></tr></thead><tbody><tr><td>Postgres</td><td>✓</td><td>✗</td><td>中</td><td>单 region 强，跨 region 弱</td></tr><tr><td>MySQL + 读副本</td><td>主写强一致</td><td>副本弱</td><td>中</td><td>读副本读 stale 数据</td></tr><tr><td>Cassandra</td><td>✗（最终一致）</td><td>✓</td><td>高</td><td>admin block 后 dashboard 短期看不到</td></tr><tr><td>DynamoDB</td><td>✓</td><td>单 region 强；多 region 异步</td><td>高</td><td>AWS 锁定</td></tr><tr><td><strong>Spanner</strong></td><td><strong>✓（全球强一致）</strong></td><td><strong>✓</strong></td><td><strong>高</strong></td><td>贵但符合需求</td></tr></tbody></table>
 <p><strong>关键考量</strong>：admin block 一个 IP，立即在 dashboard 看到 status 变化。这要求<strong>强一致</strong>。Cassandra 这种 eventual consistency 会让 admin 困惑（"我刚 block 了，怎么 UI 还显示 active？"）。</p>
 <p>Spanner 适合：全球强一致 + transaction（block + audit log 同 transaction）。</p>
 <h4>5.6 全球同步路径详细</h4>

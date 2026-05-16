@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design Uber · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -86,7 +86,7 @@ nearby = redis.geosearch('drivers', longitude, latitude, radius=2, unit='km')</c
 <h4>6. Payment</h4>
 <p>完成后调 payment gateway。前 5 秒可 dispute（cancel before charge）。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Geo index | H3 + Redis | DB B-tree on (lat, lng)：慢 | | Matching | Batched bipartite | Greedy per request：局部最优 | | State | Strong consistency DB | Eventual：state confusion | | Tracking | WebSocket 5s | Polling 1s：浪费电池 | | Pricing | Real-time surge | Static：失 elasticity |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Geo index</td><td>H3 + Redis</td><td>DB B-tree on (lat, lng)：慢</td></tr><tr><td>Matching</td><td>Batched bipartite</td><td>Greedy per request：局部最优</td></tr><tr><td>State</td><td>Strong consistency DB</td><td>Eventual：state confusion</td></tr><tr><td>Tracking</td><td>WebSocket 5s</td><td>Polling 1s：浪费电池</td></tr><tr><td>Pricing</td><td>Real-time surge</td><td>Static：失 elasticity</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1M concurrent rider + 500k driver</li><li>Location ping QPS: 500k / 5s = 100k QPS</li><li>Match QPS: peak 10k rides / sec</li><li>DB writes: ride state changes, ~30k QPS peak</li></ul>
 <h3>易错点</h3>

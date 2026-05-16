@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Leetcode 1797. Design Authentication Manager · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -83,7 +83,7 @@ class AuthenticationManager:
             # else: stale，丢
         return len(self.expire_at)</code></pre>
 <h3>复杂度</h3>
-<p>| 操作 | 复杂度 | |---|---| | generate | O(log N) 推 heap | | renew | O(log N) 推 heap | | countUnexpiredTokens | 摊销 O(log N) per call |</p>
+<table class="md-table"><thead><tr><th>操作</th><th>复杂度</th></tr></thead><tbody><tr><td>generate</td><td>O(log N) 推 heap</td></tr><tr><td>renew</td><td>O(log N) 推 heap</td></tr><tr><td>countUnexpiredTokens</td><td>摊销 O(log N) per call</td></tr></tbody></table>
 <p>总操作 M 次的总开销 O(M log N)。</p>
 <h3>关键技术点</h3>
 <h4>1. 为什么需要 heap？</h4>

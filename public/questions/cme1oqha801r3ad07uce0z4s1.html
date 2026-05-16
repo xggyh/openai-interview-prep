@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a system to display aggregation of events where multiple robots are continuously generating events in realtime · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -94,7 +94,7 @@
 <h4>8. 数据压缩</h4>
 <p>Robot position 每 100ms 报送 raw 浪费。Delta-encoded position：只发与上次差异。Server 还原 full state。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Transport | MQTT | HTTP：开销大 | | Aggregation | Flink stream | Batch：lag 大 | | Live store | Redis pub/sub | DB poll：慢 | | Historical | TSDB | RDBMS：write 慢 | | Compression | Delta encoding | Raw：bandwidth 浪费 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Transport</td><td>MQTT</td><td>HTTP：开销大</td></tr><tr><td>Aggregation</td><td>Flink stream</td><td>Batch：lag 大</td></tr><tr><td>Live store</td><td>Redis pub/sub</td><td>DB poll：慢</td></tr><tr><td>Historical</td><td>TSDB</td><td>RDBMS：write 慢</td></tr><tr><td>Compression</td><td>Delta encoding</td><td>Raw：bandwidth 浪费</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1000 robots × 50 events/sec = 50k events/sec</li><li>Aggregation per 1s × 10 zones = 10 outputs/sec → trivial</li><li>Storage: 50k × 100B = 5 MB/sec raw → InfluxDB compressed ~1 MB/sec → 86 GB/day</li></ul>
 <h3>易错点</h3>

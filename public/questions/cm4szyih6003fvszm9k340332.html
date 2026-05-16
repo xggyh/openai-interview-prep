@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design Wikipedia Crawler · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -108,7 +108,7 @@ SSE: 每个 edit event JSON 推送</code></pre>
 <p>即使用 API：</p>
 <ul><li>API 限 ~200 req/s for bots (User-Agent 必须含 contact info)</li><li>大量并发用 batch API（<code>titles=A|B|C</code>，一次 50 page）</li></ul>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Initial | Dump | Crawl：浪费 | | Update | EventStream + API | Polling sitemap：lag | | Parser | mwparserfromhell | Custom：reinvent | | Schema | Per-page record + history | Append-only：query 麻烦 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Initial</td><td>Dump</td><td>Crawl：浪费</td></tr><tr><td>Update</td><td>EventStream + API</td><td>Polling sitemap：lag</td></tr><tr><td>Parser</td><td>mwparserfromhell</td><td>Custom：reinvent</td></tr><tr><td>Schema</td><td>Per-page record + history</td><td>Append-only：query 麻烦</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 HTTP 爬 page → ToS 违反； ❌ 用 HTML parsing → wikitext source 才是正版； ❌ 不订阅 EventStream → 数据 lag； ❌ 不 separate language → 数据混； ❌ 不记 revision history → dispute 无法 trace。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>Wikipedia 不是普通 web。Use <strong>dumps + API + EventStream</strong> instead of raw HTML crawl。Respect ToS + provide User-Agent.</p></div>

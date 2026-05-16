@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Leetcode 167. Two Sum II - Input Array Is Sorted · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -56,7 +56,7 @@ class Solution:
 <ul><li><code>s &lt; target</code> → 必须增大 → 只能 lo++（hi-- 只会更小）</li><li><code>s &gt; target</code> → 必须减小 → 只能 hi--</li></ul>
 <p>每次至少移一个指针，总步数 ≤ N，且不会漏正确组合（如果答案是 (i, j) 当 lo 到 i 时，hi 还 ≥ j；若 hi &lt; j 之前会先碰到 i+x 让 s 偏小让 lo 继续 + 不会越过 j；反之类似）。</p>
 <h3>与普通 Two Sum (LC 1) 对比</h3>
-<p>| LC 1 (unsorted) | LC 167 (sorted) | |---|---| | 用 hash map O(N) 空间 | 双指针 O(1) 空间 | | 一遍扫 | 双指针一遍 |</p>
+<table class="md-table"><thead><tr><th>LC 1 (unsorted)</th><th>LC 167 (sorted)</th></tr></thead><tbody><tr><td>用 hash map O(N) 空间</td><td>双指针 O(1) 空间</td></tr><tr><td>一遍扫</td><td>双指针一遍</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 返回 0-indexed —— 题目要 1-indexed； ❌ <code>lo &lt;= hi</code> 而非 <code>lo &lt; hi</code> —— 同位置取两次； ❌ 没排序就上双指针（在其他场景） —— 失效； ❌ 假设有唯一解：题目保证，但实际多解时双指针返回第一个找到的（也合理）。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>升序数组 + 找和：第一反应双指针。这套适用于：3sum、4sum 的内层、smallest difference pair、closest sum。</p></div>

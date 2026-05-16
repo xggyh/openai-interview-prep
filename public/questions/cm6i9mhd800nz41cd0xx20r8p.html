@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Rate Limiter · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -142,9 +142,9 @@ def allow(user_id, endpoint, capacity=100, refill=10, requested=1):
     return count &lt;= limit</code></pre>
 <p>简单但有 window 边界 burst 问题。</p>
 <h3>多层防御策略</h3>
-<p>| 层 | 算法 | 目的 | |---|---|---| | L1：edge (CDN) | IP-based fixed window | 防 DDoS | | L2：API GW | Token bucket per-user/key | 业务 quota | | L3：service-internal | Concurrency limit (semaphore) | 防慢调用拖垮 | | L4：DB / 下游 | Connection pool + circuit breaker | 防雪崩 |</p>
+<table class="md-table"><thead><tr><th>层</th><th>算法</th><th>目的</th></tr></thead><tbody><tr><td>L1：edge (CDN)</td><td>IP-based fixed window</td><td>防 DDoS</td></tr><tr><td>L2：API GW</td><td>Token bucket per-user/key</td><td>业务 quota</td></tr><tr><td>L3：service-internal</td><td>Concurrency limit (semaphore)</td><td>防慢调用拖垮</td></tr><tr><td>L4：DB / 下游</td><td>Connection pool + circuit breaker</td><td>防雪崩</td></tr></tbody></table>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 算法 | Sliding window 或 Token bucket | Fixed window：边界问题 | | 状态 | Redis 共享 | Local：跨 server 不一致 | | 原子性 | Lua script | Pipeline + WATCH：复杂 | | 失效行为 | Fail open（Redis 挂了允许通过）+ alert | Fail closed：DoS 自己 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>算法</td><td>Sliding window 或 Token bucket</td><td>Fixed window：边界问题</td></tr><tr><td>状态</td><td>Redis 共享</td><td>Local：跨 server 不一致</td></tr><tr><td>原子性</td><td>Lua script</td><td>Pipeline + WATCH：复杂</td></tr><tr><td>失效行为</td><td>Fail open（Redis 挂了允许通过）+ alert</td><td>Fail closed：DoS 自己</td></tr></tbody></table>
 <h3>关键技术细节</h3>
 <h4>1. Sliding Window Counter 实现</h4>
 <pre class="language-python"><code class="language-python">def sliding_window_allow(user_id, endpoint, limit=100, window_sec=60):

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Payment System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -121,7 +121,7 @@ def capture_batch(date):
 <h4>5. 分区策略</h4>
 <ul><li>Ledger 按 <code>created_at</code> 月分区 + <code>account_id</code> hash 子分区</li><li>热数据（30 天内）在主 Postgres，冷数据归档到 S3 + Athena</li><li>读 / 报表查询走只读副本 + 列存（ClickHouse 同步）</li></ul>
 <h3>取舍 / 权衡</h3>
-<p>| 决策 | 选择 | 替代 + 为什么不选 | |---|---|---| | 存储 | Postgres（强一致） | Cassandra：不行，最终一致性写会破坏金额平衡 | | 队列 | Kafka | RabbitMQ：吞吐不够；Kafka 还能做 audit trail | | 同步/异步 | Authorize 同步（用户等结果），Capture 异步批处理 | 全异步：用户等不了；全同步：网关 API 频次上不去 | | 幂等 | Redis + DB UNIQUE 约束双保险 | 仅 Redis：Redis 挂了就丢防线 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代 + 为什么不选</th></tr></thead><tbody><tr><td>存储</td><td>Postgres（强一致）</td><td>Cassandra：不行，最终一致性写会破坏金额平衡</td></tr><tr><td>队列</td><td>Kafka</td><td>RabbitMQ：吞吐不够；Kafka 还能做 audit trail</td></tr><tr><td>同步/异步</td><td>Authorize 同步（用户等结果），Capture 异步批处理</td><td>全异步：用户等不了；全同步：网关 API 频次上不去</td></tr><tr><td>幂等</td><td>Redis + DB UNIQUE 约束双保险</td><td>仅 Redis：Redis 挂了就丢防线</td></tr></tbody></table>
 <h3>风险控制</h3>
 <ul><li><strong>欺诈检测</strong>：authorize 之前过 fraud service（特征：IP、卡 BIN、设备指纹、velocity）</li><li><strong>限速</strong>：用户级 + 卡级 rate limit</li><li><strong>对账</strong>：每日跟网关下行的 settlement 文件做 reconciliation，差异立刻 alert</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>这题在 OpenAI 53 人报告，是仅次于 Online Chess 的最热 SD。核心点：<strong>ledger + idempotency + 两阶段授权</strong>。面试官会狠抠"重启批处理不重扣"和"网关 timeout 怎么办"。</p></div>

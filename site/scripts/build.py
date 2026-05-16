@@ -131,6 +131,49 @@ def md_to_html(md: str) -> str:
                 out.append(f"<blockquote>{inner}</blockquote>")
             continue
 
+        # Table (GitHub-flavored)
+        # Header row: |c1|c2|c3|  followed by separator |---|---|---|
+        if stripped.startswith("|") and i + 1 < n:
+            sep_line = lines[i + 1].strip()
+            if re.match(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$", sep_line):
+                # Parse header
+                header_cells = [c.strip() for c in stripped.strip("|").split("|")]
+                # Parse alignment from separator
+                sep_cells = [c.strip() for c in sep_line.strip("|").split("|")]
+                aligns = []
+                for s in sep_cells:
+                    if s.startswith(":") and s.endswith(":"):
+                        aligns.append("center")
+                    elif s.endswith(":"):
+                        aligns.append("right")
+                    elif s.startswith(":"):
+                        aligns.append("left")
+                    else:
+                        aligns.append(None)
+                i += 2  # skip header + separator
+                # Body rows
+                body_rows = []
+                while i < n and lines[i].strip().startswith("|"):
+                    cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                    body_rows.append(cells)
+                    i += 1
+                # Render
+                def cell_html(tag, content, align):
+                    style = f' style="text-align:{align}"' if align else ""
+                    return f"<{tag}{style}>{md_inline(content)}</{tag}>"
+                thead = "<tr>" + "".join(
+                    cell_html("th", h, aligns[k] if k < len(aligns) else None)
+                    for k, h in enumerate(header_cells)
+                ) + "</tr>"
+                tbody = "".join(
+                    "<tr>" + "".join(
+                        cell_html("td", c, aligns[k] if k < len(aligns) else None)
+                        for k, c in enumerate(row)
+                    ) + "</tr>" for row in body_rows
+                )
+                out.append(f'<table class="md-table"><thead>{thead}</thead><tbody>{tbody}</tbody></table>')
+                continue
+
         # Bullet list
         if re.match(r"^[-*]\s+", stripped):
             items = []

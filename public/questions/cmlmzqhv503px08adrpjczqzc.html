@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a devbox system · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -112,7 +112,7 @@ class Template:
     image: str                # 'gcr.io/devbox/python:3.12'
     pre_installed_tools: list[str]</code></pre>
 <h3>取舍 / 权衡</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 隔离 | Firecracker MicroVM | Docker（够快但不够安全） / 虚拟机（太重） | | FS | EBS per user | NFS / EFS：高延迟，编辑器卡；S3：不支持 POSIX | | 编排 | K8s + custom controller | Nomad / 自研：K8s 生态最成熟 | | 启动延迟 | Hot pool + snapshot restore | 每次冷启动：用户跑不了 | | Image distribution | Stargz lazy pull | Full pull：1GB 镜像得拉 30 秒 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>隔离</td><td>Firecracker MicroVM</td><td>Docker（够快但不够安全） / 虚拟机（太重）</td></tr><tr><td>FS</td><td>EBS per user</td><td>NFS / EFS：高延迟，编辑器卡；S3：不支持 POSIX</td></tr><tr><td>编排</td><td>K8s + custom controller</td><td>Nomad / 自研：K8s 生态最成熟</td></tr><tr><td>启动延迟</td><td>Hot pool + snapshot restore</td><td>每次冷启动：用户跑不了</td></tr><tr><td>Image distribution</td><td>Stargz lazy pull</td><td>Full pull：1GB 镜像得拉 30 秒</td></tr></tbody></table>
 <div class="callout callout-key"><strong>核心要点</strong><p>OpenAI 内部其实就有 devbox，所以这题问得很贴 OpenAI infra。重点是冷启动 5s 怎么达到 —— 答：(1) hot pool 预热；(2) image lazy pull；(3) snapshot restore；(4) MicroVM 启动毫秒级。</p></div>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用普通 Docker 直接给所有用户（容器逃逸风险）； ❌ 文件系统用 NFS（编辑器会因为 fsync 卡死）； ❌ 不做 idle 回收（24h 闲置 workspace 烧钱）； ❌ 把所有 workspace 调度到同一个 K8s namespace（quota 失效）。</p></div>
 <div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持团队共享 workspace？" → branch-and-fork 模型，base workspace + per-user 增量 overlay。"GPU workspace？" → 拆 GPU pool，scheduler 按 affinity 调度。"网络拓扑要不要 service mesh？" → 不需要，devbox 之间不互通；只需 user → workspace 单向。</p></div>

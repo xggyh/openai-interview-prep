@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a system to rollout new versions of a mobile OS to devices worldwide · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -100,7 +100,7 @@ Phase 4: 100%</code></pre>
 <h4>9. Multi-tenant variant</h4>
 <p>Carrier-specific builds（Verizon vs AT&amp;T iPhone）。Per-carrier manifest + same infrastructure。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Rollout | Staged % | All at once：risk | | File | Delta | Full：bandwidth waste | | Halt | Auto + manual | Manual only：lag | | Install timing | Idle + charging | Force：UX disaster |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Rollout</td><td>Staged %</td><td>All at once：risk</td></tr><tr><td>File</td><td>Delta</td><td>Full：bandwidth waste</td></tr><tr><td>Halt</td><td>Auto + manual</td><td>Manual only：lag</td></tr><tr><td>Install timing</td><td>Idle + charging</td><td>Force：UX disaster</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1B devices × 100 MB delta = 100 PB total</li><li>CDN 99% hit → 1 PB origin egress</li><li>Telemetry: 1B × 10KB = 10 TB/day inbound</li></ul>
 <h3>易错点</h3>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>In-Memory Database: Implement SQL-Like Operations · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -137,7 +137,7 @@ class MiniDB:
     def select(self, table: str, **kwargs):
         return self.tables[table].select(**kwargs)</code></pre>
 <h3>复杂度</h3>
-<p>| 操作 | 有索引 | 无索引 | |---|---|---| | INSERT | O(C)，C = 列数 | O(C) | | SELECT 等值 | O(K)，K = 命中行数 | O(N) | | SELECT 范围 | O(M)，M = 候选行（先索引粗筛） | O(N) | | ORDER BY | O(K log K) | O(N log N) |</p>
+<table class="md-table"><thead><tr><th>操作</th><th>有索引</th><th>无索引</th></tr></thead><tbody><tr><td>INSERT</td><td>O(C)，C = 列数</td><td>O(C)</td></tr><tr><td>SELECT 等值</td><td>O(K)，K = 命中行数</td><td>O(N)</td></tr><tr><td>SELECT 范围</td><td>O(M)，M = 候选行（先索引粗筛）</td><td>O(N)</td></tr><tr><td>ORDER BY</td><td>O(K log K)</td><td>O(N log N)</td></tr></tbody></table>
 <h3>关键设计点</h3>
 <h4>1. 倒排索引（Inverted Index）</h4>
 <p>每列一个 dict：<code>value -&gt; set[row_id]</code>。等值查询直接命中；多列 AND 等值用 <code>set.intersection</code>。</p>
@@ -152,7 +152,7 @@ ids_sf &amp; ids_30                        # {0, 2}</code></pre>
 <h4>4. 多个条件的成本估算（query planner 雏形）</h4>
 <p>如果 <code>city='SF'</code> 命中 100 行，<code>age=30</code> 命中 1 行，先用 age 索引开始，能避免扫 100 行的 SF。生产 DB 用 column statistics 决定 plan。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 理由 | |---|---|---| | 存储 | 行式 list[dict] | 简单。列式（dict[col][rid]）查询友好但插入复杂 | | 索引 | 每列默认建索引 | 简化；生产应允许 user 选择 | | 并发 | 单线程 | 加 Lock 简单但题面没要求 | | WHERE 解析 | dict 风格（$gt $lt） | 比解析 SQL string 简单且清晰 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>理由</th></tr></thead><tbody><tr><td>存储</td><td>行式 list[dict]</td><td>简单。列式（dict[col][rid]）查询友好但插入复杂</td></tr><tr><td>索引</td><td>每列默认建索引</td><td>简化；生产应允许 user 选择</td></tr><tr><td>并发</td><td>单线程</td><td>加 Lock 简单但题面没要求</td></tr><tr><td>WHERE 解析</td><td>dict 风格（$gt $lt）</td><td>比解析 SQL string 简单且清晰</td></tr></tbody></table>
 <h3>扩展（如果面试官追问）</h3>
 <ul><li><strong>多表 JOIN</strong>：先实现 nested loop join，O(N×M)；优化用 hash join（小表建 hash）</li><li><strong>GROUP BY + 聚合</strong>：分组用 dict，对每组算 sum/avg</li><li><strong>持久化</strong>：把 rows + index 序列化到文件（pickle / JSON）</li><li><strong>事务</strong>：BEGIN / COMMIT / ROLLBACK，写一份 WAL（write-ahead log）</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>这题是<strong>OOP 设计 + 数据结构选择</strong>的展示。先把 INSERT / SELECT 主路径写干净，倒排索引是核心亮点。WHERE 用 dict 风格比解析 SQL string 节省时间。</p></div>

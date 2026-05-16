@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monster Fight · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -202,7 +202,7 @@ if __name__ == '__main__':
 <h3>设计亮点</h3>
 <ol><li><strong>Skill 是策略模式（Strategy Pattern）</strong>：新加技能只要写新 class + 实现 <code>apply()</code>，引擎不变。</li><li><strong>Status / 状态机解耦伤害逻辑</strong>：dot（poison/burn）、stun、shield 都用同一 Status 数据结构，<code>tick_statuses</code> 每回合统一处理。</li><li><strong>Battle 引擎决定行动顺序 + AI</strong>：分离了 Monster 数据、技能行为、战斗流程。</li><li><strong>可扩展点</strong>：装备（equip slot）、被动技能（passive，注册到 hook 如 <code>on_hit</code>）、buff/debuff、群体技能（multi-target）。</li></ol>
 <h3>取舍</h3>
-<p>| 选择 | 理由 | |---|---| | Python dataclass + Enum | 简洁，面试 30 分钟内能写完 | | 简单 random AI | 不是 AI 题，过得去就行 | | 同步逐回合 | 不引入 async / event loop，简化 |</p>
+<table class="md-table"><thead><tr><th>选择</th><th>理由</th></tr></thead><tbody><tr><td>Python dataclass + Enum</td><td>简洁，面试 30 分钟内能写完</td></tr><tr><td>简单 random AI</td><td>不是 AI 题，过得去就行</td></tr><tr><td>同步逐回合</td><td>不引入 async / event loop，简化</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把所有技能塞在 Monster 类里用 if/elif —— 不可扩展； ❌ 状态效果直接改 ATK / DEF —— 难恢复；用 Status 列表 + 计算时减； ❌ 没有 max_turns 兜底 —— 死循环（互砍 1 dmg）； ❌ tick_statuses 在 take_damage 之前还是之后？答：之前，模拟"回合开始结算"。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>OOP 题不写完美代码，要展示<strong>清晰的边界</strong>：实体 / 行为 / 引擎三层；策略模式让技能可扩展。先写最简单 <code>BasicAttack</code> 跑通整个 Battle，再加 status / mana / AI。</p></div>

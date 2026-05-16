@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design YouTube · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -95,7 +95,7 @@ Workers → notify metadata service → publish video</code></pre>
 <p>直传 S3，<strong>绝不</strong>走 backend 服务转发流量（成本爆炸）。</p>
 <h4>2. Transcoding Pipeline</h4>
 <p>每个 video 转成多套：</p>
-<p>| Resolution | Bitrate | Codec | |---|---|---| | 240p | 400 kbps | H.264 / H.265 | | 480p | 1 Mbps | H.264 / H.265 | | 720p | 2.5 Mbps | H.264 / H.265 | | 1080p | 5 Mbps | H.264 / H.265 / AV1 | | 4K | 25 Mbps | H.265 / AV1 |</p>
+<table class="md-table"><thead><tr><th>Resolution</th><th>Bitrate</th><th>Codec</th></tr></thead><tbody><tr><td>240p</td><td>400 kbps</td><td>H.264 / H.265</td></tr><tr><td>480p</td><td>1 Mbps</td><td>H.264 / H.265</td></tr><tr><td>720p</td><td>2.5 Mbps</td><td>H.264 / H.265</td></tr><tr><td>1080p</td><td>5 Mbps</td><td>H.264 / H.265 / AV1</td></tr><tr><td>4K</td><td>25 Mbps</td><td>H.265 / AV1</td></tr></tbody></table>
 <p>每个 variant 切成 4-6 秒的 chunks → 生成 HLS playlist (<code>.m3u8</code>)。</p>
 <p><strong>并行化</strong>：原视频按时长切 N 段 → fan-out 给 N worker 各自 transcode → fan-in 合并 manifest。</p>
 <p>GPU 加速：NVIDIA NVENC / Intel QSV，比 CPU x264 快 10x。</p>
@@ -108,7 +108,7 @@ Workers → notify metadata service → publish video</code></pre>
 720p/playlist.m3u8</code></pre>
 <p>每个 chunk 独立可缓存 → CDN edge 缓存命中率高（top 1% 视频占大半流量）。</p>
 <h4>4. 存储分层</h4>
-<p>| 层 | 媒介 | 数据 | |---|---|---| | Hot | SSD (CDN edge) | 上传 7 天内 + 高 popularity | | Warm | S3 Standard | 7-90 天 + 中等 popularity | | Cold | S3 Glacier | 90+ 天且 &lt; 100 view/month | | Archive | Glacier Deep | 1 年+ 几乎无人看 |</p>
+<table class="md-table"><thead><tr><th>层</th><th>媒介</th><th>数据</th></tr></thead><tbody><tr><td>Hot</td><td>SSD (CDN edge)</td><td>上传 7 天内 + 高 popularity</td></tr><tr><td>Warm</td><td>S3 Standard</td><td>7-90 天 + 中等 popularity</td></tr><tr><td>Cold</td><td>S3 Glacier</td><td>90+ 天且 &lt; 100 view/month</td></tr><tr><td>Archive</td><td>Glacier Deep</td><td>1 年+ 几乎无人看</td></tr></tbody></table>
 <p>冷数据请求时<strong>主动重新生成 hot copy</strong>：第一个查的人等 30 秒回热，后续秒开。</p>
 <h4>5. Metadata Schema</h4>
 <pre class="language-sql"><code class="language-sql">-- Postgres (videos / users / channels)
@@ -145,7 +145,7 @@ CREATE TABLE views (
 <h4>8. Engagement / Analytics</h4>
 <p>每 view / like / comment → Kafka → 实时聚合到 Cassandra (counter) + 离线 ETL 到 ClickHouse。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 视频协议 | HLS / DASH (HTTP-based) | RTMP：UDP，不友好穿透 | | 上传 | 客户端 multipart 直传 S3 | 走 backend：流量打爆 | | Transcoding | 离线 fan-out | 实时：cost 爆 | | Hot/Cold | 4 层分层 | 单层全 SSD：贵 | | View count | Cassandra counter eventual | DB row INCR：写热点 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>视频协议</td><td>HLS / DASH (HTTP-based)</td><td>RTMP：UDP，不友好穿透</td></tr><tr><td>上传</td><td>客户端 multipart 直传 S3</td><td>走 backend：流量打爆</td></tr><tr><td>Transcoding</td><td>离线 fan-out</td><td>实时：cost 爆</td></tr><tr><td>Hot/Cold</td><td>4 层分层</td><td>单层全 SSD：贵</td></tr><tr><td>View count</td><td>Cassandra counter eventual</td><td>DB row INCR：写热点</td></tr></tbody></table>
 <h3>关键技术细节</h3>
 <ul><li><strong>AV1 vs H.264/H.265</strong>：AV1 比 H.264 省 ~30% 带宽，但编码 10x 慢。Top videos 用 AV1，长尾不值得</li><li><strong>Watermark / DRM</strong>：高价值内容 + Widevine / FairPlay DRM</li><li><strong>Live streaming</strong>：单独 pipeline，sub-second 延迟用 WebRTC / RTMP + low-latency HLS</li><li><strong>Geo-replication</strong>：每 video 复制到 multi-region S3，CDN edge 拉最近</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>客户端直传 S3 + ffmpeg 离线 transcoding pipeline</strong>；(2) <strong>HLS + CDN edge 缓存 + ABR 自适应</strong>；(3) <strong>推荐两阶段（召回 + 排序）</strong>。OpenAI 面试官可能追问编码 codec 取舍和 GPU 加速。</p></div>

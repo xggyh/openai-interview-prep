@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KV Store Serialize/Deserialize · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -104,7 +104,7 @@ def _unescape(s):
     ...</code></pre>
 <p>转义法写起来短，但一旦面试官追问"如果 escape char 自己出现怎么办"、"如何避免 O(n²) 替换"、"如何流式处理"，得绕一圈。长度前缀直接干净利落。</p>
 <h3>优化方向</h3>
-<p>| 优化点 | 做法 | |---|---| | 二进制更紧凑 | 长度用 varint 编码（protobuf 用法），减少长 string 的 ASCII 开销 | | 流式 | yield 输出 / 用 generator 解析，避免一次性 load 全部到 memory | | 多语言兼容 | 直接用 protobuf / msgpack / cbor 标准库，连协议都不用自己设计 | | Checksum | 末尾加 CRC32，防止文件损坏 |</p>
+<table class="md-table"><thead><tr><th>优化点</th><th>做法</th></tr></thead><tbody><tr><td>二进制更紧凑</td><td>长度用 varint 编码（protobuf 用法），减少长 string 的 ASCII 开销</td></tr><tr><td>流式</td><td>yield 输出 / 用 generator 解析，避免一次性 load 全部到 memory</td></tr><tr><td>多语言兼容</td><td>直接用 protobuf / msgpack / cbor 标准库，连协议都不用自己设计</td></tr><tr><td>Checksum</td><td>末尾加 CRC32，防止文件损坏</td></tr></tbody></table>
 <div class="callout callout-key"><strong>核心要点</strong><p><strong>永远不要用"分隔符 + 期待 user data 里没出现"</strong> —— 这是 codec 设计第一坑。长度前缀（length-prefixed framing）是工业界标准答案，写起来最干净。</p></div>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 用 JSON：题面说 value 含任意字符，JSON 字符串里有引号需要 escape，自己实现 escape 又回到老问题； ❌ 用 base64：输出膨胀 4/3，面试官可能问"为什么不直接写"； ❌ 转义法没考虑 escape char 自己出现的递归； ❌ 用 <code>,</code> <code>;</code> <code>\n</code> 之类常见分隔符 —— 题面明说 value 可含任意字符。</p></div>
 <div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如果要支持 nested map / list 怎么办？" → 加一层 type tag（'M' = map, 'L' = list, 'S' = string），递归编码。"如何处理 4GB 大文件？" → length 用 8-byte int + 流式 read。"如果需要 partial update 不重写整个文件？" → 切换到 append-only log（每个 op 一条 record，定期 compact），就是个迷你 LSM。</p></div>

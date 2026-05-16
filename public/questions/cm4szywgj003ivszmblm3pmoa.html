@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design Online Chess · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -95,7 +95,7 @@
 <p>走子事件 ≠ 排行榜更新。<strong>对局结束</strong>事件写入 Kafka，Ranking Worker 消费：</p>
 <ul><li>计算 ELO 增减（标准 K=32 公式）</li><li>更新 Redis <code>ZSET leaderboard</code> 用于实时查询</li><li>同步落库 Postgres 做长期持久化</li></ul>
 <h3>关键技术决策</h3>
-<p>| 决策 | 选择 | 原因 | |---|---|---| | 实时协议 | WebSocket / WSS | 双向 push，低延迟 | | 路由 | 一致性哈希 by gameId | 同局两端到达同台机器，避免分布式状态同步 | | 实时状态 | 内存 + Redis 异步 | 内存低延迟，Redis 做故障恢复源 | | 历史/回放 | MongoDB（按 gameId 文档） | 走子列表天然适合文档存储 | | 排行榜 | Redis SortedSet + Postgres | 实时排名 + 长期审计 | | 防作弊 | 走子合法性强校验 + 引擎反作弊（Stockfish 比对走法相似度） | 走子合法性纯规则可校验，外挂检测靠 ML |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>原因</th></tr></thead><tbody><tr><td>实时协议</td><td>WebSocket / WSS</td><td>双向 push，低延迟</td></tr><tr><td>路由</td><td>一致性哈希 by gameId</td><td>同局两端到达同台机器，避免分布式状态同步</td></tr><tr><td>实时状态</td><td>内存 + Redis 异步</td><td>内存低延迟，Redis 做故障恢复源</td></tr><tr><td>历史/回放</td><td>MongoDB（按 gameId 文档）</td><td>走子列表天然适合文档存储</td></tr><tr><td>排行榜</td><td>Redis SortedSet + Postgres</td><td>实时排名 + 长期审计</td></tr><tr><td>防作弊</td><td>走子合法性强校验 + 引擎反作弊（Stockfish 比对走法相似度）</td><td>走子合法性纯规则可校验，外挂检测靠 ML</td></tr></tbody></table>
 <h3>API 设计</h3>
 <pre class="language-python"><code class="language-python"># REST
 POST /games          # 创建对局（vs 好友邀请）

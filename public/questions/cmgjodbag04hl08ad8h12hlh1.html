@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a data migration service for GCP · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -83,7 +83,7 @@
 <h4>8. Multi-tenant control plane</h4>
 <ul><li>每客户每 source 一个 job</li><li>Job state: pending / running / paused / completed / failed</li><li>Web UI 显示 progress</li><li>可配置 schedule（每天增量 sync）</li></ul>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Pipeline | Dataflow (Apache Beam) | Spark：less GCP integrated | | Increment | CDC where available | Full re-sync：浪费 | | Validation | Checksum + sample | Full deep compare：太慢 | | Throttle | Adaptive based on source CPU | Fixed：source overload |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Pipeline</td><td>Dataflow (Apache Beam)</td><td>Spark：less GCP integrated</td></tr><tr><td>Increment</td><td>CDC where available</td><td>Full re-sync：浪费</td></tr><tr><td>Validation</td><td>Checksum + sample</td><td>Full deep compare：太慢</td></tr><tr><td>Throttle</td><td>Adaptive based on source CPU</td><td>Fixed：source overload</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不 checkpoint → crash 重头开始； ❌ 不 throttle source → 把客户 prod DB 打挂； ❌ Schema mismatch silently → 数据破坏； ❌ 不验证 → 客户不放心 cutover； ❌ Full sync 太频繁 → 网络成本爆。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>Data migration 的三个柱子：(1) <strong>incremental + CDC</strong> 减传量；(2) <strong>checkpoint + resume</strong> robust；(3) <strong>verification + dry run</strong> 让客户 trust。</p></div>

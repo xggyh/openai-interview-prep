@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>File System Size Analysis and Reporting · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -127,7 +127,7 @@ class FileAnalyzer:
 <p>题面强调"based on their <strong>immediate</strong> file contents" —— 不递归子文件夹。这是个考察点：是否仔细读题。</p>
 <p>如果误以为递归，就和 Task 2 重复。</p>
 <h3>复杂度</h3>
-<p>| 操作 | 时间 | |---|---| | size_of (no cache) | O(子树 size) | | size_of (cached) | O(1) 摊销 | | top_n_files | O(N log K) | | top_n_folders_immediate | O(F + total_files)（每文件夹遍历直接子文件 1 次） |</p>
+<table class="md-table"><thead><tr><th>操作</th><th>时间</th></tr></thead><tbody><tr><td>size_of (no cache)</td><td>O(子树 size)</td></tr><tr><td>size_of (cached)</td><td>O(1) 摊销</td></tr><tr><td>top_n_files</td><td>O(N log K)</td></tr><tr><td>top_n_folders_immediate</td><td>O(F + total_files)（每文件夹遍历直接子文件 1 次）</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Task 3 误算成递归子树 size —— 题面 immediate； ❌ 没用 heap 而用 sort —— K 小时 5-10x 慢； ❌ 递归 size 没考虑文件夹空 —— 返回 0 OK 但要写清； ❌ Top-K 用 max-heap of size N 取 K —— 浪费空间；用 min-heap of size K； ❌ Cache 不在更新时失效 —— 后续查询数据陈旧。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>文件系统遍历 + top-K 是 Google L4-L5 必问。重点是 OOP 数据模型（entity dict + parent/children pointers）+ heap 用法 + 缓存策略。读题时区分 "recursive" vs "immediate"。</p></div>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Leetcode 994. Rotting Oranges · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -74,7 +74,7 @@ class Solution:
 <h3>关键点</h3>
 <ol><li><strong>多源初始化</strong>：把所有 <code>2</code> 在循环开始前都 push 进队列（这就是"多源"）</li><li><strong>按层处理</strong>：用 <code>for _ in range(len(q))</code> 把本层全部出队后再 <code>minutes += 1</code></li><li><strong>提早终止</strong>：<code>while q and fresh &gt; 0</code>，没有新鲜橘子就不再增加 minutes</li><li><strong>-1 判定</strong>：循环结束后还有 fresh，说明有不可达</li></ol>
 <h3>边界 case</h3>
-<p>| Case | 期望返回 | |---|---| | 全空 grid | 0 | | 全 1（无 2） | -1 | | 全 2 | 0 | | 单 cell <code>[[1]]</code> | -1 | | 单 cell <code>[[2]]</code> | 0 |</p>
+<table class="md-table"><thead><tr><th>Case</th><th>期望返回</th></tr></thead><tbody><tr><td>全空 grid</td><td>0</td></tr><tr><td>全 1（无 2）</td><td>-1</td></tr><tr><td>全 2</td><td>0</td></tr><tr><td>单 cell <code>[[1]]</code></td><td>-1</td></tr><tr><td>单 cell <code>[[2]]</code></td><td>0</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>没按层处理</strong>：直接 BFS 出队累加 1，每个 cell 都 +1 minute → 错； ❌ <strong>fresh = 0 时返回 -1</strong>：开局就没新鲜，应返回 0； ❌ <strong>初始没把所有 2 入队</strong>：错把它当单源 BFS； ❌ <strong>修改 grid 而不更新 fresh</strong> → 死循环或 -1 错判。</p></div>
 <h3>变种</h3>

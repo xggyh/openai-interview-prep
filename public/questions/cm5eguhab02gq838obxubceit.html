@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Leetcode 588. Design In-Memory File System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -103,7 +103,7 @@ class FileSystem:
             cur = cur.children[p]
         return cur.content</code></pre>
 <h3>复杂度</h3>
-<p>| 操作 | 时间 | |---|---| | ls | O(P + K log K)，P = path 长度（分段数），K = 该目录子项数（sort） | | mkdir | O(P) | | addContentToFile | O(P + L)，L = content 长度 | | readContentFromFile | O(P + L) |</p>
+<table class="md-table"><thead><tr><th>操作</th><th>时间</th></tr></thead><tbody><tr><td>ls</td><td>O(P + K log K)，P = path 长度（分段数），K = 该目录子项数（sort）</td></tr><tr><td>mkdir</td><td>O(P)</td></tr><tr><td>addContentToFile</td><td>O(P + L)，L = content 长度</td></tr><tr><td>readContentFromFile</td><td>O(P + L)</td></tr></tbody></table>
 <h3>关键设计点</h3>
 <h4>1. dir vs file 统一抽象</h4>
 <p>用一个 <code>Node</code> 类，<code>is_file</code> 标记是文件还是目录。文件没 children，目录没 content。也可以分两个 class 用 base class，更 OOP 但更繁琐。</p>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design an e-commerce offer subscription system · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -83,7 +83,7 @@
 <h4>7. Real-time vs batched</h4>
 <p>Real-time offers (flash sale): 5 min 内 push Daily digest: 凌晨 aggregate yesterday's offers + 早 8 点发邮件</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Match | Inverted index | Full scan：N×M 慢 | | Channel | User config | Default all：spam | | Rate limit | Per-user cap | 无：unsubscribe | | Personalization | ML ranking | Random：低 CTR |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Match</td><td>Inverted index</td><td>Full scan：N×M 慢</td></tr><tr><td>Channel</td><td>User config</td><td>Default all：spam</td></tr><tr><td>Rate limit</td><td>Per-user cap</td><td>无：unsubscribe</td></tr><tr><td>Personalization</td><td>ML ranking</td><td>Random：低 CTR</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1M offers/day × 1k matched subscribers avg = 1B notifications/day = 12k QPS</li><li>Push fan-out: 12k QPS → FCM / APN handle 这 scale</li></ul>
 <h3>易错点</h3>

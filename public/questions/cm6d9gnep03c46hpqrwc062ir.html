@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Distributed Cache System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -96,7 +96,7 @@
                 node = self.topology.route(key)</code></pre>
 <p>Retry + topology refresh 处理 node failure 透明。</p>
 <h3>关键技术决策</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Sharding | Consistent hash + vnodes | Hash mod N：rebalance 全部移动 | | Replication | Async, eventual | Sync, quorum：延迟高 | | Eviction | LRU + TTL | LFU：复杂；FIFO：HIT rate 低 | | Topology | 中心 coord + client pull | Gossip：复杂 | | Multi-region | 单主 + async replica | Multi-master：write conflict |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Sharding</td><td>Consistent hash + vnodes</td><td>Hash mod N：rebalance 全部移动</td></tr><tr><td>Replication</td><td>Async, eventual</td><td>Sync, quorum：延迟高</td></tr><tr><td>Eviction</td><td>LRU + TTL</td><td>LFU：复杂；FIFO：HIT rate 低</td></tr><tr><td>Topology</td><td>中心 coord + client pull</td><td>Gossip：复杂</td></tr><tr><td>Multi-region</td><td>单主 + async replica</td><td>Multi-master：write conflict</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1B keys × 500B = 500 GB → 50 nodes × 10 GB RAM each</li><li>10M QPS / 50 nodes = 200k QPS per node → 单 node 64 GB RAM，64 core，能撑</li><li>Network：10M × 500B = 5 GB/s ingress（分散到 50 node 每个 100 MB/s）</li></ul>
 <h3>易错点</h3>

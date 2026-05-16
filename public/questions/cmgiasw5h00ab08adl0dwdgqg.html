@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design an ANN index system · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -91,7 +91,7 @@
 <h4>7. 监控</h4>
 <ul><li>Recall@K：周期 sample queries with ground truth 验证</li><li>Latency P50/P99</li><li>QPS / shard utilization</li></ul>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Algorithm | HNSW for accuracy, IVF-PQ for scale | exact KNN：O(N) | | Shard | Cluster-based for low fanout | Random：always fanout | | Filter | Hybrid pre/post | One only：suboptimal | | Storage | RAM | Disk：latency 高 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Algorithm</td><td>HNSW for accuracy, IVF-PQ for scale</td><td>exact KNN：O(N)</td></tr><tr><td>Shard</td><td>Cluster-based for low fanout</td><td>Random：always fanout</td></tr><tr><td>Filter</td><td>Hybrid pre/post</td><td>One only：suboptimal</td></tr><tr><td>Storage</td><td>RAM</td><td>Disk：latency 高</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1B × 768 dim × 4 bytes (fp32) = 3 TB raw</li><li>HNSW graph ~50% overhead → 4.5 TB total → distribute 50 nodes × 100GB RAM each</li><li>1k QPS / shard / replica → 30 shards × 3 replica = 90 nodes total</li></ul>
 <h3>易错点</h3>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Webhook Callback System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -176,7 +176,7 @@ if not hmac.compare_digest(expected, provided):
 )</code></pre>
 <p>按 webhook_id partition，按时间 DESC clustering → 查询用户某 webhook 的 history 飞快。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 投递语义 | at-least-once（用户做幂等） | exactly-once：分布式不可能 | | 重试 | 指数退避 + jitter | 固定 interval：火灾恢复时打挂用户 | | 失败处理 | 7 次后 pause webhook | 无限重试：垃圾占资源 | | 队列 | Kafka delivery + Redis retry | 单 Kafka：retry delay 不易做 | | 限速 | per-host concurrency | 单全局限速：慢 host 拖累 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>投递语义</td><td>at-least-once（用户做幂等）</td><td>exactly-once：分布式不可能</td></tr><tr><td>重试</td><td>指数退避 + jitter</td><td>固定 interval：火灾恢复时打挂用户</td></tr><tr><td>失败处理</td><td>7 次后 pause webhook</td><td>无限重试：垃圾占资源</td></tr><tr><td>队列</td><td>Kafka delivery + Redis retry</td><td>单 Kafka：retry delay 不易做</td></tr><tr><td>限速</td><td>per-host concurrency</td><td>单全局限速：慢 host 拖累</td></tr></tbody></table>
 <h3>关键技术细节</h3>
 <ul><li><strong>Idempotency-Key</strong>：每条 delivery 唯一 ID，用户用此去重（at-least-once 意味着可能重复投递）</li><li><strong>Timeout 15s</strong>：用户 endpoint 处理时间上限，超过认为失败重试</li><li><strong>Webhook URL 白名单</strong>：禁止指向 internal IP（127.0.0.1, 10.x, 172.16.x, 169.254.x），防 SSRF</li><li><strong>TLS only</strong>：拒绝 http://，要求 https://</li><li><strong>Cancellation</strong>：用户 disable webhook → 立即停止后续重试（worker 拉前查 webhook.status）</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>at-least-once + 用户幂等</strong>（Idempotency-Key）；(2) <strong>指数退避 + Redis ZSET 做 delay queue</strong>；(3) <strong>HMAC 签名验证 + SSRF 防御</strong>。</p></div>

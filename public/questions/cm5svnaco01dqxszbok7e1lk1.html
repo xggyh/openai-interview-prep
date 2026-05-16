@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a URL Shortener · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -134,7 +134,7 @@ class UrlRecord:
 <h4>7. 过期清理</h4>
 <p>后台 cron job 扫 <code>expires_at &lt; now</code> 标记 deleted；硬删除可以延后到月底 GC 减小写放大。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | ID 生成 | KGS（不可猜） | Auto-increment：可枚举 | | Redirect | 302 + cache-control | 301：click count 不准 | | 存储 | DynamoDB / Cassandra | Postgres：sharding 麻烦 | | Click count | Kafka 聚合 | DB 同步：写热点 | | 缓存 | CDN + Redis 双层 | 单层：miss 走 DB 太多 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>ID 生成</td><td>KGS（不可猜）</td><td>Auto-increment：可枚举</td></tr><tr><td>Redirect</td><td>302 + cache-control</td><td>301：click count 不准</td></tr><tr><td>存储</td><td>DynamoDB / Cassandra</td><td>Postgres：sharding 麻烦</td></tr><tr><td>Click count</td><td>Kafka 聚合</td><td>DB 同步：写热点</td></tr><tr><td>缓存</td><td>CDN + Redis 双层</td><td>单层：miss 走 DB 太多</td></tr></tbody></table>
 <h3>关键技术点</h3>
 <h4>写路径</h4>
 <pre class="language-plaintext"><code class="language-plaintext">POST /shorten { long_url, custom_alias? }

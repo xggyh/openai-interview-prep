@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Web Crawler · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -95,7 +95,7 @@
 <h4>8. Errors / Trap detection</h4>
 <ul><li>4xx / 5xx 退避重试</li><li>Infinite redirect loop detect</li><li>Crawler traps（calendar like <code>/2026/1/1/...</code>）：限制 depth + URL pattern detection</li></ul>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Frontier | Per-host scheduler | Single queue：违反 politeness | | Dedup | Bloom + center service | Set in memory：OOM | | Content dedup | Simhash | exact hash：mirror 算不同 | | JS render | Selective puppeteer | All puppeteer：成本 50x | | Re-crawl | History-based + sitemap | Fixed interval：浪费 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Frontier</td><td>Per-host scheduler</td><td>Single queue：违反 politeness</td></tr><tr><td>Dedup</td><td>Bloom + center service</td><td>Set in memory：OOM</td></tr><tr><td>Content dedup</td><td>Simhash</td><td>exact hash：mirror 算不同</td></tr><tr><td>JS render</td><td>Selective puppeteer</td><td>All puppeteer：成本 50x</td></tr><tr><td>Re-crawl</td><td>History-based + sitemap</td><td>Fixed interval：浪费</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>1B pages/day × avg 100 KB = 100 TB / day raw</li><li>Fetcher: 1000 boxes × 100 req/sec = 100k req/s → 1 day = 8.6B requests（10% success bandwidth)</li><li>Storage: compressed 5x → 20 TB/day → 7 PB/year</li></ul>
 <h3>易错点</h3>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a crossword puzzle service · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -133,7 +133,7 @@ class WordList:
     size: int
     storage_url: str   # S3</code></pre>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | 求解算法 | DFS + 约束传播 | SAT solver：通用但启动慢 | | 任务队列 | Redis Stream（轻量） | Kafka：吞吐更高但复杂 | | 缓存 | hash(input) → result | 没有缓存：浪费算力 | | Worker 隔离 | 一 puzzle 一 worker | 多线程：GIL + 调度复杂 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>求解算法</td><td>DFS + 约束传播</td><td>SAT solver：通用但启动慢</td></tr><tr><td>任务队列</td><td>Redis Stream（轻量）</td><td>Kafka：吞吐更高但复杂</td></tr><tr><td>缓存</td><td>hash(input) → result</td><td>没有缓存：浪费算力</td></tr><tr><td>Worker 隔离</td><td>一 puzzle 一 worker</td><td>多线程：GIL + 调度复杂</td></tr></tbody></table>
 <div class="callout callout-key"><strong>核心要点</strong><p>这题真正的考点不在 crossword 算法本身（面试官不会期待你 30 分钟内写完 AC-3），而在<strong>任务调度 + 缓存 + 弹性扩展</strong>。说出"hash 输入做去重"和"按 queue depth 扩 worker"是基本盘。</p></div>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把求解放在 API 进程内 —— API 直接 timeout； ❌ 不做幂等（同一 puzzle 多次提交跑多次）； ❌ Worker 任务无超时 —— 一个病态 puzzle 卡死整 worker； ❌ 用 Cassandra / Dynamo 存 job state —— 状态机更新需要强一致。</p></div>
 <div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何支持 partial solution？" → worker 周期性把当前 best assignment 写到 Redis，前端可显示进度。"如何 A/B test 不同算法？" → API 层按 user_id 分桶，给不同 worker pool 打标。</p></div>

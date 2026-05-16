@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a prompt playground · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -130,7 +130,7 @@ def render(template, vars: dict[str, str]) -&gt; list[dict]:
 <h4>7. Eval（如果时间够）</h4>
 <p>用户可以定义一组 test inputs + expected outputs / criteria，批量跑模板 → 输出 pass rate。这就是 OpenAI Evals 的雏形。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 理由 | |---|---|---| | 流式协议 | SSE | 单向，简单，浏览器原生支持 | | Template store | Postgres | 元数据查询友好 | | Run history | Cassandra | 写量大，按 user_id partition | | 多模型路由 | API 层适配（OpenAI / Anthropic / 自家 vLLM 一视同仁） | 用户不应感知后端 | | 协作 | CRDT (Yjs) | 比 OT 简单 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>理由</th></tr></thead><tbody><tr><td>流式协议</td><td>SSE</td><td>单向，简单，浏览器原生支持</td></tr><tr><td>Template store</td><td>Postgres</td><td>元数据查询友好</td></tr><tr><td>Run history</td><td>Cassandra</td><td>写量大，按 user_id partition</td></tr><tr><td>多模型路由</td><td>API 层适配（OpenAI / Anthropic / 自家 vLLM 一视同仁）</td><td>用户不应感知后端</td></tr><tr><td>协作</td><td>CRDT (Yjs)</td><td>比 OT 简单</td></tr></tbody></table>
 <h3>关键技术点</h3>
 <ul><li><strong>Latency 对比</strong>：UI 要显示 TTFT、tok/s、total_latency 三个数；后端在 SSE 第一个 token 时记 TTFT，每隔 N 个 token 算 tok/s</li><li><strong>Token 计数</strong>：用对应模型的 tokenizer（tiktoken for OpenAI、anthropic counter）实时算 prompt_tokens</li><li><strong>Diff view</strong>：两个 run 输出做字符 diff，标红删除标绿新增</li></ul>
 <div class="callout callout-key"><strong>核心要点</strong><p>这题面对 OpenAI 面试官，亮点要打在：(1) <strong>并发多 model 对比 + 流式 diff</strong>；(2) <strong>template 版本化</strong>（不要让用户改 prompt 后丢历史）；(3) <strong>token / cost 实时计算</strong>。</p></div>

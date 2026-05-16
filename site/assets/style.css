@@ -117,6 +117,30 @@ pre[class*="language-"] {
   border-radius: 6px; font-size: 13.5px; padding: 14px 16px; overflow-x: auto;
   background: #0d1117 !important;
 }
+
+/* Markdown tables */
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 14px;
+}
+.md-table th, .md-table td {
+  border: 1px solid #d0d7de;
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.md-table th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+.md-table tr:nth-child(even) td {
+  background: #fafbfc;
+}
+.md-table code {
+  white-space: nowrap;
+}
 code:not([class*="language-"]) {
   background: rgba(175,184,193,.2); padding: 0.15em 0.35em;
   border-radius: 4px; font-size: 85%;

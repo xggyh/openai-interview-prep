@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design Google Docs · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -97,7 +97,7 @@ Server  → transform op against ops since client's revision
 <h4>8. 大 doc 优化</h4>
 <p>10k-page doc 不全 load。Lazy load sections + virtual scroll。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Algorithm | OT (历史) / CRDT (现代) | Locking：blocks user | | Sync | WebSocket + sticky session | REST polling：高延迟 | | Storage | Spanner（strong consistency for ops） | Eventual：op 顺序乱 | | Offline | Op queue + sync on reconnect | Disable offline：UX 差 |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Algorithm</td><td>OT (历史) / CRDT (现代)</td><td>Locking：blocks user</td></tr><tr><td>Sync</td><td>WebSocket + sticky session</td><td>REST polling：高延迟</td></tr><tr><td>Storage</td><td>Spanner（strong consistency for ops）</td><td>Eventual：op 顺序乱</td></tr><tr><td>Offline</td><td>Op queue + sync on reconnect</td><td>Disable offline：UX 差</td></tr></tbody></table>
 <h3>易错点</h3>
 <div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Naïve last-write-wins → lost edits； ❌ OT transform function bug → divergence； ❌ 没 sticky routing → 跨 server op log 乱； ❌ Cursor 走 op log → 太多 noise；分开 ephemeral； ❌ Comment anchor 不跟随编辑 → comment 偏。</p></div>
 <div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>OT 或 CRDT</strong> 实时协作；(2) <strong>WebSocket + sticky session</strong>；(3) <strong>Op log 持久 + replay enable versioning + offline</strong>。</p></div>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design an Anti-Phishing System · 面试题准备</title>
-<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="../assets/style.css?v=7b1a18da">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
 </head>
 <body>
@@ -88,7 +88,7 @@ if prefix in client_bloom:   # cached locally
 <h4>8. Distributed delivery</h4>
 <p>10B+ URLs。Bloom filter 客户端只装 popular subset；rare URLs 必须 server-side check。每天分发 incremental Bloom updates。</p>
 <h3>取舍</h3>
-<p>| 决策 | 选择 | 替代 | |---|---|---| | Privacy | k-anonymity prefix | Send full URL：privacy leak | | Speed | Bloom + Redis + Spanner | DB-only：50ms+ | | Detection | ML + signature + crowdsource | Single signal：low recall | | FP | Appeal + ML retrain | None：user backlash |</p>
+<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Privacy</td><td>k-anonymity prefix</td><td>Send full URL：privacy leak</td></tr><tr><td>Speed</td><td>Bloom + Redis + Spanner</td><td>DB-only：50ms+</td></tr><tr><td>Detection</td><td>ML + signature + crowdsource</td><td>Single signal：low recall</td></tr><tr><td>FP</td><td>Appeal + ML retrain</td><td>None：user backlash</td></tr></tbody></table>
 <h3>容量估算</h3>
 <ul><li>10B URLs hashed → 10B × 32 bytes = 320 GB (full hash)</li><li>Bloom filter client-side: 1M popular URL × 8 bits = 1 MB (low overhead)</li><li>Check QPS: 100M URL/sec aggregate worldwide → mostly client-bloom local</li></ul>
 <h3>易错点</h3>
