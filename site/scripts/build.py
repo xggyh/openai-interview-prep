@@ -29,6 +29,23 @@ COMPANY_COLOR = {
     "Anthropic": "#d97706",
 }
 
+# Questions that have been rewritten in extended teaching-style depth.
+# These show a 📚 badge and have a dedicated filter.
+DEEP_DIVE_SLUGS = {
+    # Google Senior System Design (11 questions, rewritten 2026-05-16)
+    "cm9auesuf00ioad072gonjah8",  # Distributed Denylist System
+    "cm7honmgk0278imqn03o95rtg",  # Trending Hashtags System
+    "cm4szwvht003pnqlrkhad2xjd",  # Ticket Booking System
+    "cm4t1rgrn005988ilm7ct8ma1",  # Image Uploader
+    "cmkxbumw501pk08ad4wrda4pv",  # Large Model File Distribution
+    "cm6jx0wxh016bui4b2oqtwudo",  # Logger System
+    "cm6jwhimp0093dar9n0eo4lvt",  # Server Health Monitoring
+    "cm6i9u0oh00rmjx73lr1pjtlu",  # Navigation/Mapping
+    "cmgs26zx800vx08ad6f8ncnxh",  # Global VM Monitoring
+    "cmdj4mw0801blad0810r3tfos",  # Slowest Query System
+    "cmi3quwzg02mg07ad9blftp07",  # Fast Food Restaurant Chain
+}
+
 # We rely on a minimal markdown subset and CDN-loaded prism.js for syntax highlighting.
 # Markdown features supported by our parser:
 #   - # / ## / ### headings
@@ -341,13 +358,19 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
                 f'<span class="company-badge" style="--c:{color}" title="{esc(c)}: {n} 人报告">{esc(c)} {n}</span>'
             )
 
+        # Deep dive badge for teaching-style rewritten questions
+        is_deep = slug_id in DEEP_DIVE_SLUGS
+        deep_badge = '<span class="deep-badge" title="教学版深度讲解：概念铺垫 + 架构推演 + 45min 面试节奏 + Follow-up 演练">📚 教学版</span>' if is_deep else ''
+
         data_companies = "|".join(company_list)
+        data_deep = "1" if is_deep else "0"
         card = f"""
-<div class="q-card" data-type="{esc(qtype)}" data-companies="{esc(data_companies)}">
+<div class="q-card{' is-deep' if is_deep else ''}" data-type="{esc(qtype)}" data-companies="{esc(data_companies)}" data-deep="{data_deep}">
   <a class="q-title" href="{href}">{esc(q['title'])}</a>
   <div class="q-tags">
     <span class="{tag_class(qtype)}">{esc(qtype)}</span>
     <span class="tag tag-level">{esc(level_tag)}</span>
+    {deep_badge}
     {''.join(company_badges)}
   </div>
   <div class="q-meta">📋 {total_reports} 人报告 · 🕒 最近 {esc(most_recent or '—')}</div>
@@ -369,6 +392,13 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
         count = len(type_groups.get(tname, []))
         if count:
             type_buttons.append(f'<button data-tfilter="{esc(tname)}">{esc(tname)} ({count})</button>')
+
+    # Deep dive filter (toggle button)
+    deep_count = sum(1 for q in questions if q["slug"].rsplit("/", 1)[-1] in DEEP_DIVE_SLUGS)
+    deep_tabs = [
+        '<button class="active" data-dfilter="all">全部</button>',
+        f'<button data-dfilter="deep">📚 教学版深度讲解 ({deep_count})</button>',
+    ]
 
     counts = ' '.join(
         f'<span class="stat"><strong>{len(type_groups.get(t, []))}</strong> {esc(t)}</span>'
@@ -406,18 +436,23 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
     <span class="filter-label">类型：</span>
     {''.join(type_buttons)}
   </div>
+  <div class="filter-bar">
+    <span class="filter-label">深度：</span>
+    {''.join(deep_tabs)}
+  </div>
 
   <div class="q-grid" id="q-grid">{''.join(cards)}</div>
 </main>
 
 <script>
-const state = {{ cfilter: 'all', tfilter: 'all' }};
+const state = {{ cfilter: 'all', tfilter: 'all', dfilter: 'all' }};
 function applyFilters() {{
   document.querySelectorAll('.q-card').forEach(card => {{
     const companies = (card.dataset.companies || '').split('|');
     const matchC = state.cfilter === 'all' || companies.includes(state.cfilter);
     const matchT = state.tfilter === 'all' || card.dataset.type === state.tfilter;
-    card.style.display = (matchC && matchT) ? '' : 'none';
+    const matchD = state.dfilter === 'all' || (state.dfilter === 'deep' && card.dataset.deep === '1');
+    card.style.display = (matchC && matchT && matchD) ? '' : 'none';
   }});
 }}
 document.querySelectorAll('button[data-cfilter]').forEach(btn => {{
@@ -433,6 +468,14 @@ document.querySelectorAll('button[data-tfilter]').forEach(btn => {{
     document.querySelectorAll('button[data-tfilter]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     state.tfilter = btn.dataset.tfilter;
+    applyFilters();
+  }});
+}});
+document.querySelectorAll('button[data-dfilter]').forEach(btn => {{
+  btn.addEventListener('click', () => {{
+    document.querySelectorAll('button[data-dfilter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.dfilter = btn.dataset.dfilter;
     applyFilters();
   }});
 }});
@@ -546,6 +589,16 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
     else:
         nav_next = "<span></span>"
 
+    # Deep-dive banner at top of detail page
+    is_deep = slug_id in DEEP_DIVE_SLUGS
+    deep_banner = ''
+    if is_deep:
+        deep_banner = '''
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>'''
+
     html_doc = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -564,7 +617,7 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
 </header>
 <main class="container detail">
   <div class="breadcrumb"><a href="../index.html">所有题目</a> / {esc(qtype)} / {esc(title)}</div>
-  <h1>{esc(title)}</h1>
+  <h1>{esc(title)}</h1>{deep_banner}
   <div class="header-meta">
     <span class="{tag_class(qtype)}">{esc(qtype)}</span>
     <span class="tag tag-level">{esc(primary_level)}</span>

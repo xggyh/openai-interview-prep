@@ -96,6 +96,45 @@ a:hover { text-decoration: underline; }
 }
 .company-chip strong { color: var(--c, #1f2328); }
 
+/* Deep-dive teaching badge on cards */
+.deep-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; line-height: 1.4;
+  color: #5a1e9f;
+  background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+  border: 1px solid #c084fc;
+}
+.q-card.is-deep {
+  border-color: #c084fc;
+  box-shadow: 0 1px 4px rgba(168, 85, 247, 0.15);
+}
+.q-card.is-deep:hover {
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.25);
+}
+
+/* Deep filter button when active uses purple */
+.filter-bar button[data-dfilter="deep"].active {
+  background: #9333ea;
+  border-color: #9333ea;
+  color: white;
+}
+
+/* Banner on detail page */
+.deep-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px; margin: 12px 0 18px;
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border: 1px solid #c084fc; border-left-width: 4px;
+  border-radius: 8px;
+}
+.deep-badge-large {
+  font-weight: 700; font-size: 14px;
+  color: #5a1e9f;
+  white-space: nowrap;
+}
+.deep-banner-text { font-size: 13px; color: #4a4a4a; line-height: 1.5; }
+
 /* ---- Detail page ---- */
 .detail h1 { font-size: 28px; margin: 0 0 8px; }
 .detail .breadcrumb { font-size: 13px; color: #57606a; margin-bottom: 16px; }
