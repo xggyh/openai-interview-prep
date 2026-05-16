@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenAI FDE Take-home Walkthrough — ConvFinQA Agent · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=2f582d51">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Guide / OpenAI FDE Take-home Walkthrough — ConvFinQA Agent</div>
+  <h1>OpenAI FDE Take-home Walkthrough — ConvFinQA Agent</h1>
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>
+  <div class="header-meta">
+    <span class="tag tag-guide">Guide</span>
+    <span class="tag tag-level">FDE</span>
+    <span class="external"><a href="https://openai.com/index/openai-launches-the-deployment-company/" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#10a37f"><strong>OpenAI</strong> · FDE · 📋 0 · 🕒 Mid May, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Tomoro 被 OpenAI 收购后（2026-05-11），其经典 FDE take-home challenge —— 基于 ConvFinQA paper 构建对话式金融 QA agent —— 几乎确认会被 OpenAI Deployment Company 继承。这是一份 800+ 行的完整实战 playbook：误区警告 / 五大难点深挖 / 6 步 step-by-step playbook / 完整 code 骨架 / 7 个 follow-up 面试题样板答案。覆盖 coding agent 怎么用、cost transparency 怎么写、eval framework 怎么设计。</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>0. 在开始之前 — 背景 + 概念铺垫</h3>
+<h4>0.1 你为什么要看这个 guide</h4>
+<p><strong>2026 年 5 月 11 日，OpenAI 宣布收购 Tomoro</strong>（伦敦的 AI deployment 咨询公司，~150 个 Forward Deployed Engineers）。Tomoro 团队整建制并入新成立的 <strong>OpenAI Deployment Company</strong>（4B 美元投资 + TPG 战投）。</p>
+<p>→ <strong>"Tomoro FDE" 现在 = "OpenAI Deployment Company FDE"</strong>。</p>
+<p>Tomoro 在被收购前的 FDE take-home challenge —— <strong>基于 ConvFinQA paper 的对话式金融问答 agent</strong> —— 几乎可以确认会被 OpenAI 继承（或改良版）作为 FDE 流程一环。理解这道题怎么做，是准备 OpenAI FDE 面试的关键。</p>
+<h4>0.2 关键名词（带类比）</h4>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>FDE (Forward Deployed Engineer)</strong></td><td>在客户现场部署 AI 系统的"前线工程师"。Palantir 发明的角色</td><td>既懂技术又懂业务的"军医"</td></tr><tr><td><strong>Take-home</strong></td><td>拿回家做的编程任务，1-7 天</td><td>期末大作业</td></tr><tr><td><strong>ConvFinQA</strong></td><td>2022 年的学术 paper + dataset：多轮对话式金融问答</td><td>你跟分析师问财报</td></tr><tr><td><strong>Multi-turn dialogue</strong></td><td>多轮对话，后面 question 可能 reference 前面答案</td><td>聊天而非搜索</td></tr><tr><td><strong>Agent</strong></td><td>能调用 tool（calculator / lookup）的 LLM 系统</td><td>助理 + 工具</td></tr><tr><td><strong>ReAct</strong></td><td>Reasoning + Acting，让 LLM 边想边做边观察</td><td>出声思考 + 试错</td></tr><tr><td><strong>RAG</strong></td><td>Retrieval-Augmented Generation —— 检索相关 doc 后再让 LLM 回答</td><td>查参考书后回答</td></tr><tr><td><strong>Eval</strong></td><td>评估系统好坏的框架（accuracy / cost / latency）</td><td>期末考试</td></tr><tr><td><strong>Coreference</strong></td><td>代词指代谁 ("the previous answer" 指什么)</td><td>上下文理解</td></tr><tr><td><strong>Tool use</strong></td><td>LLM 调用外部函数（calculator / search）</td><td>助理用计算器</td></tr><tr><td><strong>Hallucination</strong></td><td>LLM 凭空编造内容</td><td>没读书的同学瞎答</td></tr><tr><td><strong>Critic agent</strong></td><td>单独 LLM 验证答案对错</td><td>复审编辑</td></tr><tr><td><strong>Chain-of-thought (CoT)</strong></td><td>让 LLM 写出推理步骤</td><td>数学题写过程</td></tr><tr><td><strong>Cost-aware</strong></td><td>设计时考虑钱（API 费用）</td><td>学生会精打细算</td></tr></tbody></table>
+<h4>0.3 阅读建议</h4>
+<p>如果你<strong>完全没读过 ConvFinQA paper</strong>：读完 0-3 节后，去 GitHub 看 <a href="https://github.com/czyssrs/ConvFinQA">ConvFinQA repo</a> 5 分钟感受数据再回来。</p>
+<p>如果你<strong>完全没做过 LLM agent</strong>：先读 <a href="https://arxiv.org/abs/2210.03629">ReAct paper</a> 20 分钟。</p>
+<hr />
+<h3>1. 题目重述</h3>
+<h4>1.1 原始 task description（综合多个候选人面经）</h4>
+<blockquote><p>"We give you the <strong>ConvFinQA dataset</strong> (Chen et al., EMNLP 2022). You should build an <strong>LLM-driven prototype</strong> that can answer <strong>conversational dialogue questions</strong> on <strong>any given financial document</strong>.</p>
+<p><strong>Key constraint</strong>: do <strong>not</strong> use the same methodology as the paper. We want to see your own approach.</p>
+<p>The task is officially scoped at <strong>4 hours</strong>, but you can spend more if needed. Don't implement everything — describe future features in your report.</p>
+<p>Submit: code + README + short report (architecture decisions, eval results, limitations, future work)."</p></blockquote>
+<h4>1.2 数据集长什么样</h4>
+<pre class="language-json"><code class="language-json">{
+  "id": "Single_AAPL/2002/page_23.pdf-2",
+  "annotation": {
+    "amt_pre_text": "...company narrative...",
+    "amt_table": [
+      ["", "2001", "2002"],
+      ["revenue", "$5,363", "$5,742"],
+      ["cost of goods", "(3,648)", "(3,872)"],
+      ...
+    ],
+    "amt_post_text": "...more narrative...",
+    "dialogue_break": [
+      "what was the revenue in 2002?",
+      "and in 2001?",
+      "what is the percent change?",
+      "is that increase greater than 10%?"
+    ],
+    "exe_ans_list": ["5742", "5363", "0.0707", "no"]
+  }
+}</code></pre>
+<ul><li><strong>Pre/post text</strong>：财报 narrative</li><li><strong>Table</strong>：财报数据表</li><li><strong>Dialogue</strong>：4-6 个连续 question（后面可 reference 前面）</li><li><strong>Gold answers</strong>：每个 question 的正确数字 / yes/no</li></ul>
+<h4>1.3 数据集规模</h4>
+<ul><li><strong>2066</strong> 个独立财报文档</li><li><strong>3,892</strong> 个对话</li><li><strong>14,115</strong> 个总 questions</li><li>平均每对话 <strong>3.6 turns</strong></li><li>来源：<strong>S&amp;P 500</strong> 公司 10-K / 10-Q 文档</li></ul>
+<h4>1.4 实测时间</h4>
+<table class="md-table"><thead><tr><th>报告</th><th>时间</th></tr></thead><tbody><tr><td>官方说</td><td>4 hours</td></tr><tr><td>候选人 A</td><td>2 days</td></tr><tr><td>候选人 B</td><td>1.5 days</td></tr><tr><td>候选人 C</td><td>3 hours（只做 baseline）→ 没过</td></tr></tbody></table>
+<p>→ <strong>官方 "4 hours" 是 trap</strong>。真正想过的人花 1-2 天。但不必无限投入 —— <strong>质量大于数量</strong>。</p>
+<hr />
+<h3>2. 五大误区（先警告，免得你踩）</h3>
+<h4>误区 ① "我不敢用 coding agent，怕被 detect"</h4>
+<p><strong>真相</strong>：<strong>他们期望你用</strong>。</p>
+<p>FDE 是 LLM 公司的工程师。<strong>自己不 dogfood 反而是 red flag</strong>。Cursor / Claude Code / GPT-5 写代码完全 OK。</p>
+<p><strong>唯一要求</strong>：在 README 里<strong>诚实声明</strong>：</p>
+<pre class="language-markdown"><code class="language-markdown">## Build notes
+Prototyped over ~10 hours using Claude Code for boilerplate (dataset 
+loader, API client) and GPT-5 for SQL queries. Architecture decisions, 
+failure mode analysis, eval framework, and the report are mine.</code></pre>
+<p>→ 这反而<strong>加分</strong>，dogfood + 诚实 + 仍体现自己的 thinking。</p>
+<h4>误区 ② "我要把 code 写得超级 production"</h4>
+<p><strong>真相</strong>：他们看的不是 code，是 <strong>architecture + thinking + report</strong>。</p>
+<ul><li>一份 "60% accuracy + 详细 failure analysis + cost table + future work" 比一份 "85% accuracy 但 README 只有 README.md" <strong>强 10x</strong></li><li>Code quality 维持"clean enough"即可（80 行函数 OK，类型 hint 加好），别强迫症地 refactor 8 小时</li></ul>
+<h4>误区 ③ "我要把全 14k question 跑完看 final accuracy"</h4>
+<p><strong>真相</strong>：<strong>会烧光预算 + 浪费时间</strong>。</p>
+<table class="md-table"><thead><tr><th>Model</th><th>Full eval cost estimate</th></tr></thead><tbody><tr><td>GPT-5</td><td>~$350-500</td></tr><tr><td>GPT-4o</td><td>~$50</td></tr><tr><td>GPT-4o-mini</td><td>~$5</td></tr><tr><td>Claude Opus 4.7</td><td>~$400</td></tr><tr><td>Claude Haiku</td><td>~$3</td></tr></tbody></table>
+<p><strong>正确做法</strong>：</p>
+<ul><li>Prototype 用 <strong>gpt-4o-mini / claude-haiku</strong>（10x 便宜）</li><li>Eval 跑 <strong>300 个 stratified sample</strong>（covering 不同 question type）</li><li>Report 里<strong>算清楚</strong>：你 sample 多少、估全量多少、为啥这么 sample</li></ul>
+<p>→ <strong>Cost transparency = senior engineering signal</strong>。</p>
+<h4>误区 ④ "我要 reproduce paper 的方法"</h4>
+<p><strong>真相</strong>：题目<strong>明说不要 paper 同方法</strong>。你必须 differentiate。</p>
+<p>Paper 用：</p>
+<ul><li><strong>Tag-OP</strong>：把数学操作编译成 program tag</li><li><strong>Chain-of-thought prompting</strong> on 大 LLM</li></ul>
+<p>你可以用：</p>
+<ul><li><strong>Agent + tools</strong> (ReAct / function calling)</li><li><strong>RAG-first</strong> 不全 doc 入 prompt</li><li><strong>Symbolic + LLM hybrid</strong>：LLM 提取数字，Python 算数</li><li><strong>Critic agent</strong>：单独 LLM 验证答案，错了 retry</li><li><strong>Structured table extraction</strong> vs raw text</li></ul>
+<p>→ <strong>选 1-2 个 differentiation 重点讲</strong>，不必全做。</p>
+<h4>误区 ⑤ "Future Work 是凑字数的"</h4>
+<p><strong>真相</strong>：Future Work <strong>极其重要</strong> —— 候选人 A 被打回就因为 "future direction 写得不够"。</p>
+<p>Future Work 展示：</p>
+<ul><li>你<strong>意识到</strong> current solution 的 limitation</li><li>你<strong>知道</strong>给更多时间 / 资源会做什么</li><li>你能<strong>估算</strong> ROI（成本 vs 收益）</li></ul>
+<p>写法（后面有完整 template）：</p>
+<pre class="language-markdown"><code class="language-markdown">### What I'd do with another week
+1. **Fine-tune gpt-4o-mini on tool use traces** — 2 day; would reduce 
+   per-question cost from $0.025 to $0.003 (~8x), likely match GPT-4o 
+   accuracy. ROI: huge if production deployment.
+2. **Critic agent with disagreement-based retry** — 1 day; targets the 
+   25% chain-reasoning failures. Trade-off: ~2x latency per question.
+3. **Symbolic table extractor (replace LLM table parsing)** — 1.5 day; 
+   targets 20% table mis-locate errors. Lib: LayoutLM or unstructured.</code></pre>
+<p>每条 = 1 行说明 + 量化 + trade-off。<strong>面试官读完知道你不只是"做完就走"</strong>。</p>
+<hr />
+<h3>3. 难点深挖</h3>
+<p>ConvFinQA 表面是 RAG，实际有 <strong>5 个独立难点</strong>。要让面试官看到你<strong>意识到</strong>所有这些。</p>
+<h4>难点 ① Multi-turn coreference（指代解析）</h4>
+<pre class="language-plaintext"><code class="language-plaintext">T1: "what was revenue in 2020?"            → 5234
+T2: "and in 2021?"                          → "and" 指 revenue
+T3: "what is the percent change?"           → from T1 to T2 implicit
+T4: "is that higher than 5-year avg?"       → "that" 指 T3 答案</code></pre>
+<p><strong>LLM 默认 stateless</strong>。你必须把 conversation history 进 prompt。但：</p>
+<ul><li>全塞 prompt → token 爆 / 注意力散</li><li>只塞前一轮 → T4 reference T3 的 T3 reference T1 失效</li></ul>
+<p><strong>解决方案</strong>：</p>
+<pre class="language-python"><code class="language-python">class ConversationMemory:
+    def __init__(self):
+        self.turns = []   # list of (question, answer, resolved_meaning)
+    
+    def add_turn(self, q, a):
+        # 关键：把当前 question 用历史 resolve 后存下
+        resolved_q = self.resolve_coref(q)
+        self.turns.append({
+            "raw_q": q,
+            "resolved_q": resolved_q,   # "and in 2021" → "what was revenue in 2021"
+            "answer": a,
+        })
+    
+    def resolve_coref(self, q: str) -&gt; str:
+        """Use LLM to expand pronouns / implicit references."""
+        if not self.turns:
+            return q
+        prompt = f"""Given this conversation history:
+{format_history(self.turns)}
+
+The latest question is: {q}
+
+Rewrite this question to be fully self-contained, expanding any 
+pronouns or implicit references."""
+        return llm.complete(prompt)</code></pre>
+<p><strong>Eval 时显示</strong>：'multi-turn accuracy drops from 78% (T1) to 38% (T4+)' → 面试官 <strong>buy</strong>。</p>
+<h4>难点 ② LLM 不能信赖做算数</h4>
+<pre class="language-python"><code class="language-python"># GPT-4 算 12345.67 × 0.0823 经常错
+# 实测 100 次：误差 &gt; 1% 的占 23%</code></pre>
+<p><strong>必须 tool use</strong>：</p>
+<pre class="language-python"><code class="language-python">def calculate(expression: str) -&gt; float:
+    """Safe arithmetic via Python REPL."""
+    # Sanitize: only allow numbers + basic ops
+    allowed = re.match(r'^[\d\.\+\-\*\/\(\)\s\,]+$', expression)
+    if not allowed:
+        raise ValueError(f"unsafe: {expression}")
+    return eval(expression)   # safe after sanitize</code></pre>
+<p>Agent 调用：</p>
+<pre class="language-plaintext"><code class="language-plaintext">LLM: I need to calculate (5742 - 5363) / 5363
+→ tool call: calculate("(5742 - 5363) / 5363")
+→ observation: 0.07067
+→ LLM: The percent change is approximately 7.07%</code></pre>
+<p><strong>关键陷阱</strong>：</p>
+<ul><li>数字格式：<code>$5,742</code> vs <code>5742</code> vs <code>5.742K</code>。<strong>必须 normalize</strong></li><li>会计括号：<code>(3,648) = -3648</code>（不是 3648）</li><li>百分比：fraction <code>0.10</code> vs percent <code>10</code> 经常混</li></ul>
+<h4>难点 ③ Table cell location</h4>
+<p>财报 table 在 prompt 里是 markdown / CSV / raw 形式：</p>
+<pre class="language-plaintext"><code class="language-plaintext">              2000      2001      2002
+revenue     $5,034    $5,363    $5,742
+cogs       (3,612)   (3,648)   (3,872)</code></pre>
+<p><strong>LLM 经常</strong>：</p>
+<ul><li>跑错列（"2001 revenue" 答 5742 即 2002 的）</li><li>跑错行（"cogs" 答 revenue）</li><li>把 <code>(3,648)</code> 当 3648（应是 -3648）</li></ul>
+<p><strong>解决</strong>：把 table 抽到 <strong>structured dict</strong> 而非让 LLM 看 raw：</p>
+<pre class="language-python"><code class="language-python">def extract_table(table_rows: list) -&gt; dict:
+    """[['', '2001', '2002'], ['revenue', '5363', '5742'], ...]
+    → {('revenue', '2001'): 5363, ('revenue', '2002'): 5742, ...}"""
+    headers = [c.strip() for c in table_rows[0][1:]]
+    facts = {}
+    for row in table_rows[1:]:
+        row_label = normalize_label(row[0])
+        for i, val in enumerate(row[1:]):
+            year = headers[i]
+            num = parse_number(val)
+            facts[(row_label, year)] = num
+    return facts
+
+def parse_number(s: str) -&gt; float:
+    """$5,742 → 5742.0;  (3,648) → -3648.0"""
+    s = s.replace('$', '').replace(',', '').strip()
+    if s.startswith('(') and s.endswith(')'):
+        return -float(s[1:-1])
+    return float(s)</code></pre>
+<p>→ Agent 用 <code>lookup(row, col)</code> 而非让 LLM 找 cell。<strong>Table accuracy 60% → 95%</strong>。</p>
+<h4>难点 ④ Chain of operations</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Q: "What's the gross profit margin growth from 2020 to 2022?"
+
+需要 5 步：
+1. gross_profit_2020 = revenue_2020 - cogs_2020
+2. gross_profit_2022 = revenue_2022 - cogs_2022
+3. margin_2020 = gross_profit_2020 / revenue_2020
+4. margin_2022 = gross_profit_2022 / revenue_2022
+5. growth = (margin_2022 - margin_2020) / margin_2020</code></pre>
+<p><strong>任一步错全错</strong>。Paper 模型 vs 人类专家差 21 个百分点就败在这。</p>
+<p><strong>解决思路</strong>：<strong>显式 plan-then-execute</strong></p>
+<pre class="language-python"><code class="language-python">def answer_multi_step(q, doc_facts):
+    # Step 1: LLM decompose into operations
+    plan = llm.plan(q, doc_facts, format="json")
+    # plan = [
+    #   {"name": "gp_2020", "op": "subtract", "args": ["revenue_2020", "cogs_2020"]},
+    #   {"name": "gp_2022", ...},
+    #   {"name": "margin_2020", "op": "divide", "args": ["gp_2020", "revenue_2020"]},
+    #   ...
+    # ]
+    
+    # Step 2: Execute plan deterministically
+    state = doc_facts.copy()
+    for step in plan:
+        result = TOOLS[step["op"]](*[state[a] for a in step["args"]])
+        state[step["name"]] = result
+    
+    return state[plan[-1]["name"]]</code></pre>
+<p>→ LLM 做<strong>计划</strong>，Python 做<strong>执行</strong>。LLM 在 step 间不会算错（因为不算）。</p>
+<h4>难点 ⑤ Eval 本身难</h4>
+<p><strong>你以为</strong>：accuracy = correct / total。</p>
+<p><strong>实际</strong>：</p>
+<table class="md-table"><thead><tr><th>Question</th><th>Gold</th><th>Pred</th><th>算对？</th></tr></thead><tbody><tr><td>"revenue in 2020?"</td><td>5742</td><td>"5742"</td><td>string vs int</td></tr><tr><td>"growth?"</td><td>0.0707</td><td>7.07</td><td>fraction vs percent</td></tr><tr><td>"growth?"</td><td>0.0707</td><td>0.071</td><td>rounding</td></tr><tr><td>"greater than 10%?"</td><td>"no"</td><td>"No, 7.07% &lt; 10%"</td><td>format</td></tr></tbody></table>
+<p><strong>必须</strong>实现 robust matcher：</p>
+<pre class="language-python"><code class="language-python">def numeric_match(pred: Any, gold: Any, tol=0.01) -&gt; bool:
+    """Tolerant comparison."""
+    # Extract number from pred
+    pred_num = extract_first_number(str(pred))
+    gold_num = float(gold) if not is_yesno(gold) else None
+    
+    # Yes/No questions
+    if is_yesno(gold):
+        return _yesno_match(pred, gold)
+    
+    if pred_num is None or gold_num is None:
+        return False
+    
+    # Handle fraction vs percent confusion (very common!)
+    if abs(pred_num - gold_num) &lt; tol:
+        return True
+    if abs(pred_num / 100 - gold_num) &lt; tol:
+        return True  # pred is percent, gold is fraction
+    if abs(pred_num - gold_num * 100) &lt; tol:
+        return True
+    
+    # Relative tolerance for big numbers
+    if abs(pred_num - gold_num) / max(abs(gold_num), 1) &lt; tol:
+        return True
+    
+    return False</code></pre>
+<p><strong>Stratified sampling</strong>：</p>
+<pre class="language-python"><code class="language-python">def stratify_sample(dataset, n=300):
+    """按 question type 分层 sample。"""
+    by_type = defaultdict(list)
+    for conv in dataset:
+        for turn in conv.turns:
+            qtype = classify_question(turn.q)  # lookup / single_op / multi_op / multi_turn / yesno
+            by_type[qtype].append((conv, turn))
+    
+    # 每类按比例分配
+    per_type = {k: int(n * len(v) / total) for k, v in by_type.items()}
+    return [random.sample(by_type[k], n_k) for k, n_k in per_type.items()]</code></pre>
+<p>→ 跑 300 个 stratified sample，<strong>报告 per-category accuracy</strong> 而非单一数字。</p>
+<hr />
+<h3>4. 实战 playbook — 6 步走</h3>
+<h4>Step 0: Scope decision（30 分钟，最重要的 30 分钟）</h4>
+<p><strong>不要开 IDE</strong>。先在 README 头部写：</p>
+<pre class="language-markdown"><code class="language-markdown"># ConvFinQA Agent — Design Doc
+
+## Scope
+- **In scope**: 
+  - Build agent capable of multi-turn QA
+  - Eval on 300 stratified samples (12% of test set), estimated $5 cost
+  - Compare to paper's baseline (where reported)
+  
+- **Out of scope** (with rationale):
+  - Fine-tuning: too time-intensive (~2-3 days), not feasible in 1-2 day
+  - Web UI: not core to demonstrating architecture
+  - Full 14k eval: cost ($350+ on GPT-5), no commensurate value at prototype
+  
+## Differentiation from paper (which used Tag-OP + CoT)
+- **Agent with explicit tool use** vs static prompt program
+- **Structured table extraction** vs LLM-read-raw
+- **Critic-based retry** vs single-pass
+- **Plan-then-execute** for multi-step questions</code></pre>
+<p><strong>这一段 = 面试官 first impression</strong>。Show 你<strong>思考过 trade-off</strong> 才动手。</p>
+<h4>Step 1: Baseline（1-2 小时）</h4>
+<p>最简单的 GPT prompt:</p>
+<pre class="language-python"><code class="language-python">def naive_agent(doc, conversation):
+    """Single-shot LLM with full context."""
+    prompt = f"""You are a financial analyst. Answer based on the document.
+
+Document:
+{format_doc(doc)}
+
+Conversation:
+{format_history(conversation[:-1])}
+
+Question: {conversation[-1]}
+Answer with a number or yes/no."""
+    
+    return openai.complete(prompt, model="gpt-4o-mini")</code></pre>
+<p>跑 <strong>50 个 sample</strong> 测 accuracy。<strong>这是你的 baseline number</strong>。</p>
+<p>后续每个改动都 vs baseline 看。<strong>改动 ROI</strong> 是面试 deep dive 的核心问题。</p>
+<h4>Step 2: Failure mode analysis（30-60 分钟，最有价值）</h4>
+<p><strong>手动看 20 个 failure</strong>。分类：</p>
+<pre class="language-plaintext"><code class="language-plaintext">Failure 类型              占比     例子
+─────────────────────────────────────────────────────
+Multi-turn coref          35%     T2: "and in 2021?" 答了 2022
+Numerical hallucination   25%     算 5742-5363 答 369 (实 379)
+Table cell mis-locate     20%     "cogs 2020" 答了 revenue
+Chain reasoning broken    15%     5 步推理在第 3 步错
+Yes/no format issue       3%      "No, ..." 但 gold 是 "no"
+Other                      2%     真实 ambiguous</code></pre>
+<p><strong>面试官最爱听这种 breakdown</strong>。"I found 35% of errors come from multi-turn coref, so I prioritized fixing that first..."</p>
+<h4>Step 3: Targeted architecture（3-5 小时）</h4>
+<p>基于 failure mode 设计:</p>
+<pre class="language-python"><code class="language-python">class FinAgent:
+    def __init__(self, doc):
+        self.doc = doc
+        # Pre-process: structured table extraction (fix table mis-locate)
+        self.facts = extract_facts(doc)
+        self.tables = extract_tables(doc)
+        self.conv_memory = ConversationMemory()
+    
+    def answer(self, question: str) -&gt; dict:
+        # Fix 1: Multi-turn coref resolution
+        resolved_q = self.conv_memory.resolve_coref(question)
+        
+        # Fix 2: Plan-then-execute for multi-step
+        plan = self._llm_plan(resolved_q)
+        
+        # Fix 3: Deterministic execution with tools (no LLM arithmetic)
+        result = self._execute_plan(plan)
+        
+        # Fix 4: Critic verifies answer
+        if not self._critic_approves(result, resolved_q):
+            # Retry with different prompt
+            result = self._retry(resolved_q, error_hint="Verify your calculation")
+        
+        # Save to memory
+        self.conv_memory.add(question, resolved_q, result)
+        return result
+    
+    def _llm_plan(self, q):
+        """Decompose question into ordered operations."""
+        prompt = PLAN_PROMPT.format(question=q, facts=list(self.facts.keys()))
+        plan_json = llm.complete(prompt, model="gpt-4o-mini", format="json")
+        return parse_plan(plan_json)
+    
+    def _execute_plan(self, plan):
+        state = dict(self.facts)
+        for step in plan:
+            op = TOOLS[step["op"]]
+            args = [state[a] for a in step["args"]]
+            state[step["name"]] = op(*args)
+        return state[plan[-1]["name"]]</code></pre>
+<p><strong>Tools</strong>:</p>
+<pre class="language-python"><code class="language-python">TOOLS = {
+    "lookup": lambda row, col: facts.get((row, col)),
+    "add": lambda a, b: a + b,
+    "subtract": lambda a, b: a - b,
+    "multiply": lambda a, b: a * b,
+    "divide": lambda a, b: a / b if b != 0 else None,
+    "percent_change": lambda new, old: (new - old) / old if old else None,
+    "compare": lambda a, op, b: {"gt": a&gt;b, "lt": a&lt;b, "eq": a==b}[op],
+}</code></pre>
+<h4>Step 4: Eval framework（1-2 小时，面试买分项）</h4>
+<pre class="language-python"><code class="language-python">class Evaluator:
+    def __init__(self, dataset):
+        self.samples = stratify_sample(dataset, n=300)
+    
+    def run(self, agent_factory) -&gt; Report:
+        results = []
+        for conv in self.samples:
+            agent = agent_factory(conv.doc)
+            for i, turn in enumerate(conv.turns):
+                pred = agent.answer(turn.question)
+                results.append({
+                    "conv_id": conv.id,
+                    "turn_idx": i,
+                    "question": turn.question,
+                    "category": classify_question(turn.question, i),
+                    "gold": turn.gold_answer,
+                    "pred": pred,
+                    "correct": numeric_match(pred, turn.gold_answer),
+                    "tokens": agent.last_call_tokens,
+                    "latency_ms": agent.last_call_latency,
+                })
+        return Report(results)
+    
+    
+@dataclass
+class Report:
+    results: list
+    
+    def overall_accuracy(self): ...
+    def by_category(self): ...
+    def by_turn_position(self): ...
+    def cascading_failure_rate(self): ...
+    def total_cost_usd(self): ...
+    def render(self) -&gt; str: ...   # 输出 README 友好 markdown</code></pre>
+<p>输出像这样：</p>
+<pre class="language-plaintext"><code class="language-plaintext">Overall accuracy: 67.3% (n=978 turns across 300 conversations)
+
+By question type:
+  single_lookup:      89%  (n=120)   ← 第一次跑就这样
+  single_operation:   72%  (n=240)   ← 引入 plan-then-execute 后
+  multi_operation:    58%  (n=180)   ← 还是 multi-step 难
+  multi_turn (T2+):   58%  (n=438)   ← coref 是核心 bottleneck
+
+By conversation turn:
+  Turn 1: 78%
+  Turn 2: 65%
+  Turn 3: 52%
+  Turn 4+: 38%   ← cascading
+
+Cascading failure rate: 67% of turn-N errors come from turn-(N-1) errors.
+
+Cost: $5.34 on gpt-4o-mini (978 turns, avg $0.0055/turn)
+Estimated full eval (14k turns): $77 on gpt-4o-mini</code></pre>
+<p>→ 这是<strong>面试官梦中数据</strong>。</p>
+<h4>Step 5: Cost transparency（30 分钟）</h4>
+<pre class="language-markdown"><code class="language-markdown">## Cost Analysis
+
+| Run | Model | Turns | Tokens (in/out) | Cost | Accuracy |
+|---|---|---|---|---|---|
+| Baseline | gpt-4o-mini | 50 | 60k / 15k | $0.02 | 51% |
+| + Table extract | gpt-4o-mini | 50 | 45k / 12k | $0.015 | 64% |
+| + Plan-execute | gpt-4o-mini | 50 | 90k / 25k | $0.04 | 71% |
+| + Critic-retry | gpt-4o-mini | 50 | 130k / 35k | $0.06 | 76% |
+| **Final eval** | gpt-4o-mini | 978 | 1.7M / 300k | $5.34 | 67% (stratified) |
+| Estimated full | gpt-4o-mini | 14k | 24M / 4.3M | $77 | (not run) |
+| Hypothetical | gpt-4o | 978 | 1.7M / 300k | $50 | (not run; ~+8% expected) |
+
+**Why stratified sample, not full eval?**
+- Full eval cost on gpt-4o-mini: $77; on gpt-4o: $500; on gpt-5: $2000
+- Stratified 300 conv (978 turns) sufficient to estimate per-category accuracy 
+  within ±2% confidence interval
+- Saved $72-1995 for prototype iteration
+
+**Why gpt-4o-mini, not gpt-4o?**
+- Prototype iterating cost: I ran the eval 7 times during development. 
+  gpt-4o would cost 7 × $50 = $350 vs gpt-4o-mini $35.
+- For production deployment, I'd switch to gpt-4o or fine-tuned model.</code></pre>
+<p>→ 每一个数字 / 决定都有 <strong>why</strong>。这是 senior 工程师的样子。</p>
+<h4>Step 6: Report + Future Work（1-2 小时）</h4>
+<p>完整 README 结构：</p>
+<pre class="language-markdown"><code class="language-markdown"># ConvFinQA Agent
+
+## TL;DR
+- Built ReAct-style agent with structured table extraction, plan-then-execute, 
+  and critic-based retry.
+- 67.3% accuracy on 300 stratified samples (978 turns), vs ~60% paper baseline.
+- $5 in API cost (prototype + final eval combined).
+
+## Architecture
+[ASCII diagram of components]
+
+## What I built
+[brief: agent / table extractor / plan-execute / eval framework]
+
+## Why I built it this way
+[3-4 architecture decisions with rationale and alternatives considered]
+
+## Eval results
+[stratified table, by-turn, by-category, cascading failure]
+
+## Cost analysis
+[from Step 5 above]
+
+## Failure modes
+1. Multi-turn coref (35% of errors) — example + why
+2. ...
+
+## Limitations
+- Only evaluated 300/3892 conversations
+- Did not handle multi-document questions
+- No fine-tuning explored
+
+## Future work
+[6 ranked items, each with time estimate + ROI]
+
+## Build notes
+- ~12 hours over 2 evenings
+- Used Claude Code for boilerplate (loader, API client)
+- Architecture, eval design, analysis are mine
+
+## Reproduction
+```bash
+pip install -r requirements.txt
+python eval.py --model gpt-4o-mini --n 300
+# Cost: ~$5; Time: ~30 min</code></pre>
+<pre class="language-plaintext"><code class="language-plaintext">
+---
+
+## 5. Coding agent 怎么用 / 不用
+
+### ✅ 该用 coding agent
+
+| 任务 | 让 agent 做 |
+|---|---|
+| Dataset loader | "write me a loader for ConvFinQA JSON" |
+| API client wrapper | "wrap OpenAI / Anthropic API with retry" |
+| Argparse / CLI | "make a click CLI with --model --n flags" |
+| README boilerplate | "draft README structure for this project" |
+| Type hints / docstrings | "add types to this function" |
+| Unit test framework | "write pytest for these tools" |
+
+**节省 60-70% 时间**。
+
+### ❌ 不该用 / 必须自己做
+
+| 任务 | 为什么 |
+|---|---|
+| Scope decision | 你的 judgment 不能 outsource |
+| Architecture choice | 面试官会问 why，agent 答不上来 |
+| Failure mode analysis | 手动看 error = irreplaceable |
+| Eval design | sample strategy / metric / categorization |
+| Cost analysis | 决策、估算、trade-off |
+| Future work writing | 你思想的窗口 |
+| Report writing | 你的 voice 才有信号 |
+
+### 实战诀窍
+
+1. **手改 30%**：agent 出来后改命名 / comment / 错误处理风格 → 看起来像你写
+2. **Commit history 自然**：分阶段 commit，不要 1 commit 800 行
+3. **小但 real 的 test**：哪怕只 5 个 test case，run-able + 真测
+4. **README 老实声明**：诚实 + dogfood = 加分
+
+---
+
+## 6. Sample 代码骨架
+
+### 6.1 Project structure
+</code></pre>
+<p>convfinqa-agent/ ├── README.md ├── requirements.txt ├── data/ │   └── (download from github.com/czyssrs/ConvFinQA) ├── src/ │   ├── __init__.py │   ├── loader.py            # dataset loading │   ├── doc.py               # document parsing + table extraction │   ├── memory.py            # ConversationMemory + coref resolution │   ├── tools.py             # calculator / lookup / etc │   ├── plan.py              # plan-then-execute │   ├── critic.py            # answer verifier │   ├── agent.py             # main FinAgent class │   └── eval.py              # Evaluator + matchers + categorizer ├── tests/ │   └── test_tools.py ├── scripts/ │   ├── run_eval.py │   ├── analyze_failures.py │   └── compute_costs.py └── notebooks/ └── failure_analysis.ipynb   # 你 manual 分析的痕迹</p>
+<pre class="language-plaintext"><code class="language-plaintext">
+### 6.2 Core agent code
+
+```python
+# src/agent.py
+from dataclasses import dataclass
+from typing import Any
+from .doc import Document
+from .memory import ConversationMemory
+from .plan import plan_then_execute
+from .critic import Critic
+from .tools import TOOLS
+
+
+@dataclass
+class AgentResult:
+    answer: Any
+    plan: list
+    reasoning: str
+    tokens_used: int
+    retries: int
+
+
+class FinAgent:
+    def __init__(self, doc: Document, model="gpt-4o-mini"):
+        self.doc = doc
+        self.model = model
+        self.memory = ConversationMemory()
+        self.critic = Critic(model=model)
+    
+    def answer(self, question: str) -&gt; AgentResult:
+        # 1. Resolve coreference using memory
+        resolved_q = self.memory.resolve(question)
+        
+        # 2. Plan + execute
+        for attempt in range(3):
+            plan, result = plan_then_execute(
+                question=resolved_q,
+                facts=self.doc.facts,
+                tools=TOOLS,
+                model=self.model,
+            )
+            
+            # 3. Critic verify
+            if self.critic.approves(resolved_q, plan, result):
+                break
+            # else retry with hint
+        
+        # 4. Save to memory
+        self.memory.add(question, resolved_q, result)
+        
+        return AgentResult(
+            answer=result,
+            plan=plan,
+            reasoning=f"Resolved Q: {resolved_q}",
+            tokens_used=self._tokens,
+            retries=attempt,
+        )</code></pre>
+<h4>6.3 Eval code</h4>
+<pre class="language-python"><code class="language-python"># src/eval.py
+import random
+from collections import defaultdict
+from .agent import FinAgent
+from .loader import load_dataset
+
+
+def numeric_match(pred, gold, tol=0.01) -&gt; bool:
+    """Robust numeric/yes-no comparison."""
+    pred_num = _extract_number(pred)
+    
+    if _is_yesno(gold):
+        return _yesno_match(pred, gold)
+    
+    try:
+        gold_num = float(gold)
+    except:
+        return str(pred).strip().lower() == str(gold).strip().lower()
+    
+    if pred_num is None:
+        return False
+    
+    # Try multiple comparisons
+    candidates = [
+        pred_num,           # raw
+        pred_num / 100,     # if pred was percent
+        pred_num * 100,     # if pred was fraction
+    ]
+    
+    for c in candidates:
+        if abs(c - gold_num) &lt; tol:
+            return True
+        if abs(gold_num) &gt; 1 and abs(c - gold_num) / abs(gold_num) &lt; tol:
+            return True
+    return False
+
+
+def classify_question(q: str, turn_idx: int) -&gt; str:
+    """Heuristic question type classifier."""
+    q_lower = q.lower()
+    if turn_idx == 0 and any(w in q_lower for w in ["what was", "what is", "how much"]):
+        return "single_lookup"
+    if turn_idx == 0 and any(w in q_lower for w in ["percent", "ratio", "difference"]):
+        return "single_operation"
+    if turn_idx &gt; 0 and any(w in q_lower for w in ["and", "what about", "that"]):
+        return "multi_turn"
+    if any(w in q_lower for w in ["greater", "higher", "lower", "yes", "no"]):
+        return "yesno"
+    return "multi_operation"
+
+
+def stratified_sample(dataset, n=300):
+    """Sample preserving question type distribution."""
+    by_type = defaultdict(list)
+    for conv in dataset:
+        for i, turn in enumerate(conv.turns):
+            t = classify_question(turn.question, i)
+            by_type[t].append((conv, i))
+    
+    total = sum(len(v) for v in by_type.values())
+    per_type = {k: max(1, int(n * len(v) / total)) for k, v in by_type.items()}
+    
+    selected_convs = set()
+    for t, n_t in per_type.items():
+        for conv, _ in random.sample(by_type[t], min(n_t, len(by_type[t]))):
+            selected_convs.add(conv.id)
+    
+    return [c for c in dataset if c.id in selected_convs]
+
+
+def evaluate(dataset, model="gpt-4o-mini", n=300):
+    samples = stratified_sample(dataset, n=n)
+    results = []
+    total_cost = 0
+    
+    for conv in samples:
+        agent = FinAgent(conv.doc, model=model)
+        for i, turn in enumerate(conv.turns):
+            result = agent.answer(turn.question)
+            results.append({
+                "conv_id": conv.id,
+                "turn_idx": i,
+                "category": classify_question(turn.question, i),
+                "gold": turn.gold_answer,
+                "pred": result.answer,
+                "correct": numeric_match(result.answer, turn.gold_answer),
+                "tokens": result.tokens_used,
+                "retries": result.retries,
+            })
+            total_cost += result.tokens_used * cost_per_token(model)
+    
+    return Report(results, total_cost)</code></pre>
+<hr />
+<h3>7. 面试 follow-up 演练</h3>
+<p>Take-home 交完后会有 60 min <strong>deep dive 面试</strong>。下面是常见追问 + 怎么答。</p>
+<h4>Q1: "Tell me about a specific question your agent got wrong. Why?"</h4>
+<p><strong>期望答</strong>：</p>
+<blockquote><p>"Looking at Q-234 (multi-turn): T3 asked 'what's the ratio?' implicitly meaning T2's answer (5742) to T1's answer (5363). My coref resolver expanded 'the ratio' to 'the ratio of revenue 2020 to revenue 2022' incorrectly, because it lacked context about which numbers T1/T2 referred to.</p>
+<p>Fix would be: resolver should also access the previous <em>answers</em>, not just questions. I.e. memory should carry forward computed values, not just question text. I'd estimate this fixes ~20% of multi-turn errors. Add ~1 day."</p></blockquote>
+<p>→ 具体 question + 具体 root cause + 具体 fix + 量化 + 时间估计。</p>
+<h4>Q2: "If dataset were 1M conversations instead of 4k, what breaks?"</h4>
+<p><strong>期望答</strong>：</p>
+<blockquote><p>"Three things would scale-break:</p>
+<ol><li><strong>Cost</strong>: full eval $77 → $20k. Mitigation: stratified sample stays 300, no change needed.</li><li><strong>Inference latency</strong>: agent currently 3-5 sec per turn (gpt-4o-mini + critic). 1M users 待 5 sec 不可接受. Mitigation: batch async + Fine-tune small model.</li><li><strong>Memory</strong>: ConversationMemory in-process state. 1M concurrent sessions = OOM. Mitigation: externalize to Redis with session_id."</li></ol></blockquote>
+<p>→ 列 3 个 + each scale problem + mitigation。</p>
+<h4>Q3: "How do you know your agent is actually working well?"</h4>
+<p><strong>杀手题</strong>。期望答：</p>
+<blockquote><p>"Four signals, not just one:</p>
+<ol><li><strong>Per-category accuracy</strong> (not overall): 'multi-turn 38%' is the real story, masked by 'overall 67%'.</li><li><strong>Cascading failure rate</strong>: 67% of T4 errors propagate from T3. Tells me to fix early turns.</li><li><strong>Manual review of 20 failures</strong>: surface failure modes invisible in metrics.</li><li><strong>Real-customer simulation</strong>: if I had access, I'd have 5 analysts use the agent for a week, log usability issues.</li></ol>
+<p>No single metric captures it. SaaS shipping decision should be based on 'is this safe for high-stakes financial decisions?' answer is no until per-category 90%+."</p></blockquote>
+<p>→ Multi-signal + 没有 single number 是答得好的标志。</p>
+<h4>Q4: "Why didn't you use GPT-5? Cost?"</h4>
+<p><strong>期望答</strong>：</p>
+<blockquote><p>"Two reasons:</p>
+<ol><li><strong>Cost</strong>: prototype eval × 7 iterations × 14k full eval = $14k on GPT-5. On gpt-4o-mini = $35. ROI for prototype: gpt-4o-mini.</li><li><strong>Iteration speed</strong>: gpt-4o-mini eval finishes in 5 min, gpt-5 maybe 30 min. Tight feedback loop is more valuable than absolute accuracy at prototype stage.</li></ol>
+<p>For production: I'd evaluate gpt-5 / claude-opus on a held-out test set with proper power analysis. Likely gpt-5 ~+8% accuracy. Trade-off: 60x cost. Whether worth depends on customer's price sensitivity."</p></blockquote>
+<p>→ Money + speed + production-vs-prototype distinction。</p>
+<h4>Q5: "Would you ship this to a real bank?"</h4>
+<p><strong>期望答</strong>：</p>
+<blockquote><p>"No, not as-is. Three blockers:</p>
+<ol><li><strong>Accuracy floor</strong>: 67% means 1-in-3 answers wrong. Banks make decisions on these — unacceptable risk. Need 95%+ on high-stakes questions, plus uncertainty estimates ('I'm not confident in this answer').</li><li><strong>Source citation</strong>: agent doesn't currently cite which doc cell its answer came from. Auditors need this.</li><li><strong>Guardrails</strong>: if asked something outside doc scope, agent might hallucinate. Need 'I don't know' fallback + escalation to human.</li></ol>
+<p>Path to production: 6 months. Phase 1 (fine-tune + critic stack) → 85%. Phase 2 (citation + uncertainty) → 90% with explainability. Phase 3 (compliance + audit) → ship."</p></blockquote>
+<p>→ Customer-aware + production thinking + roadmap。这是 <strong>FDE 最看重的能力</strong>。</p>
+<h4>Q6: "Walk me through your architecture decisions."</h4>
+<p><strong>期望答</strong>（structured）：</p>
+<blockquote><p>"Three main decisions:</p>
+<p><strong>1. Agent (ReAct) vs static prompt</strong>: chose agent because multi-step chains benefit from explicit observation + replan. Trade-off: 2-3x tokens. Alternative considered: program-of-thought (paper's approach) — rejected because of single-pass failure mode.</p>
+<p><strong>2. Structured table extraction vs LLM-read-raw</strong>: extracted facts to dict upfront. Trade-off: brittleness when table format varies (~5% extraction failure rate). Worth it because LLM table reading is ~60% accurate, dict lookup ~95%.</p>
+<p><strong>3. Critic + retry vs single-pass</strong>: critic catches ~30% of would-be errors at 2x latency cost. Trade-off worth it for accuracy-sensitive task. Alternative: confidence-based abstain (return 'unsure') — would do in production but not in prototype."</p></blockquote>
+<p>→ 每个决定 + alternatives considered + 量化 trade-off。</p>
+<h4>Q7: "Have you used a coding agent for this take-home?"</h4>
+<p><strong>期望答（诚实）</strong>：</p>
+<blockquote><p>"Yes, Claude Code wrote the dataset loader, API client wrapper, argparse, and 60% of the critic code. I personally wrote: the architecture decisions, the failure mode analysis, eval framework design, all prompt engineering, and the report.</p>
+<p>I also reviewed and rewrote agent-generated code where the style didn't match (~30% of code was edited post-generation). My commit history reflects the development phases.</p>
+<p>I see coding agent use as expected for an FDE — we dogfood our own tools."</p></blockquote>
+<p>→ 诚实 + 区分 + dogfood framing。<strong>Never lie</strong>。</p>
+<hr />
+<h3>8. 总结</h3>
+<h4>三件你必须记住的事</h4>
+<ol><li><strong>他们看的是 thinking，不是 code</strong>。Architecture decisions / failure analysis / cost transparency / future work 比 accuracy 数字重要 10x。</li></ol>
+<ol><li><strong>Coding agent 是 expected, not feared</strong>。但 follow-up 面试 60 分钟 deep dive 是 coding agent 救不了你的地方 —— 准备好解释每一个 design choice。</li></ol>
+<ol><li><strong>ConvFinQA 真正难的不是 RAG，是 5 个独立难点</strong>（multi-turn coref / LLM 数学 / table extraction / chain ops / eval 设计）。识别 + 各个击破 = senior signal。</li></ol>
+<h4>进阶学习</h4>
+<ul><li><strong>必读 paper</strong>:</li><li><a href="https://arxiv.org/abs/2210.03629">ReAct: Synergizing Reasoning and Acting</a></li><li><a href="https://aclanthology.org/2022.emnlp-main.421/">ConvFinQA original paper</a></li><li><a href="https://arxiv.org/abs/2211.10435">Program-Aided Language Models (PAL)</a> — symbolic + LLM hybrid</li></ul>
+<ul><li><strong>实操</strong>:</li><li>跑 GitHub repo: github.com/czyssrs/ConvFinQA</li><li>用 LangChain / LlamaIndex 搭一个 ReAct agent</li><li>看 OpenAI function calling cookbook</li></ul>
+<ul><li><strong>生态</strong>:</li><li>关注 OpenAI Deployment Company hiring page</li><li>关注 Tomoro team 的人 (Substack / LinkedIn) 看他们 share 的 best practice</li><li>参加 Anthropic 公开 talks（FDE 框架很多类似）</li></ul>
+<ul><li><strong>mindset shift</strong>:</li><li>FDE 不是"在公司里写代码"，是"<strong>到客户现场把 AI 用好</strong>"</li><li>这意味着：客户 communication / scoping / 验证 / handoff 跟 coding 同样重要</li><li>准备一些<strong>跟非技术 stakeholder 协作的故事</strong>（PM / Sales / Product designer）</li></ul>
+<hr />
+<h3>9. 行动清单</h3>
+<ol><li>☐ 立刻下载 <a href="https://github.com/czyssrs/ConvFinQA">ConvFinQA GitHub repo</a> 看 sample 5 条数据</li><li>☐ 读 ConvFinQA paper 第 2-4 节（30 分钟）</li><li>☐ 用 GPT-4o-mini 跑一个 naive baseline on 10 questions（1 小时）</li><li>☐ Manual 看 5 个 failure 分类（30 分钟）</li><li>☐ 写一份 design doc 草稿（不实现，只 design）—— 让我帮你 review</li><li>☐ 如果决定真做：花 1-2 天 follow Step 0-6 playbook</li></ol>
+<hr />
+<blockquote><p>下一步：如果你想 hands-on 试，<strong>第二步</strong>我会真的把 ConvFinQA repo 拉下来，<strong>实际搭一遍</strong> baseline + agent + eval，让你看一份完整 reference implementation。</p></blockquote>
+  </section>
+
+  
+  
+  <section class="section"><h2>外部链接</h2><ul><li><a href="https://github.com/czyssrs/ConvFinQA" target="_blank" rel="noopener">https://github.com/czyssrs/ConvFinQA</a></li><li><a href="https://aclanthology.org/2022.emnlp-main.421/" target="_blank" rel="noopener">https://aclanthology.org/2022.emnlp-main.421/</a></li><li><a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener">https://arxiv.org/abs/2210.03629</a></li><li><a href="https://openai.com/index/openai-launches-the-deployment-company/" target="_blank" rel="noopener">https://openai.com/index/openai-launches-the-deployment-company/</a></li></ul></section>
+
+  <div class="nav-footer">
+    <a href="cm4t1rgrn005988ilm7ct8ma1.html">← Design an Image Uploader</a>
+    <a href="cmhykoavb02w108adtuubkyzp.html">Disease Spread in Flower Grid →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

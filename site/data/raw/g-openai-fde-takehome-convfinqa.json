@@ -1,0 +1,14 @@
+{
+  "title": "OpenAI FDE Take-home Walkthrough — ConvFinQA Agent",
+  "shortDescription": "Tomoro 被 OpenAI 收购后（2026-05-11），其经典 FDE take-home challenge —— 基于 ConvFinQA paper 构建对话式金融 QA agent —— 几乎确认会被 OpenAI Deployment Company 继承。这是一份 800+ 行的完整实战 playbook：误区警告 / 五大难点深挖 / 6 步 step-by-step playbook / 完整 code 骨架 / 7 个 follow-up 面试题样板答案。覆盖 coding agent 怎么用、cost transparency 怎么写、eval framework 怎么设计。",
+  "bodyText": "",
+  "timelineRaw": "",
+  "commentsRaw": "",
+  "externalLinks": [
+    "https://github.com/czyssrs/ConvFinQA",
+    "https://aclanthology.org/2022.emnlp-main.421/",
+    "https://arxiv.org/abs/2210.03629",
+    "https://openai.com/index/openai-launches-the-deployment-company/"
+  ],
+  "meta": {}
+}

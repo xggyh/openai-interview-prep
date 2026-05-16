@@ -34,6 +34,8 @@ SOURCES = [
     # Google all-types pages 1-5 (expanded round) — overlapping with above is fine,
     # merge dedupes by slug. Both contribute the same "Google" badge.
     ("Google", ROOT / "site" / "data" / "google-all-questions.json"),
+    # Hand-written guides / longform articles (not scraped from hellointerview)
+    ("OpenAI", ROOT / "site" / "data" / "guides.json"),
 ]
 
 def main():

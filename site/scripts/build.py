@@ -44,6 +44,8 @@ DEEP_DIVE_SLUGS = {
     "cmgs26zx800vx08ad6f8ncnxh",  # Global VM Monitoring
     "cmdj4mw0801blad0810r3tfos",  # Slowest Query System
     "cmi3quwzg02mg07ad9blftp07",  # Fast Food Restaurant Chain
+    # Long-form guides
+    "g-openai-fde-takehome-convfinqa",  # OpenAI FDE Take-home Walkthrough
 }
 
 # We rely on a minimal markdown subset and CDN-loaded prism.js for syntax highlighting.
@@ -316,6 +318,7 @@ def parse_comments(comments_raw: str):
 def render_index(questions, type_groups, company_groups, recency_sorted):
     """Render index.html with company + type filters."""
     types_meta = [
+        ("Guide", "Guide（专题文章）"),
         ("Coding", "Coding 题（算法 / LLD 编码）"),
         ("System Design", "System Design 题（架构设计）"),
         ("Googlyness", "Googlyness（Google 行为面试）"),

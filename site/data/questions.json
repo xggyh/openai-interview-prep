@@ -2692,5 +2692,19 @@
         "lastAsked": "Late January, 2025"
       }
     }
+  },
+  {
+    "slug": "/guides/g-openai-fde-takehome-convfinqa",
+    "title": "OpenAI FDE Take-home Walkthrough — ConvFinQA Agent",
+    "type": "Guide",
+    "description": "Tomoro 被 OpenAI 收购（2026-05-11），其经典 FDE take-home challenge 几乎确认会被 OpenAI Deployment Company 继承。一份 800+ 行的完整实战 playbook：5 个核心难点、6 步 playbook、coding agent 怎么用、cost analysis、7 个 follow-up 样板答案。",
+    "url": "https://openai.com/index/openai-launches-the-deployment-company/",
+    "companies": {
+      "OpenAI": {
+        "level": "FDE",
+        "reportedUsers": null,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
   }
 ]

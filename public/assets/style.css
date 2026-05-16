@@ -75,6 +75,7 @@ a:hover { text-decoration: underline; }
 .tag-product-architecture { color: #5c1f00; background: #ffe0c2; border-color: #ffb380; }
 .tag-ml-system-design { color: #401b6f; background: #efe6ff; border-color: #c8b3f0; }
 .tag-technical-project-retrospective { color: #3d3a00; background: #eef0c0; border-color: #d0d068; }
+.tag-guide { color: #ffffff; background: #9333ea; border-color: #7e22ce; font-weight: 700; }
 .tag-level { color: #57606a; background: #f6f8fa; border-color: #d0d7de; font-weight: 500; }
 
 /* Company badge on cards: small filled pill with brand color */
