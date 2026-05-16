@@ -31,72 +31,399 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Fast Food Restaurant Chain Management System</strong>：McDonalds / Subway 类全球连锁的 IT 系统：POS、库存、订单、会员、餐厅运营。</p>
-<h3>需求</h3>
-<ul><li>30k+ 餐厅全球</li><li>高峰每秒 100k 订单</li><li>实时库存</li><li>会员 + 积分</li><li>餐厅 offline 时仍可下单</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Customer (mobile / kiosk / POS)
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>POS</strong></td><td>Point of Sale，收银机 + 软件</td><td>收银台</td></tr><tr><td><strong>Kitchen Display System (KDS)</strong></td><td>后厨显示器，显示订单 + 状态</td><td>厨房的电子菜单</td></tr><tr><td><strong>Edge server</strong></td><td>装在门店本地的小服务器，offline 也能 work</td><td>门店保险柜</td></tr><tr><td><strong>Inventory</strong></td><td>库存（牛肉饼 / 面包 / 番茄酱）</td><td>仓库存货</td></tr><tr><td><strong>Eventual consistency</strong></td><td>数据各点最终会一致，但短期可能不同步</td><td>全国分店每天对一次账</td></tr><tr><td><strong>Edge computing</strong></td><td>在边缘（门店）处理，不全靠云</td><td>门店自给自足</td></tr><tr><td><strong>CDC</strong></td><td>DB 变化通知</td><td>"我加菜单了，告诉云"</td></tr><tr><td><strong>Multi-tenant</strong></td><td>不同 franchisee（加盟商）数据隔离</td><td>一栋楼多家公司</td></tr><tr><td><strong>Saga</strong></td><td>分布式事务，每步 compensating</td><td>接力跑跑错往回跑</td></tr><tr><td><strong>Loyalty program</strong></td><td>会员积分 / 优惠</td><td>集邮票</td></tr><tr><td><strong>PCI DSS</strong></td><td>支付卡数据合规标准</td><td>银行级别安全规范</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Fast Food Restaurant Chain Management System</strong> = 一套软件，让一个连锁餐厅集团（McDonalds 40k 店 / Subway 40k 店 / 蜜雪冰城 38k 店）运营：</p>
+<ol><li><strong>门店运营</strong>：POS 收银 + KDS 厨房显示</li><li><strong>订单管理</strong>：堂食 / 外卖 / 自取 / 外卖平台聚合</li><li><strong>库存管理</strong>：实时 + 自动补货</li><li><strong>会员 + 积分</strong>：跨店通用</li><li><strong>供应链</strong>：自动下 PO 到供应商</li><li><strong>运营分析</strong>：每店 / 每区 / 全国 metrics</li></ol>
+<p><strong>为什么这道题难</strong>：</p>
+<ol><li><strong>30k+ 门店全球</strong>，每店网络 / 设备 / 操作员千差万别</li><li><strong>门店 offline 不能停业</strong>：断网 5 分钟仍要能收单</li><li><strong>高峰订单 burst</strong>：午餐 12-13 点全国 100k+ 订单/分钟</li><li><strong>跨店会员</strong>：北京会员上海消费要算分</li><li><strong>多 tenant</strong>：franchisee（加盟商）有自己 admin，但总部要全局 view</li><li><strong>多渠道下单</strong>：堂食 / app / 外卖 (美团 / Uber Eats / DoorDash)</li></ol>
+<p>考点：<strong>Edge + Cloud 混合架构 + Eventual consistency + Multi-tenant + 业务系统集成</strong>。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：哪些渠道下单？ <strong>典型答</strong>：(a) 堂食 (POS)；(b) 自家 app；(c) 外卖 third party (Uber Eats, DoorDash, 美团)；(d) 自助 kiosk。</p>
+<p><strong>你问</strong>：门店断网时怎么办？ <strong>典型答</strong>：必须能 offline 收单。Sync 上线后。</p>
+<p><strong>你问</strong>：实时库存 / 餐厅状态（卖完了某 item）显示给 app 用户吗？ <strong>典型答</strong>：要。卖完 Big Mac 时 app 不能再下单。</p>
+<p><strong>你问</strong>：会员 / 积分跨店通用？ <strong>典型答</strong>：要。全国 / 全球通用。</p>
+<p><strong>你问</strong>：franchisee 多 admin？ <strong>典型答</strong>：是。每 franchisee 看自己店面，总部看全国。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：店面规模 / 订单量？ <strong>典型答</strong>：30k 门店全球，peak 100k 订单 / 分钟全国 = ~1700 QPS。</p>
+<p><strong>你问</strong>：订单端到端响应？ <strong>典型答</strong>：POS 录单 → KDS 显示 &lt; 2 秒。</p>
+<p><strong>你问</strong>：库存更新延迟？ <strong>典型答</strong>：5-10 秒（卖完 propagate to app 用户）。</p>
+<p><strong>你问</strong>：法规 / 合规？ <strong>典型答</strong>：PCI DSS (支付卡)，GDPR (用户数据)，per-country tax law。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- POS / KDS / Inventory / Loyalty / Supply Chain / Analytics
+- 多渠道下单 (堂食 / app / 第三方外卖 / kiosk)
+- Offline 操作
+- 跨店会员
+- Multi-tenant (franchisee + corporate)
+
+非功能：
+- 30k stores
+- Peak 1700 QPS order
+- &lt; 2s POS-to-KDS
+- 库存 5-10s 同步
+- PCI/GDPR</code></pre>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 订单量</h4>
+<pre class="language-plaintext"><code class="language-plaintext">30k stores × peak hour 200 orders/h = 6M orders/h global = 1700 orders/sec
+× 100B record = 170 KB/sec write to cloud
+
+每店 local 200 orders/h = 0.06 order/sec → 单 edge server 轻松</code></pre>
+<h4>3.2 库存 events</h4>
+<pre class="language-plaintext"><code class="language-plaintext">每订单 use 5-10 ingredients → 10000 inventory events/sec global
+但 mostly local (店内决策) → cloud-bound 仅 summary</code></pre>
+<h4>3.3 数据存储</h4>
+<pre class="language-plaintext"><code class="language-plaintext">全球 365 day × 6M orders/h × 24h × 365 = ~50B orders/year
+× 1 KB/record = 50 TB/year
++ inventory + loyalty + analytics = ~200 TB/year</code></pre>
+<h4>3.4 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Per store: 0.1 QPS sustained
+Global: 1700 QPS peak  
+Cloud network: 几 MB/sec aggregate (most stays local)
+Storage: 200 TB/year</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 0 步：纯云方案（行不通）</h4>
+<div class="ascii-diagram">   Store POS → Internet → Cloud Backend</div>
+<p><strong>问题</strong>：</p>
+<ul><li>门店网络抖动 → POS 卡，付款失败</li><li>总部网络挂了 → 全国 30k 店都停业 → 灾难</li><li>即使网络好，跨洋延迟 &gt; 200 ms 影响 POS UX</li></ul>
+<h4>4.2 第 1 步：Edge + Cloud 混合</h4>
+<p>每店一个 <strong>Edge Server</strong>（一台 Intel NUC mini-PC）：</p>
+<div class="ascii-diagram">   Store:
+   ┌──────────────────────────────────┐
+   │ POS / Kiosk / KDS / Tablet       │
+   │     │                            │
+   │     ▼                            │
+   │  Edge Server (NUC, 16GB RAM)     │
+   │  - Local DB (Postgres)           │
+   │  - Local cache menu / prices     │
+   │  - Order routing                 │
+   │  - KDS push                      │
+   │  - Inventory tracking            │
+   └──────────┬───────────────────────┘
+              │ async sync
+              ▼
+        ┌──────────────┐
+        │ Cloud        │
+        └──────────────┘</div>
+<p><strong>Edge 的工作</strong>：</p>
+<ul><li>POS 录单 → local DB → KDS 推 → 立即 ack 给收银员</li><li>网络好时 async sync 到 cloud</li><li>网络断时 buffer 本地，恢复后 sync</li></ul>
+<p><strong>优势</strong>：</p>
+<ul><li>POS &lt; 100ms 响应（本地）</li><li>断网仍能下单（buffer + replay）</li><li>网络成本低（只 sync summary，不每订单实时上传）</li></ul>
+<h4>4.3 第 2 步：Inventory 同步策略</h4>
+<p><strong>关键 trade-off</strong>：库存是 store-local (本店有多少 patty) 还是 global (全国库存)？</p>
+<p><strong>答</strong>：<strong>Per-store local source of truth</strong>，cloud 是 reporting + supply chain decision。</p>
+<pre class="language-python"><code class="language-python"># 卖一个 Big Mac
+def sell_bigmac(store_id):
+    # Local DB transaction
+    db.execute('UPDATE inventory SET quantity = quantity - 1 WHERE store_id=? AND item="patty"', store_id)
+    db.execute('UPDATE inventory SET quantity = quantity - 1 WHERE store_id=? AND item="bun"', store_id)
+    # async push to cloud
+    queue.put('inventory_event', {store, items, delta})</code></pre>
+<p><strong>Cloud aggregation</strong>：每分钟收 events 聚合，触发：</p>
+<ul><li>Reorder (库存低 → 发 PO 给供应商)</li><li>Mobile app inventory display ("This store sold out of Big Mac")</li></ul>
+<h4>4.4 第 3 步：Order Routing (多渠道)</h4>
+<div class="ascii-diagram">   堂食 POS ─────┐
+   自家 app ──────┼─→ Cloud Order API ──→ Edge Server (target store) ──→ KDS
+   第三方外卖 ──┤
+   Kiosk ───────┘</div>
+<p><strong>Multi-channel</strong> 不同渠道下单<strong>最终汇到同一 Edge KDS</strong>，否则厨师看 4 个屏幕。</p>
+<p><strong>Cloud → Edge push</strong>：用 WebSocket / Long-poll。Edge 一直连云，云 push 订单 down。</p>
+<h4>4.5 第 4 步：Loyalty (跨店通用)</h4>
+<div class="ascii-diagram">   Customer A 在 Store 1 消费 $10
+        │ POS 扫 customer QR / phone
+        ▼
+   Edge Server:
+     - Local price + tax 计算
+     - Async POST cloud: { user_id, store, amount, ts }
+        │
+        ▼
+   Cloud Loyalty Service:
+     - Update user.points (在 central DB)
+     - Notify user app (推送 "你得了 X points")</div>
+<p><strong>Trade-off</strong>：loyalty 用 <strong>central DB 强一致</strong> —— 用户 next time 5 秒后查 points，必须看到最新值。</p>
+<p>如果 Edge 断网，loyalty event buffer 本地，sync 后 cloud 加分。<strong>用户即时显示</strong> 可以 trust edge 算的（offline 加分）+ later reconciled。</p>
+<h4>4.6 第 5 步：完整架构</h4>
+<div class="ascii-diagram">┌────────────────────── Store (30k) ─────────────────────────┐
+│                                                             │
+│  POS / Kiosk / KDS / Tablet                                 │
+│     │                                                       │
+│     ▼                                                       │
+│  Edge Server (NUC)                                          │
+│  - Local Postgres                                           │
+│  - Order / Inventory / Print receipt                        │
+│  - Background sync to cloud                                 │
+└──────────┬──────────────────────────────────────────────────┘
+           │ async + reliable (Kafka edge)
+           ▼
+┌────────────────── Cloud Backend ───────────────────────────┐
+│                                                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐        │
+│  │ Order    │ │ Inventory│ │ Loyalty  │ │ Supply   │        │
+│  │ Service  │ │ Agg      │ │ Service  │ │ Chain    │        │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘        │
+│       │            │            │            │              │
+│       ▼            ▼            ▼            ▼              │
+│  ┌──────────────────────────────────────────────────┐       │
+│  │ Cloud DB (Spanner / Aurora)                      │       │
+│  │ + Analytics warehouse (BigQuery)                 │       │
+│  └──────────────────────────────────────────────────┘       │
+│                                                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐        │
+│  │ Customer │ │Franchisee│ │ Corporate│ │ Supplier │        │
+│  │ App      │ │Admin     │ │ Dashboard│ │ Integration│      │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘        │
+└─────────────────────────────────────────────────────────────┘</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Edge Server 详细</h4>
+<p><strong>硬件</strong>：Intel NUC / Mac mini class，16 GB RAM，1 TB SSD。</p>
+<p><strong>软件 stack</strong>:</p>
+<ul><li>OS: Linux</li><li>Local DB: Postgres (orders, inventory, loyalty events)</li><li>Application: containerized Java / Python</li><li>Communication: Kafka producer (push to cloud), WebSocket consumer (recv from cloud)</li></ul>
+<p><strong>Resilience</strong>:</p>
+<ul><li>Power outage: UPS 1 小时</li><li>Hardware fail: 总部寄备机 → 客户重启用</li><li>Data loss: 每天 incremental backup to cloud + 1 month retention</li></ul>
+<h4>5.2 Order State Machine</h4>
+<pre class="language-python"><code class="language-python">class OrderStatus:
+    PLACED = 'placed'               # 下单
+    KITCHEN_PREP = 'kitchen_prep'   # 厨房做
+    READY = 'ready'                 # 做好
+    HANDED_OFF = 'handed_off'       # 给顾客
+    CANCELLED = 'cancelled'
+    REFUNDED = 'refunded'
+
+# Transitions (state machine)
+ALLOWED = {
+    PLACED: {KITCHEN_PREP, CANCELLED},
+    KITCHEN_PREP: {READY, CANCELLED},
+    READY: {HANDED_OFF, REFUNDED},
+}</code></pre>
+<p>每 state transition 触发 event → Kafka → cloud analytics + customer notification ("Your order is ready")。</p>
+<h4>5.3 Database schema</h4>
+<pre class="language-sql"><code class="language-sql">-- Local (Edge) DB
+CREATE TABLE orders (
+  id              UUID PRIMARY KEY,
+  store_id        UUID,
+  customer_id     UUID,
+  channel         TEXT,         -- 'pos' / 'app' / 'doordash' / 'ubereats'
+  items           JSONB,        -- [{sku, qty, price, modifiers}]
+  total_cents     BIGINT,
+  status          TEXT,
+  payment_id      TEXT,
+  placed_at       TIMESTAMPTZ,
+  ready_at        TIMESTAMPTZ,
+  synced_at       TIMESTAMPTZ,  -- 是否已 sync to cloud
+  metadata        JSONB
+);
+
+CREATE TABLE inventory (
+  store_id        UUID,
+  sku             TEXT,
+  quantity        DECIMAL,
+  last_count_at   TIMESTAMPTZ,
+  PRIMARY KEY (store_id, sku)
+);
+
+CREATE TABLE pending_sync_events (
+  id              BIGSERIAL,
+  topic           TEXT,
+  payload         JSONB,
+  created_at      TIMESTAMPTZ,
+  sent_at         TIMESTAMPTZ
+);</code></pre>
+<h4>5.4 Sync Engine</h4>
+<pre class="language-python"><code class="language-python">class SyncEngine:
+    """Background process push pending events to cloud."""
+    
+    async def run(self):
+        while True:
+            events = db.fetch('SELECT * FROM pending_sync_events WHERE sent_at IS NULL LIMIT 100')
+            if not events:
+                await sleep(5)
+                continue
+            
+            try:
+                # Push to Kafka cluster (cloud)
+                await kafka.produce_batch(events)
+                # Mark sent
+                ids = [e.id for e in events]
+                db.execute('UPDATE pending_sync_events SET sent_at = NOW() WHERE id IN (...)', ids)
+            except NetworkError:
+                # Backoff and retry
+                await sleep(30)</code></pre>
+<p><strong>保证最终一致性</strong>：网络断了 events buffer 本地，恢复后 push。Postgres replication WAL 类似机制。</p>
+<h4>5.5 Cloud Order Aggregation</h4>
+<pre class="language-python"><code class="language-python"># Cloud Order Service consumes Kafka
+def handle_order_event(event):
+    store_id = event['store_id']
+    
+    # Persist to central DB
+    db.upsert(orders_table, event)
+    
+    # Update analytics
+    analytics_kafka.produce({'event_type': 'order_placed', ...})
+    
+    # Notify customer (if loyalty member)
+    if event['customer_id']:
+        notification.push(event['customer_id'], "Order placed at " + event['store_id'])
+    
+    # Inventory aggregation
+    for item in event['items']:
+        inventory_kafka.produce({'store_id': store_id, 'sku': item.sku, 'delta': -item.qty})</code></pre>
+<h4>5.6 第三方外卖集成</h4>
+<div class="ascii-diagram">   DoorDash app
+       │ user places order
+       ▼
+   DoorDash backend
+       │ webhook
+       ▼
+   Cloud Order API
+       │ route to target store
+       ▼
+   Edge Server
        │
        ▼
-  ┌──────────────┐
-  │  Order API   │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐    ┌──────────────┐
-  │ Order Svc    │ ── │ Inventory    │
-  │              │    │ Service      │
-  └──┬───────────┘    └──────────────┘
-     │
-     ▼
-  ┌──────────────┐    ┌──────────────┐
-  │ Kitchen      │    │ Payment      │
-  │ Display      │    │ Service      │
-  └──────────────┘    └──────────────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Per-Restaurant│  local DB sync periodically
-  │ Edge Server   │
-  └──────────────┘
-         │
-         ▼
-  Cloud Backend ← analytics, supply chain, member</div>
-<h3>核心组件</h3>
-<h4>1. Hybrid edge + cloud</h4>
-<p>每餐厅有 local edge server (NUC / mini-PC)：</p>
-<ul><li>本地 cache menu / prices / inventory</li><li>Local POS 可 offline 操作</li><li>每分钟 sync 到 cloud（订单上报、inventory pull）</li></ul>
-<p><strong>Why edge</strong>：30k 餐厅同时连 cloud → 网络抖动时不能停业。</p>
-<h4>2. Inventory tracking</h4>
-<p>每 restaurant 每 item current count：</p>
-<ul><li>POS 减库存（订单 confirm 后）</li><li>收货增库存</li><li>Inventory event 写本地 + 异步 sync cloud</li></ul>
-<p>低库存 alert：local alert + cloud aggregated forecast。</p>
-<h4>3. 订单 lifecycle</h4>
-<pre class="language-plaintext"><code class="language-plaintext">placed → kitchen prep → ready → delivered → completed
-                                      ↓ refund
-                                  cancelled</code></pre>
-<p>每 status change emit event。</p>
-<h4>4. Kitchen Display System (KDS)</h4>
-<p>订单 push 到厨房屏幕。按 priority + ETA 显示 ticket。完成时员工 tap → ready。</p>
-<h4>5. 会员 + 积分</h4>
-<p>中心 member service（不在 edge）。Loyalty point = order total × multiplier。Async crediting (5 分钟内显示在 app)。</p>
-<h4>6. Payment</h4>
-<ul><li>Credit card：external gateway (Square / Stripe)</li><li>移动支付：Apple Pay / Google Pay / Alipay</li><li>Cash：POS 自己 reconcile</li></ul>
-<h4>7. 实时 analytics</h4>
-<p>每订单 emit event → Kafka → Flink → 实时 metric：</p>
-<ul><li>Per-store hourly revenue</li><li>Hot items</li><li>Order wait time</li></ul>
-<p>Manager dashboard 看实时 + 日报告。</p>
-<h4>8. Supply chain</h4>
-<p>每 store inventory level → forecast model → 供应商 PO。自动 reordering when below threshold。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Edge</td><td>Per-store mini server</td><td>Cloud only：offline 停业</td></tr><tr><td>Inventory</td><td>Eventual consistency</td><td>Strong：跨 store 慢</td></tr><tr><td>Order ID</td><td>Snowflake</td><td>UUID：sort 难</td></tr><tr><td>KDS sync</td><td>Local + push</td><td>Pull：延迟</td></tr><tr><td>Member</td><td>Central</td><td>Per-store：积分错乱</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>30k store × 100 orders/hour peak = 3M orders/hour = 833 orders/sec</li><li>边缘 server CPU 4 core + 16 GB 足够</li><li>Cloud 主要 analytics + member + supply chain</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Cloud-only architecture → 网络抖动停业； ❌ Inventory 强一致 → 跨 store 写延迟； ❌ KDS 全 cloud → 厨房显示卡； ❌ Member 数据 per-store → 跨店积分丢； ❌ 订单 ID 用 auto-increment → 不能离线生成。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Edge + Cloud hybrid</strong> 处理 offline；(2) <strong>Inventory eventual consistency + 本地权威</strong>；(3) <strong>Member / supply chain central + analytics 实时</strong>。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Mobile order ahead (skip-the-line)？" → app order + ETA → KDS 提前 prep；"Drive-thru 优化？" → CV count cars + wait time predict；"国际化 menu / 价格？" → per-region config service；"实时 menu 更新（item out of stock）？" → push from KDS 到 customer-facing apps。</p></div>
+       KDS</div>
+<p>每个第三方平台一个 webhook integration。Order 进来标 <code>channel='doordash'</code>。结算时按合同抽成。</p>
+<h4>5.7 Inventory Management</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Store inventory:
+  - Per-SKU count
+  - Reorder threshold
+
+Auto-reorder logic:
+  When quantity &lt; threshold:
+    1. Generate PO (Purchase Order) draft
+    2. Send to franchisee admin or auto-approve
+    3. Push PO to supplier system
+    4. Track expected delivery
+
+ML forecast:
+  Per store × per SKU × per day-of-week × seasonality
+  → forecast 下周需求 → 自动调 reorder threshold</code></pre>
+<h4>5.8 Loyalty 计算</h4>
+<pre class="language-python"><code class="language-python">def loyalty_earn(customer, amount_cents, store_id):
+    points = amount_cents // 100  # 1 point per $1
+    # Multiplier 
+    if is_member_tier_gold(customer):
+        points *= 2
+    # Promo (周二 double points)
+    if today_is_double_point_day():
+        points *= 2
+    
+    # Atomic update (Cloud DB)
+    db.execute('UPDATE customers SET points = points + ? WHERE id = ?', points, customer.id)
+    # Audit log
+    insert_audit(customer.id, store_id, points, 'earn')
+    return points</code></pre>
+<h4>5.9 Multi-tenant (Franchisee + Corporate)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">RBAC:
+  store_employee: read/write own store's POS only
+  store_manager: + analytics for own store
+  franchisee_admin: + analytics across all franchisee's stores
+  corporate_admin: + analytics nationally + can modify menu
+  corporate_super: + can disable any franchisee
+
+Data isolation:
+  All tables have franchisee_id + store_id
+  Query layer enforces filter based on user role</code></pre>
+<h4>5.10 Analytics</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Real-time (last hour):
+  - Per-store sales / order count
+  - Best-selling items
+  - Average wait time
+  - Customer NPS (post-order survey)
+
+Daily reports:
+  - Per franchisee revenue
+  - Inventory waste %
+  - Forecast accuracy
+
+ML insights:
+  - Demand forecasting (next week)
+  - Customer churn prediction
+  - Optimal staffing per store per shift</code></pre>
+<p>存 BigQuery / Snowflake → 跑 SQL + ML。</p>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - 渠道（POS/app/外卖）
+  - Offline support？
+  - 跨店 loyalty？
+  - 规模
+
+0:05 - 0:10  Capacity Estimation
+  - 30k stores, 1700 QPS peak
+  - 大部分 traffic 本地 stay
+  - 200 TB/year cloud storage
+
+0:10 - 0:15  High-Level Architecture
+  - Edge + Cloud hybrid
+  - 每店 NUC + local DB
+  - Cloud aggregator + dashboard
+
+0:15 - 0:30  Deep Dive
+  ★ Edge server resilience (offline)
+  ★ Sync engine (eventual consistency)
+  ★ Multi-channel order routing
+  ★ Loyalty (cloud strong consistency)
+  ★ Multi-tenant RBAC
+
+0:30 - 0:38  Follow-ups
+  - 第三方外卖 integration
+  - Auto-reorder
+  - Analytics / ML
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK fast food chain. Key insight 来源于一个观察：<strong>门店不能因为网络断而停业</strong>。一家 McDonald's 1 小时无 POS = 几万损失。所以核心是 <strong>Edge + Cloud hybrid</strong>。</p>
+<p>每店一个 mini PC (NUC, 16GB RAM)，跑本地 Postgres + 应用。POS / KDS / Kiosk / Tablet 都连这台 edge server。订单录入：local DB → KDS 推 → &lt; 2 秒响应。<strong>网络断仍能 work</strong>。</p>
+<p>Edge 后台 sync engine 把订单 / inventory / loyalty events 异步 push 到云。Kafka 本地 buffer，断网时不丢。恢复后批量 push。</p>
+<p>多渠道下单：堂食 (POS) / 自家 app / 第三方外卖 (DoorDash/Uber Eats/美团) / Kiosk —— 全部最终走 cloud Order API → push 到 target store edge → KDS 显示。Edge 是 single source of truth for "什么订单要做"。</p>
+<p>Inventory：<strong>per-store local</strong> 是 truth (因为每个 patty 在哪个店是物理事实)。Cloud 收 events 聚合，触发 auto-reorder PO to supplier，触发 app 库存显示。</p>
+<p>Loyalty：用户跨店要 immediate 看到 points → <strong>cloud central DB 强一致</strong>。Edge offline 加分 buffer，sync 后 reconcile。Trade-off 用户 5 秒内可能看 stale points (offline 期间)。</p>
+<p>Multi-tenant: store_employee / store_manager / franchisee_admin / corporate_admin / corporate_super 五级 RBAC。每 table 含 franchisee_id + store_id，query 强制 filter。</p>
+<p>Dashboards: real-time per-store sales, daily franchisee report, ML demand forecast for 自动 reorder threshold。</p>
+<p>想 deep dive offline 仍工作详细，还是 multi-tenant RBAC?"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: Edge server 挂了怎么办？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>总部备机寄付 (overnight)</li><li>期间临时方案：iPad POS app 直接连云（性能差但 work）</li><li>Cloud 仍能 view recent orders（last sync 前的）</li></ul>
+<h4>Q2: 第三方外卖订单丢失，customer 找上来？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>DoorDash webhook 有 idempotency key + retry policy</li><li>Cloud 收到去重，落地 + ack DoorDash</li><li>Cloud → Edge push 也 retry + idempotent</li><li>Customer 报告 missing order → query orders by customer_id + window → trace 哪一步丢</li></ul>
+<h4>Q3: 怎么处理 menu / 价格 update？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Corporate admin update menu → CDC → 同步 all edge servers</li><li>Pricing rules 复杂（限时 / 区域 / 会员折扣）→ 中心 pricing engine compile rules，push compiled config 到 edge</li><li>每个 edge 启动 / 周期 pull config</li></ul>
+<h4>Q4: 12 点 lunch rush 1700 QPS 怎么 scale?</h4>
+<p><strong>答</strong>：</p>
+<ul><li>大部分 traffic 本地 (POS) 不上云</li><li>Cloud 部分主要是 event ingest (Kafka 撑得住)</li><li>Order API for app/外卖 集中 cloud → auto-scale stateless service</li><li>Dashboard query 慢可 cache</li></ul>
+<h4>Q5: 怎么 prevent over-discount (同 user 多次用同 coupon)?</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Coupon 有 unique code + redemption limit</li><li>Cloud DB tracks redemptions</li><li>POS scan code → cloud check → return valid / used</li><li>网络断时 edge 用 stale data，可能 accept 已用 coupon → 风险接受 (rare event，loss 小)</li></ul>
+<h4>Q6: GDPR 删除某 user？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Soft delete: customer.deleted_at = NOW()</li><li>Loyalty / orders 保留 (audit 需要)，但 PII (name, email, phone) 替换 hash</li><li>30 day grace period，硬删 PII</li><li>跨多 system propagate via event</li></ul>
+<h4>Q7: 怎么训练 demand forecast ML?</h4>
+<p><strong>答</strong>：</p>
+<ul><li>历史 order data + weather + holiday + 促销 → features</li><li>Per store × per SKU × per (hour, day-of-week, month) granularity</li><li>Gradient boosting / time series model</li><li>Weekly retrain</li><li>A/B test 准确度</li><li>Forecast 用于 auto-reorder threshold + staffing schedule</li></ul>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>纯 cloud architecture</strong> —— 一断网 30k 店 stop 营业； ❌ <strong>Edge / cloud 不区分 source of truth</strong> —— inventory 究竟以谁为准？应明确 per-store local； ❌ <strong>Loyalty 用 eventual consistency</strong> —— 用户跨店扫积分看不到 immediate 不行； ❌ <strong>不做 channel 归一化</strong> —— 第三方外卖各自不同 webhook 格式，处理乱； ❌ <strong>不做 multi-tenant RBAC</strong> —— franchisee 看到别家数据； ❌ <strong>Auto-reorder 没人监督</strong> —— 错误 forecast 导致大量浪费 / 缺货； ❌ <strong>Menu update 推全店实时</strong> —— 推送爆 + 推时网络挂部分店 stale；用 versioned config + pull； ❌ <strong>不做 idempotency</strong> —— 第三方外卖 webhook 重试 duplicated order。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>Drive-thru optimization</strong>：用摄像头 detect 车队长度 + 预估等待时间</li><li><strong>AI menu personalization</strong>：app 根据用户口味推荐</li><li><strong>Voice ordering</strong> in drive-thru (whisper + LLM)</li><li><strong>Dynamic pricing</strong> (peak hour 微涨 / 闲时打折)</li><li><strong>Sustainability dashboard</strong>：food waste / energy / packaging</li><li><strong>Franchisee benchmarking</strong>：自家 vs region avg vs national best</li><li><strong>Crew scheduling</strong>：ML 根据 forecast demand 安排员工</li><li><strong>Robot kitchen integration</strong>：自动炒蛋 / 油炸机器人 API</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Edge + Cloud hybrid 是连锁零售 / 餐饮 IT 系统的金科玉律</strong>。所有 customer-facing 操作必须 local，cloud 是 sync + 分析。</li></ol>
+<ol><li><strong>明确 source of truth per domain</strong>：inventory 在 store 本地；loyalty / 会员在云；订单同时存两份（local + synced to cloud）。每个 domain 选不同的 consistency model。</li></ol>
+<ol><li><strong>Multi-channel ingestion 必须归一化到统一 order schema</strong>。POS / app / 第三方各异的 input format 在 cloud 适配后再 push 到 store edge。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) 读 Square / Toast 这类餐饮 SaaS 的工程博客；(b) 学 Postgres logical replication for edge-cloud sync；(c) 看一篇关于 retail edge computing 的 paper；(d) 跑通 Kafka edge producer + cloud consumer；(e) 思考 "如果未来 30k 店都装 GPU + LLM voice ordering，架构怎么变"。</p></div>
   </section>
 
   

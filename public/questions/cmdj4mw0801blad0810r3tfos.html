@@ -31,56 +31,370 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Distributed system for getting the slowest query from Google search</strong>：从 search service 的几十亿 daily queries 中找出<strong>最慢的 top-K queries</strong>（按 latency）作为优化目标。</p>
-<p>考点：<strong>streaming top-K by metric + sampling + persistence</strong>。</p>
-<h3>解法</h3>
-<p>类似 [[cm4t0twp0004pvszmvb2qeg0u]] (Top-K System) 的 framework，但 metric 是 <strong>latency</strong>（continuous）而非 frequency。</p>
-<h4>1. Streaming approach</h4>
-<p>每 query 完成后 emit event <code>{query_id, normalized_query, latency_ms, timestamp}</code>。</p>
-<pre class="language-plaintext"><code class="language-plaintext">Search Service → Kafka topic: query.latency
-                       │
-                       ▼
-              ┌────────────────────┐
-              │ Stream Aggregator  │
-              │  per-window top-K  │
-              └─────────┬──────────┘
-                        │
-                        ▼
-              ┌────────────────────┐
-              │ Top-K Store        │  → Redis sorted set / DB
-              └────────────────────┘</code></pre>
-<h4>2. Top-K by latency</h4>
-<p>不是 count，是 latency。所以是：<strong>Top-K queries by max latency in window</strong>。</p>
-<pre class="language-python"><code class="language-python"># 每 window 维护 max-heap of size K, by latency
-heap = []  # min-heap of (-latency, query_id, ts)
-def on_query(latency, query):
-    if len(heap) &lt; K:
-        heapq.heappush(heap, (-latency, query))
-    elif latency &gt; -heap[0][0]:
-        heapq.heapreplace(heap, (-latency, query))</code></pre>
-<p>每 5 分钟 emit top-K → 持久化。</p>
-<h4>3. Query normalization</h4>
-<p>Same logical query 不同参数（<code>q=python+tutorial</code> vs <code>q=java+tutorial</code>）。Normalize:</p>
-<ul><li>Lowercase + 去 stop words</li><li>提取 query template (anonymize specifics)</li><li>同 template 的 latency 才能 aggregate</li></ul>
-<h4>4. Slowest by p99 / p95 vs max?</h4>
-<p>Single outlier latency 不代表"slow query"。更好：<strong>top-K by p99 latency</strong> over same template。</p>
-<p>实现：每 template 维护 latency histogram（HDR Histogram / T-digest）→ p99 → top-K templates。</p>
-<h4>5. Sampling</h4>
-<p>10B queries/day → 不可能全部 process。10% sampling 足够（top-K 是 high-count item，sample 不丢精度）。</p>
-<h4>6. Multi-dimensional</h4>
-<ul><li>按 region：US slow query vs JP slow query</li><li>按 user segment：mobile vs desktop</li><li>按 service version：v1 vs v2 deploy 后是否 regress</li></ul>
-<p>每维度独立 aggregator。</p>
-<h4>7. Persistence</h4>
-<p>Top-K per (window, region, version) 写 DB / TimescaleDB。Analyst dashboard 看历史 trend，研发用来 prioritize 优化目标。</p>
-<h4>8. Alert integration</h4>
-<p>当 top-K queries 中出现"新 query 而且 p99 急涨" → alert。这是 regression detection。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Metric</td><td>p99 / max</td><td>mean：长尾不显示</td></tr><tr><td>Aggregation</td><td>Per template (normalized)</td><td>Per query：cardinality 爆</td></tr><tr><td>Sample</td><td>10%</td><td>100%：贵</td></tr><tr><td>Window</td><td>5 分钟 + sliding</td><td>Tumbling：突发不平滑</td></tr></tbody></table>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Top-K by single max latency → outlier dominant； ❌ 不 normalize query → 同 template 算多次； ❌ 不 sample → 处理不过来； ❌ Slowest 不带 context（哪个 region / 哪个 version） → 找不到根因； ❌ 不 alert on regression → 优化方向漂移。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Template normalization</strong> 让 query 可聚合；(2) <strong>HDR histogram for p99</strong> 而非 mean；(3) <strong>Multi-dim aggregation (region/version)</strong> 找 regression。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Real-time slowest queries (&lt; 1 min latency)？" → 短 window + 高 sample rate；"按 user satisfaction 而非 latency？" → 加 user metrics (abandon rate, page load)；"如何 distinguish slow query vs slow infra？" → trace 关联 service-level latency。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Search query</strong></td><td>用户在 Google 搜索框输入的文本</td><td>"OpenAI 招聘"</td></tr><tr><td><strong>Query latency</strong></td><td>一次 search 从发出到收到结果的耗时</td><td>点菜到上菜的时间</td></tr><tr><td><strong>p99 latency</strong></td><td>99% 请求快于这值（剩 1% 慢于）</td><td>班级 99% 同学成绩</td></tr><tr><td><strong>Heavy hitter</strong></td><td>出现频繁的 item，需要专门跟踪</td><td>网红 hashtag</td></tr><tr><td><strong>Sampling</strong></td><td>不存全部，随机抽样部分</td><td>民意调查</td></tr><tr><td><strong>HDR Histogram</strong></td><td>高动态范围直方图，省内存算 percentile</td><td>体重分布图</td></tr><tr><td><strong>T-digest</strong></td><td>流式 percentile 算法</td><td>滚动算中位数</td></tr><tr><td><strong>Query template</strong></td><td>类似 query 的归一化形式（"OpenAI X" 都同 template）</td><td>公式模板</td></tr><tr><td><strong>Stream processor</strong></td><td>实时处理流数据的服务（Flink / Spark Streaming）</td><td>流水线工人</td></tr><tr><td><strong>TSDB</strong></td><td>时序数据库</td><td>体重记录本</td></tr><tr><td><strong>Regression</strong></td><td>性能突然变差</td><td>病情突然加重</td></tr><tr><td><strong>A/B test</strong></td><td>同时跑两版对比</td><td>实验组对照组</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Distributed system for getting the slowest query from Google search</strong> = 从 Google search 每天 <strong>10B+ 次查询</strong>里找出"哪些 query 让 search service 最慢"，作为性能优化目标。</p>
+<p><strong>为什么需要这个系统</strong>：</p>
+<ol><li><strong>Performance bug 难定位</strong>：search 总体 p99 涨 50ms，但是哪种 query 慢？需要找到 outlier。</li><li><strong>Regression detection</strong>：新版本上线后某种 query 突然变慢</li><li><strong>Optimization prioritization</strong>：开发资源有限，先优化最慢的 N 个 query 类型，性价比最高</li><li><strong>SLO accountability</strong>：定 SLO "all queries &lt; 500ms"，超时哪些？</li></ol>
+<p><strong>与 trending hashtag (cm7honmgk0278imqn03o95rtg) 区别</strong>：</p>
+<table class="md-table"><thead><tr><th>维度</th><th>Trending Hashtag</th><th>Slowest Query</th></tr></thead><tbody><tr><td>信号</td><td>count (出现次数)</td><td>latency (耗时)</td></tr><tr><td>算 top-K by</td><td>frequency</td><td>latency (max / p99)</td></tr><tr><td>关心的 entity</td><td>hashtag 字符串</td><td>query template</td></tr><tr><td>用户</td><td>end user (前端展示)</td><td>内部工程师 (debug)</td></tr><tr><td>实时性</td><td>1 min</td><td>5-15 min OK</td></tr></tbody></table>
+<p>考点：<strong>streaming top-K by metric + sampling + query normalization + regression detection</strong>。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：metric 用什么？max latency？还是 p99？ <strong>典型答</strong>：p99 更稳定。单次 outlier 不代表"种类慢"。但也存 max 作 hot signal。</p>
+<p><strong>你问</strong>：query 怎么算"同一类"？ <strong>典型答</strong>：normalize template。"OpenAI 招聘" "OpenAI engineering" 都归 template "OpenAI [生词]"。</p>
+<p><strong>你问</strong>：要不要 dimension breakdown（按 region / 设备 / 时间）？ <strong>典型答</strong>：要。"亚洲移动端慢" vs "欧洲 desktop 慢" 是不同根因。</p>
+<p><strong>你问</strong>：要不要 regression alert（新慢出现）？ <strong>典型答</strong>：要。"新出现的 top-100 慢 query" 应立即 alert。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：query 总量？ <strong>典型答</strong>：10B/day = 116k QPS, peak 300k QPS。</p>
+<p><strong>你问</strong>：处理延迟？ <strong>典型答</strong>：&lt; 15 min ingest-to-dashboard。</p>
+<p><strong>你问</strong>：保留？ <strong>典型答</strong>：30 day fine breakdown，1 year aggregate。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- 实时聚合 query latency
+- Top-K slowest query templates per region/version/device
+- p99 跟踪 + max outlier 跟踪
+- Regression alert (新慢 query)
+- 历史 trend (回放优化效果)
+
+非功能：
+- 300k QPS ingest peak
+- &lt; 15 min lag
+- Query template cardinality 数百万</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>关键 trick：<strong>不要存所有 query</strong>！10B/day × 100B 每条 = 1 PB/day，浪费。<strong>Sample + template normalization</strong> 是核心。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 原始 query 数据量</h4>
+<pre class="language-plaintext"><code class="language-plaintext">10B query/day × 平均 100 byte query + 16 byte latency 
+= 11.6 TB/day raw</code></pre>
+<p>→ 全存爆，必须聚合。</p>
+<h4>3.2 Sampling</h4>
+<p>10% sample → 1.16 TB/day 仍多。但<strong>关键观察</strong>：top-K slowest 是 heavy hitters，sample 不会丢精度。</p>
+<pre class="language-plaintext"><code class="language-plaintext">10% sample × 关键 metric only (template + latency) 
+= 1B records/day × ~50 byte 
+= 50 GB/day</code></pre>
+<h4>3.3 Template aggregation</h4>
+<pre class="language-plaintext"><code class="language-plaintext">~1M unique template/day (normalize 后)
+每 template: histogram (HDR / t-digest) ~500 byte
+总 internal state: 1M × 500 = 500 MB</code></pre>
+<p>→ <strong>轻量！</strong> 这就是聚合的力量。</p>
+<h4>3.4 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Raw: 11.6 TB/day → 不存
+Sample: 50 GB/day raw archive
+Aggregated state: 500 MB（内存够装）
+Output: top-100 slowest / region/version = 几 KB / minute</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 0 步：朴素方案</h4>
+<div class="ascii-diagram">   Every search query → log to DB
+   分析师每天跑 SQL:
+   SELECT query, AVG(latency) FROM search_log
+   WHERE day = '2026-05-15'
+   GROUP BY query
+   ORDER BY AVG(latency) DESC LIMIT 100;</div>
+<p><strong>问题</strong>：</p>
+<ul><li>10B records/day，scan 太慢</li><li><code>GROUP BY query</code> 每 query 不 normalize 都唯一 → group 1B+ groups 内存爆</li><li>不实时（dashboard 每天才更新）</li></ul>
+<h4>4.2 第 1 步：Query Template Normalization</h4>
+<pre class="language-plaintext"><code class="language-plaintext">"OpenAI 招聘 software engineer"      → "OpenAI [token]"
+"OpenAI engineering blog"             → "OpenAI [token]"
+"Google software engineer salary"     → "Google [token]"</code></pre>
+<p>把含动态值的部分替换成 placeholder。<strong>1B unique query → 1M unique template</strong>，aggregation 可行。</p>
+<pre class="language-python"><code class="language-python">def normalize_template(query: str) -&gt; str:
+    tokens = tokenize(query)
+    # 替换数字 / 罕见词 / 用户名为 placeholder
+    template = []
+    for tok in tokens:
+        if is_number(tok):
+            template.append('[NUM]')
+        elif is_rare_word(tok):
+            template.append('[RARE]')
+        else:
+            template.append(tok)
+    return ' '.join(template)</code></pre>
+<h4>4.3 第 2 步：Streaming Aggregation</h4>
+<div class="ascii-diagram">   search service emit: {query, normalized_template, latency, region, version, device, ts}
+        │
+        ▼
+   ┌──────────────┐
+   │ Kafka topic  │  search.latency
+   │ (sampled 10%)│
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────────────────────────────┐
+   │ Stream Processor (Flink)             │
+   │ keyBy (template, region, device, version)│
+   │ window 5min tumbling                 │
+   │ aggregate per group:                 │
+   │   - count                            │
+   │   - sum latency                      │
+   │   - HDR histogram (for p50/p95/p99)  │
+   │   - max latency                      │
+   └──────┬───────────────────────────────┘
+          │
+          ▼ emit every 5 min
+   ┌──────────────────┐
+   │ Top-K Aggregator │  cross-group: pick top 100 by p99
+   └──────┬───────────┘
+          │
+          ▼
+   ┌──────────────────┐
+   │ Slowest TSDB +   │
+   │ Dashboard        │
+   └──────────────────┘</div>
+<h4>4.4 第 3 步：HDR Histogram / T-digest</h4>
+<p>普通 array 算 p99 需要 sort。10k records/template → 30 ms。1M template → 30000s. <strong>不行</strong>。</p>
+<p><strong>HDR Histogram</strong>: 固定 bucket 数（~200 个，按 log scale），每个 bucket 计数。p99 = 累计 99% 的 bucket boundary。</p>
+<pre class="language-python"><code class="language-python">class HDRHistogram:
+    def __init__(self, max_value=1_000_000_000, num_significant=3):
+        # log-scale buckets, sub-buckets for precision
+        self.buckets = [0] * BUCKET_COUNT
+    
+    def record(self, value):
+        bucket = log_bucket(value)
+        self.buckets[bucket] += 1
+    
+    def percentile(self, p):
+        total = sum(self.buckets)
+        cumulative = 0
+        target = total * p / 100
+        for i, c in enumerate(self.buckets):
+            cumulative += c
+            if cumulative &gt;= target:
+                return bucket_to_value(i)</code></pre>
+<p>每 template 内存 ~500 byte，update O(1)，query p99 O(BUCKET_COUNT)。<strong>完美</strong>。</p>
+<h4>4.5 第 4 步：完整架构</h4>
+<div class="ascii-diagram">   Search service (300k QPS)
+        │ emit (query, template, latency, dims)
+        ▼ 10% sample
+   ┌──────────────┐
+   │ Kafka        │  partition by template
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────────┐
+   │ Flink            │  keyBy (template, dims)
+   │                  │  5min window
+   │                  │  HDR Histogram per group
+   └──┬───────────┬───┘
+      │           │
+      ▼           ▼
+   ┌──────┐  ┌──────────────┐
+   │ Top-K│  │ Anomaly /    │
+   │ rank │  │ Regression   │
+   │ per  │  │ Detector     │
+   │ dim  │  └──────┬───────┘
+   └──┬───┘         │
+      │             ▼
+      ▼        ┌──────────────┐
+   ┌─────────┐ │ Alert        │
+   │ TSDB +  │ │ (PagerDuty / │
+   │ Dashbrd │ │  Slack)      │
+   └─────────┘ └──────────────┘
+
+   Cold:
+   ┌──────────────┐
+   │ S3 Parquet   │  raw sampled records，历史回放
+   └──────────────┘</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Query Template Normalization</h4>
+<pre class="language-python"><code class="language-python">import re
+
+class TemplateNormalizer:
+    PATTERNS = [
+        (r'\b\d+\b',              '[NUM]'),
+        (r'\b\d{4}-\d{2}-\d{2}\b', '[DATE]'),
+        (r'\b\w+@\w+\.\w+\b',     '[EMAIL]'),
+        (r'\bhttps?://\S+\b',     '[URL]'),
+        (r'"[^"]*"',              '[QUOTED]'),
+    ]
+    
+    def normalize(self, query: str) -&gt; str:
+        for pat, repl in self.PATTERNS:
+            query = re.sub(pat, repl, query)
+        tokens = query.lower().split()
+        # 替换 rare token (在 ML model 字典外的)
+        return ' '.join(t if t in COMMON_VOCAB else '[RARE]' for t in tokens)</code></pre>
+<p><strong>例</strong>：</p>
+<pre class="language-plaintext"><code class="language-plaintext">"buy iPhone 15 pro max 2024"  → "buy iphone [NUM] pro max [NUM]"
+"buy iPhone 16 pro max 2025"  → "buy iphone [NUM] pro max [NUM]"
+→ 归一化到同 template</code></pre>
+<h4>5.2 HDR Histogram 实战</h4>
+<pre class="language-python"><code class="language-python">from hdrh.histogram import HdrHistogram
+
+class TemplateAggregator:
+    def __init__(self):
+        self.histogram = HdrHistogram(1, 60_000, 3)  # 1ms - 60s, 3 sig figs
+        self.count = 0
+        self.max_latency = 0
+        self.max_query = ''  # 保留 max 那个 query 作为 example
+    
+    def record(self, query, latency_ms):
+        self.histogram.record_value(latency_ms)
+        self.count += 1
+        if latency_ms &gt; self.max_latency:
+            self.max_latency = latency_ms
+            self.max_query = query
+    
+    def emit(self):
+        return {
+            'p50': self.histogram.get_value_at_percentile(50),
+            'p95': self.histogram.get_value_at_percentile(95),
+            'p99': self.histogram.get_value_at_percentile(99),
+            'p999': self.histogram.get_value_at_percentile(99.9),
+            'count': self.count,
+            'max': self.max_latency,
+            'max_example': self.max_query,
+        }</code></pre>
+<h4>5.3 Top-K Aggregator</h4>
+<pre class="language-python"><code class="language-python">import heapq
+
+def top_k_slowest(template_stats, k=100, by='p99'):
+    """Pick top-K templates by latency metric."""
+    heap = []  # min-heap of (metric, template)
+    for template, stats in template_stats.items():
+        val = stats[by]
+        if len(heap) &lt; k:
+            heapq.heappush(heap, (val, template))
+        elif val &gt; heap[0][0]:
+            heapq.heapreplace(heap, (val, template))
+    return sorted(heap, reverse=True)</code></pre>
+<h4>5.4 Multi-dimension Aggregation</h4>
+<p>不只全 global，按维度 breakdown：</p>
+<pre class="language-plaintext"><code class="language-plaintext">keyBy:
+  - global (no dim)
+  - (region) 单维度
+  - (region, device) 二维度
+  - (region, device, version) 三维度
+
+每维度独立 top-K</code></pre>
+<p>存储分别一份。dashboard 让 user 选 dimension 看 breakdown。</p>
+<h4>5.5 Regression Detection</h4>
+<pre class="language-python"><code class="language-python">def detect_regression(today_top_k, last_week_top_k):
+    """Find templates that are NEW or much slower than last week."""
+    last_week_map = {t['template']: t for t in last_week_top_k}
+    regressions = []
+    
+    for today in today_top_k:
+        tmpl = today['template']
+        if tmpl not in last_week_map:
+            regressions.append({'template': tmpl, 'reason': 'new_in_top_k'})
+        else:
+            old_p99 = last_week_map[tmpl]['p99']
+            new_p99 = today['p99']
+            if new_p99 &gt; old_p99 * 1.5:
+                regressions.append({
+                    'template': tmpl,
+                    'reason': 'regression',
+                    'old_p99': old_p99,
+                    'new_p99': new_p99,
+                    'ratio': new_p99 / old_p99,
+                })
+    return regressions</code></pre>
+<p>发现 regression → alert + 记录到 incident tracking。<strong>版本 deploy 后</strong>特别关注 (auto compare new version vs previous)。</p>
+<h4>5.6 Sampling Strategy</h4>
+<p>10% uniform sample 简单但 miss rare query。<strong>Stratified sampling</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">- Random 1% (representative)
+- + 100% of any query with latency &gt; 500ms (capture all slow events)
+- + 100% of new version deploys' first 1 hour (regression detection)</code></pre>
+<p>混合保证 outlier 不丢。</p>
+<h4>5.7 Cold Storage (history)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Sample records → daily → S3 Parquet (compressed columnar)
+
+Schema:
+  - ts, query (string), template, latency, region, version, device, user_seg
+
+Query via Athena: 
+  "show me slowest restaurant queries last month"
+  Athena scan with partition pruning (by day) → ~minute</code></pre>
+<p>历史 deep dive 用 cold storage。Real-time top-K 用 in-memory + TSDB。</p>
+<h4>5.8 Dashboard 设计</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Dashboard:
+  - Top 100 slowest templates (current 5 min)
+  - Filterable by: region, version, device
+  - Per template detail:
+    - Trend over time (last 7 days)
+    - p50/p95/p99/p999 + max example query
+    - Compare to last week (regression highlight)
+    - Sample queries (real examples)
+  - Alert feed: 新出现的 top-100 + regression</code></pre>
+<p>工程师每天 standup 看 dashboard 决定 today's optimization priority。</p>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - Slowest by max / mean / p99?
+  - Query 归一化？
+  - Real-time / batch?
+
+0:05 - 0:10  Capacity Estimation
+  - 10B/day, 300k QPS peak
+  - Sample 10%
+  - 1M unique templates
+
+0:10 - 0:15  High-Level Architecture
+  - Sample → Kafka → Flink → top-K aggregator → TSDB
+
+0:15 - 0:30  Deep Dive
+  ★ Template normalization
+  ★ HDR Histogram p99
+  ★ Multi-dim aggregation
+  ★ Regression detection
+  ★ Stratified sampling
+
+0:30 - 0:38  Follow-ups
+  - Cold storage / history
+  - Trace 集成
+  - Cost
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK，找 search 最慢的 query。先 clarify：用 p99 latency 而非 max 单 outlier；query 必须 normalize 成 template，不然 1B unique query 没法聚合。</p>
+<p>估算：10B/day = 116k QPS, peak 300k。Raw 11.6 TB/day 不能全存。<strong>Sample 10% + template aggregate</strong> 后 internal state 500 MB，超轻。</p>
+<p>整体：search service emit (query, latency, dims) → 10% sample 进 Kafka → Flink stream processor → per (template, dims) HDR Histogram 5 min window → 每窗口 emit p99 → top-K aggregator 选 top-100 slowest → TSDB + dashboard。</p>
+<p><strong>HDR Histogram</strong> 是 p99 计算关键：固定 200 buckets log-scale，每 update O(1)，query p99 O(200)。每 template 内存 500 byte，1M template 总 500 MB。</p>
+<p><strong>Template normalization</strong> 是另一个 trick：regex 替换数字 / 日期 / 邮箱 / rare word 为 placeholder。'iPhone 15' 和 'iPhone 16' 归到 'iphone [NUM]'。1B unique → 1M unique → aggregation 可行。</p>
+<p><strong>Regression detection</strong>: 每窗口与上周同窗口对比，新出现 top-100 或 p99 涨 50%+ → alert PagerDuty + 加入 priority bug list.</p>
+<p><strong>Stratified sampling</strong>: 不只 uniform 10%，加入 latency &gt; 500ms 100% + 新 deploy 第一小时 100% → capture rare 但重要的事件。</p>
+<p>Cold tier：sample records 每天 export S3 Parquet，Athena query 用于历史 deep dive。</p>
+<p>想 deep dive HDR Histogram 还是 regression detection？"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: Max latency 用还是 p99？</h4>
+<p><strong>答</strong>：<strong>两个都存</strong>。p99 更稳定，更适合识别"种类慢"；max + example query 帮助 debug 单点 worst case。Dashboard 两者都显示。</p>
+<h4>Q2: Template normalization 太 aggressive 会怎样？</h4>
+<p><strong>答</strong>：normalize 过头 → 不同 query 归同 template，丢失信息（"buy iPhone" 和 "buy car" 都成 "buy [RARE]"）。 <strong>Trade-off</strong>：normalize 程度。Conservative 用 named entity recognition (NER) + 保留 main verb / noun。</p>
+<h4>Q3: Sample 不到 rare query (1 day 只 1 个但 5 秒)？</h4>
+<p><strong>答</strong>：Stratified sample，latency &gt; threshold 100% 保留。或 query frequency &lt; N 都保留（rare query 不会让总量爆）。</p>
+<h4>Q4: Regression false positive 怎么 reduce？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>至少 2 个连续 window 都 regression 才 alert</li><li>同时看 traffic 是否变化（traffic spike 时 latency 自然涨）</li><li>ML model 学正常 variance pattern</li></ul>
+<h4>Q5: 怎么把 slowest query 关联到具体 service / endpoint？</h4>
+<p><strong>答</strong>：emit metric 时除了 query + latency 还带 service trace breakdown：</p>
+<pre class="language-plaintext"><code class="language-plaintext">{ query, latency, services: [{name, time_ms}, ...] }</code></pre>
+<p>聚合时多 dimension：per template × per service。"Templates that spend 80% time in service X" → 知道是 X 慢。</p>
+<h4>Q6: Cost 怎么 control?</h4>
+<p><strong>答</strong>：</p>
+<ul><li>10% sample （不是 100%）</li><li>Flink HDR aggregation 内存常量 cost</li><li>Cold storage S3 Parquet 比 TSDB 便宜 50x</li><li>Dashboard query 限速 + cache 5 min</li></ul>
+<h4>Q7: 如何 measure 优化效果？</h4>
+<p><strong>答</strong>：优化某 template 后：</p>
+<ul><li>Track p99 over time</li><li>Compare 同 dim 与 baseline</li><li>A/B test：deploy 到 1% traffic 先看 metric 变化</li></ul>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>不 normalize template</strong> —— 1B unique query 无法 group； ❌ <strong>算 mean latency</strong> —— outlier 拉高 mean 不能区分"种类慢"；用 p99； ❌ <strong>直接 sort 算 p99</strong> —— 10k record × 1M template = TLE；用 HDR； ❌ <strong>Uniform sample</strong> —— rare 但 important slow query 丢；用 stratified； ❌ <strong>不存 example query</strong> —— 工程师看 top-K 没法 reproduce；存 max 那条； ❌ <strong>Regression alert 太宽</strong> —— PagerDuty 烦；需 2 window 持续 + traffic adj； ❌ <strong>不分 dimension</strong> —— "全球慢" 但实际只是 APAC mobile 慢，optimization 方向错。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>Distributed tracing 集成</strong>：每 slow query 关联 trace → 看哪 service 占耗时</li><li><strong>Cohort analysis</strong>：power user vs casual user 慢的不同</li><li><strong>Real user monitoring</strong>：客户端测，end-to-end 包括网络</li><li><strong>Auto-bug-filing</strong>：top-100 + new regression 自动 file JIRA / Asana</li><li><strong>What-if simulation</strong>：估"如果我能优化 template X 50%，全 service p99 减多少"</li><li><strong>ML root cause</strong>：correlate slowness 与 deploy / config change → 自动找 culprit</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Template normalization 让 high cardinality 可聚合</strong>。这是这类系统的灵魂 trick。</li></ol>
+<ol><li><strong>HDR Histogram / T-digest 是 percentile 的工业算法</strong>。O(1) update, O(K) query, 500 byte state per series。一定要会。</li></ol>
+<ol><li><strong>Stratified sampling + multi-dim aggregation 让稀有重要事件不丢</strong>。Uniform 10% sample 看起来够，实际 rare 慢 query 被漏。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) HDR Histogram 实现 / 用 hdrh Python 库；(b) 读 t-digest paper (Ted Dunning)；(c) 学 Flink stream window；(d) 看 Google "Dapper" / "Monarch" paper 关于内部 monitoring；(e) 思考"如果 trace_id 关联 cross-service，怎么算 cross-service slowest endpoint"。</p></div>
   </section>
 
   

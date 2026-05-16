@@ -31,70 +31,420 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Large Model File Distribution System</strong>：把 100GB+ 的 LLM model file 高效分发到全球 1000+ 训练/推理节点。</p>
-<p>OpenAI / Google AI / Meta 都需要。考点：<strong>P2P / chunked download + CDN + 一致性 hash + 大文件 reliability</strong>。</p>
-<h3>需求</h3>
-<ul><li>Model file 100GB-1TB</li><li>分发到 1000+ GPU nodes</li><li>分发 &lt; 1 hour</li><li>Resume on failure</li><li>Multiple model versions（10-50 active）</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Model Producer (training cluster)
-        │ produces model.bin (100GB)
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>LLM model file</strong></td><td>训练完的语言模型权重文件，几 GB 到上 TB</td><td>一本超厚的字典</td></tr><tr><td><strong>GPU node</strong></td><td>装 GPU 的服务器，跑 ML 训练 / 推理</td><td>厨房里的炒锅</td></tr><tr><td><strong>Inference / Serving</strong></td><td>用训练好的 model 给用户生成回复 (vs 训练)</td><td>跟厨师点单</td></tr><tr><td><strong>S3 / GCS</strong></td><td>云存储，存大文件靠谱但带宽 egress 收费</td><td>全球仓库</td></tr><tr><td><strong>Egress</strong></td><td>从云出去的流量。<strong>云厂商收费的大头</strong></td><td>仓库到外面的运输费</td></tr><tr><td><strong>CDN</strong></td><td>把数据缓存到全球 edge，加速分发</td><td>全球连锁店</td></tr><tr><td><strong>Peer-to-peer (P2P)</strong></td><td>节点之间互相传数据，不只从中央拉</td><td>BT 下载（电骡时代）</td></tr><tr><td><strong>BitTorrent</strong></td><td>最经典 P2P 协议。文件切块 + tracker + swarm</td><td>蚂蚁搬家：每只搬一块</td></tr><tr><td><strong>Chunked transfer</strong></td><td>大文件切小块分别传输 + 校验</td><td>大象切块装冰箱</td></tr><tr><td><strong>Content-addressable</strong></td><td>用文件 hash 作 ID（同内容 = 同 ID）</td><td>用指纹识别人</td></tr><tr><td><strong>SHA256</strong></td><td>加密哈希函数。同样内容算出同样 hash</td><td>内容的"指纹"</td></tr><tr><td><strong>Stargz / eStargz</strong></td><td>一种 Docker 镜像格式，支持 <strong>按需 pull 部分内容</strong></td><td>看部分章节而不下载整本书</td></tr><tr><td><strong>DHT</strong></td><td>Distributed Hash Table，去中心化查"谁有 X"</td><td>朋友圈打听 "谁家有伞"</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Large Model File Distribution System</strong> = 把训练完的大 model（100 GB - 1 TB+）<strong>快速复制到全球 N 个 GPU 节点</strong>，用于 inference / 进一步训练。</p>
+<p><strong>典型场景</strong>：</p>
+<ul><li>OpenAI 训完 GPT-4，要部署到全球 100+ data center 的 inference 集群</li><li>Meta 发布 Llama 3，要 push 到自己 1000+ inference node</li><li>客户买了你 hosted model，要部署到他的 dedicated cluster</li></ul>
+<p><strong>为什么这道题难</strong>：</p>
+<ol><li><strong>文件大</strong>（70B param × 2 bytes = 140 GB；万亿参数模型 2-4 TB）</li><li><strong>目标节点多</strong> —— 1000+ GPU node 同时要这个模型</li><li><strong>下载时间 = 节点不可用时间</strong>。GPU 一台一小时 $5+，1000 台等模型 1 小时 = $5000 浪费</li><li><strong>Egress 费用</strong>：1000 节点 × 100 GB = 100 TB egress，AWS S3 egress $0.09/GB → <strong>$9000 一次部署</strong></li><li><strong>版本快速迭代</strong>：模型每周更新一版，差异部分要 detect 增量下载</li></ol>
+<p>OpenAI / Google AI 内部都有类似系统。这是 LLM infra 工程师的 daily concern。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：模型多大？ <strong>典型答</strong>：100 GB - 1 TB。中位数 200 GB。</p>
+<p><strong>你问</strong>：多少目标节点同时分发？ <strong>典型答</strong>：1000+ GPU nodes，可能分散在 5+ region。</p>
+<p><strong>你问</strong>：分发完成的 SLA？ <strong>典型答</strong>：&lt; 1 小时全部 ready。Ideally &lt; 30 min。</p>
+<p><strong>你问</strong>：模型 update 是 full replace 还是增量？ <strong>典型答</strong>：希望增量（layer-level reuse），但要支持 full 也行。</p>
+<p><strong>你问</strong>：分发后还要 verify integrity 吗？ <strong>典型答</strong>：必须。Model corruption 会产生 garbage output。</p>
+<p><strong>你问</strong>：要不要 resume on failure？ <strong>典型答</strong>：要。1 GB chunk 失败不能重头来。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：分发吞吐量目标？ <strong>典型答</strong>：1000 nodes × 100 GB = 100 TB 总量在 30 min 内分发 = 56 GB/s 聚合。</p>
+<p><strong>你问</strong>：成本敏感度？ <strong>典型答</strong>：每次发布成本 &lt; $1000（vs 朴素方案 $9000）。</p>
+<p><strong>你问</strong>：网络 topology？ <strong>典型答</strong>：节点在同 DC 内 100 Gbps 互联；跨 DC 受跨域 bandwidth 限。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- 100 GB - 1 TB model file
+- 分发到 1000+ GPU nodes 全球
+- &lt; 1 hour SLA
+- 增量更新（model 间共享 weights）
+- 完整性校验
+- Resume on failure
+
+非功能：
+- 100 TB 聚合分发 / 半小时
+- 成本 $1k / deployment
+- 不影响 training cluster bandwidth</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>关键洞察：<strong>1000 node 同时从 S3 拉 = 1000x egress 费 + 受 S3 limit</strong>。这道题的灵魂是 <strong>"如何避免中心 S3 成瓶颈"</strong> —— 答案就是 P2P。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 朴素方案 cost</h4>
+<pre class="language-plaintext"><code class="language-plaintext">1000 nodes 全从 S3 拉 100 GB model:
+  Egress: 1000 × 100 GB × $0.09/GB = $9000 / deploy
+  Bandwidth: 100 TB total
+  Time: 假设 S3 limit 100 Gbps per region = 1000 sec = 17 min (但单 region 撑不住)
+  → 实际 S3 把你 throttle，慢，可能 1 小时不够</code></pre>
+<p>→ <strong>不可行</strong>。</p>
+<h4>3.2 用 P2P 的 cost</h4>
+<pre class="language-plaintext"><code class="language-plaintext">第一批 10 nodes 从 S3 拉 (seed):
+  Egress: 10 × 100 GB × $0.09 = $90
+其他 990 nodes 从 peers 拉:
+  Egress (内 cloud free): 0
+  Bandwidth: peer-to-peer 限速 1 GB/s per node
+  Time: ~5 min per node (但并发 → 总 30 min)
+
+成本: $90 (vs $9000) → 100x 省 ✅
+时间: 30 min (满足 SLA) ✅</code></pre>
+<h4>3.3 增量 update cost</h4>
+<pre class="language-plaintext"><code class="language-plaintext">新版本 model 共享 70% chunk → 实际新传输 30%:
+  Egress: 1000 × 30 GB × $0.09 = $2700 (full)
+  P2P: 第一批 10 × 30 GB = $27 (P2P 后)</code></pre>
+<p>→ Content-addressable + dedup 让"增量更新"自动发生。</p>
+<h4>3.4 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Naive: $9000 / deploy, 1 hour (timeout)
+P2P:   $90-100 / deploy, 30 min
+Increm with P2P: $27 / deploy (新版只 30% 变)</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 0 步：朴素方案（不可用）</h4>
+<div class="ascii-diagram">   Training cluster produces model.bin (100 GB)
+        │
         ▼
-   ┌────────────────┐
-   │ Storage (S3 /  │  S3 multipart upload
-   │  GCS)          │  chunk = 64MB
-   └──────┬─────────┘
+   ┌──────────────┐
+   │ S3           │
+   └──────┬───────┘
           │
-          ▼
-   ┌────────────────┐
-   │  Distribution  │  metadata: version, chunks, hashes
-   │  Service       │
-   └──────┬─────────┘
-          │ notify
-          ▼
-   ┌─────────────────────────────┐
-   │ Pull-mode workers (1000)    │  ← BitTorrent-style peer to peer
-   │ - request manifest          │
-   │ - parallel download chunks  │
-   │ - share with peers          │
-   └─────────────────────────────┘</div>
-<h3>核心机制</h3>
-<h4>1. Chunked + content-addressable</h4>
-<p>Model 切成 64MB chunks，每 chunk SHA256 hash 当 ID。Manifest 列出 chunk hashes + 顺序。</p>
-<pre class="language-json"><code class="language-json">{
+   ┌──────┼──────┬──────┬─────┐
+   ▼      ▼      ▼      ▼     ▼
+  N1     N2     N3     ...   N1000
+  (all download from S3 simultaneously)</div>
+<p><strong>问题</strong>：</p>
+<ul><li>1000 node × 100 GB = 100 TB egress = $9000</li><li>S3 egress bandwidth throttle → 1000 node 同时拉 → 慢死</li></ul>
+<h4>4.2 第 1 步：Chunking + Content-Addressable</h4>
+<p>把 model 切成 64 MB chunks，每 chunk 用 SHA256 作 ID。</p>
+<pre class="language-plaintext"><code class="language-plaintext">model.bin (100 GB)
+  ↓ split into 64 MB chunks
+[chunk1, chunk2, ..., chunk1600]
+  ↓ each chunk SHA256 = unique ID
+chunk_id_1 = "abc123..."
+chunk_id_2 = "def456..."
+...
+
+Manifest:
+{
   "model": "llama-3-70b",
   "version": "v1.2.3",
-  "total_size": 140000000000,
+  "total_size": 100_000_000_000,
   "chunks": [
-    {"id": "sha256:abc...", "size": 67108864, "offset": 0},
+    {"id": "abc123...", "offset": 0, "size": 67108864},
+    {"id": "def456...", "offset": 67108864, "size": 67108864},
     ...
   ]
 }</code></pre>
-<h4>2. Hybrid pull：S3 + Peer-to-peer</h4>
-<p>第一个 download 的 N nodes 从 S3 拉。之后 nodes 可以从 <strong>同 region peers</strong> 拉（BitTorrent-style）。</p>
-<p>P2P 大幅降低 S3 egress 成本 + 加速分发：</p>
-<ul><li>1000 nodes 全从 S3 拉 = 1000 × 100GB = 100TB egress</li><li>用 P2P: 第一批 10 nodes 从 S3，其他 990 从 peers → S3 egress 1TB</li></ul>
-<h4>3. Content deduplication</h4>
-<p>同一 model 不同 version 共享相同 chunks（layer weights 部分相同）。Content-addressable 自动去重 → 增量 download。</p>
-<h4>4. Parallel download</h4>
-<p>每 node 同时下载 8-16 chunks（不同 source —— mix of S3 + peers）。完成一个就 verify SHA256 + add 到 local pool 供其他 peer 下载。</p>
-<h4>5. Failure handling</h4>
-<ul><li>Chunk download fail → retry 不同 source</li><li>Hash mismatch → discard + re-fetch</li><li>Resume：保留 local chunk 进度，restart 时跳过已 ok 的 chunk</li></ul>
-<h4>6. Tracker / Coordinator</h4>
-<p>类似 BitTorrent tracker：</p>
-<ul><li>维护"哪个 node 有哪些 chunks"</li><li>Node 请求"我要 chunk X" → tracker 返回有该 chunk 的 peers list</li><li>用 DHT (Distributed Hash Table) 或中心 coordinator</li></ul>
-<h4>7. CDN as accelerator</h4>
-<p>对于 high-popularity model (10+ datacenter 都要)，pre-warm 各 region S3 / 类 S3 cache。</p>
-<h4>8. Bandwidth scheduling</h4>
-<p>不要让分发饱和 cluster bandwidth（影响 training）。Rate-limit per-node 上行 bandwidth (e.g., 2 GB/s)。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Chunk size</td><td>64MB</td><td>8MB：太多 metadata；1GB：恢复慢</td></tr><tr><td>P2P</td><td>BitTorrent-like</td><td>All S3：egress 贵</td></tr><tr><td>Content addressing</td><td>SHA256 hash</td><td>UUID：不能 dedup</td></tr><tr><td>Tracker</td><td>Central coord</td><td>DHT：复杂</td></tr><tr><td>Coordination</td><td>Pull model</td><td>Push：拥塞</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>100GB / 1Gbps = 800s = 13min per node from S3</li><li>With P2P + 8 parallel chunks: ~5min per node</li><li>1000 nodes simultaneous: ~30 min total（vs 几天 if serial）</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 单 S3 拉所有 nodes → egress 费 + 限速； ❌ 不 chunk → 一处 fail 全重； ❌ 不 verify hash → 数据 corrupt model 跑乱； ❌ 不限速上行 → P2P 抢 training 带宽； ❌ 不版本化 → 升级 model 时新旧混乱。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Chunked content-addressable</strong> 支持 dedup + resume；(2) <strong>P2P 分发</strong> 降 egress + 加速；(3) <strong>Tracker + parallel chunks</strong> 协调。本质是 BitTorrent 的工业版。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Differential model update（增量 vs full）？" → 只传 changed chunks（content addressing 自然支持）；"如何 verify model 没被 tampered？" → manifest 签名 + chunk hash chain；"Multi-cloud？" → 各 cloud region 自己 P2P swarm，跨 cloud 用 transfer service；"GPU 训练同时分发？" → 不行，分发完才训练 (or 用 prefetching)。</p></div>
+<p><strong>为什么 chunk</strong>：</p>
+<ul><li>失败 retry 只需重传 chunk</li><li>不同 version model 共享 chunk → 增量更新自动</li><li>多 source 并发 download</li></ul>
+<p><strong>为什么 SHA256 作 ID</strong>：</p>
+<ul><li>内容寻址 (content-addressable)：同内容 = 同 ID</li><li>验证完整性：download 后 hash 对照</li><li>Dedup：不同 model version 中相同内容的 chunk 自动 dedup</li></ul>
+<h4>4.3 第 2 步：P2P 分发（核心 idea）</h4>
+<p>第一批 N nodes 从 S3 拉（seed），完成后<strong>它们成为新 source</strong>，其他 nodes 从 peers 拉。</p>
+<div class="ascii-diagram">T=0:
+  S3 has model
+  10 seed nodes start pulling from S3
+  
+T=5 min:
+  10 seed nodes finished
+  Now 11 sources (S3 + 10 nodes)
+  
+T=10 min:
+  More nodes finished, become sources
+  Swarm grows exponentially
+  
+T=30 min:
+  All 1000 nodes finished
+  S3 egress only ~10 × 100 GB = 1 TB (vs 100 TB)</div>
+<p><strong>Swarm 增长</strong>：classic BitTorrent。每完成一个 node 都成 source，并发能力指数增加。</p>
+<h4>4.4 第 3 步：Tracker + DHT</h4>
+<p>每 node 怎么知道"我要的 chunk X 在哪个 peer 上"？</p>
+<p><strong>方案 A：中心 Tracker</strong></p>
+<div class="ascii-diagram">   Node → Tracker: "我有 chunk [A, B, C], 我要 [D, E, F]"
+   Tracker → Node: "D 在 node 7, E 在 node 12, F 在 node 7"
+   Node → node 7: GET chunk D, GET chunk F</div>
+<p>简单，但 tracker 是 SPoF。</p>
+<p><strong>方案 B：DHT (Distributed Hash Table)</strong></p>
+<p>每 node 维护"chunk_id → owning peers" 的部分映射。Lookup 通过 chained hop。无中心。</p>
+<p><strong>推荐</strong>：中心 tracker（简单 + 1 个 tracker server 撑 1000 nodes 毫无压力）。</p>
+<h4>4.5 第 4 步：完整架构</h4>
+<div class="ascii-diagram">   Training cluster
+        │ produces model.bin
+        ▼
+   ┌──────────────┐
+   │ Indexer      │  → chunk, compute SHA256, build manifest
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ S3           │  store chunks (origin)
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Distribution │  - manifest registry
+   │ Service      │  - notify nodes
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Tracker      │  chunk_id → [peer_node_ids]
+   └──────┬───────┘
+          │ peers query / update
+          ▼
+   ┌─────────────────────────────────┐
+   │       Worker Nodes (1000)       │
+   │  ┌──────────────────────────┐   │
+   │  │ Pull manifest            │   │
+   │  │ For each chunk:          │   │
+   │  │   Ask tracker for peers  │   │
+   │  │   Try peer first         │   │
+   │  │   Fallback to S3         │   │
+   │  │   Verify SHA256          │   │
+   │  │   Store + 通知 tracker   │   │
+   │  └──────────────────────────┘   │
+   └─────────────────────────────────┘</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Manifest 设计</h4>
+<pre class="language-json"><code class="language-json">{
+  "schema_version": "1.0",
+  "model_name": "llama-3-70b",
+  "version": "v1.2.3",
+  "total_size_bytes": 140000000000,
+  "chunk_size_bytes": 67108864,
+  "chunks": [
+    {
+      "id": "sha256:abc123...",
+      "offset": 0,
+      "size": 67108864,
+      "compression": null
+    },
+    {
+      "id": "sha256:def456...",
+      "offset": 67108864,
+      "size": 67108864,
+      "compression": null
+    },
+    ...
+  ],
+  "metadata": {
+    "framework": "pytorch",
+    "param_count": 70_000_000_000,
+    "dtype": "bfloat16"
+  },
+  "signature": "..."          // 签名验证 model 未被篡改
+}</code></pre>
+<p><strong>新手 question</strong>：</p>
+<p>❓ <strong>为什么 chunk 64 MB？</strong></p>
+<ul><li>太小（1 MB）：metadata overhead 大，manifest 太长</li><li>太大（1 GB）：失败重传成本高，不利于 P2P 并发</li><li>64 MB 是 BitTorrent / Stargz / 工业实践的 sweet spot</li></ul>
+<p>❓ <strong>Compression 为什么默认 null？</strong> Model weights 是浮点 / 整数张量，<strong>压缩比极差</strong>（通常 &lt; 5% 减小）。不值得 CPU 开销。已经 quantize 过的 model 更不必压缩。</p>
+<h4>5.2 Chunking Pipeline</h4>
+<pre class="language-python"><code class="language-python">import hashlib
+import os
+
+CHUNK_SIZE = 64 * 1024 * 1024  # 64 MB
+
+def chunk_model(file_path: str) -&gt; dict:
+    """Chunk a model file and produce manifest."""
+    manifest = {"chunks": []}
+    offset = 0
+    
+    with open(file_path, 'rb') as f:
+        while True:
+            chunk = f.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            chunk_id = hashlib.sha256(chunk).hexdigest()
+            manifest['chunks'].append({
+                'id': f'sha256:{chunk_id}',
+                'offset': offset,
+                'size': len(chunk),
+            })
+            # Upload to S3 with chunk_id as key
+            s3.put(f'chunks/{chunk_id}', chunk)
+            offset += len(chunk)
+    
+    return manifest</code></pre>
+<p><strong>关键观察</strong>：S3 上<strong>每个 chunk 用 hash 作 key</strong>。如果两个 model version 共享 chunk（layer 一样），它们的 chunk_id 相同 → S3 只存一份 → <strong>自动 dedup</strong>。</p>
+<h4>5.3 P2P Download Worker</h4>
+<pre class="language-python"><code class="language-python">import asyncio
+import aiohttp
+
+class P2PDownloader:
+    def __init__(self, manifest, tracker_url, s3_url, max_concurrent=16):
+        self.manifest = manifest
+        self.tracker = tracker_url
+        self.s3 = s3_url
+        self.max_concurrent = max_concurrent
+        self.local_chunks = set()
+    
+    async def download(self):
+        """Download all chunks (parallel + P2P first, S3 fallback)."""
+        sem = asyncio.Semaphore(self.max_concurrent)
+        tasks = [self._download_chunk(c, sem) for c in self.manifest['chunks']]
+        await asyncio.gather(*tasks)
+    
+    async def _download_chunk(self, chunk, sem):
+        async with sem:
+            chunk_id = chunk['id']
+            if await self._already_have(chunk_id):
+                return  # 之前 download 过
+            
+            # 1. Ask tracker for peers
+            peers = await self._get_peers(chunk_id)
+            
+            # 2. Try each peer
+            for peer in peers:
+                data = await self._try_fetch(peer, chunk_id)
+                if data and self._verify(data, chunk_id):
+                    await self._store(chunk_id, data)
+                    await self._notify_tracker_have(chunk_id)
+                    return
+            
+            # 3. Fallback to S3
+            data = await self._fetch_from_s3(chunk_id)
+            assert self._verify(data, chunk_id), "S3 corrupt!"
+            await self._store(chunk_id, data)
+            await self._notify_tracker_have(chunk_id)
+    
+    def _verify(self, data, chunk_id):
+        expected = chunk_id.removeprefix('sha256:')
+        actual = hashlib.sha256(data).hexdigest()
+        return actual == expected</code></pre>
+<p><strong>关键设计点</strong>：</p>
+<ol><li><strong>并发</strong>：16 chunk 同时下载（多个 peer source 并发）</li><li><strong>Verify after download</strong>：每 chunk SHA256 校验，corrupt 重试</li><li><strong>完成后 notify tracker</strong>：变成新 source 供其他 node 拉</li><li><strong>Fallback to S3</strong>：peer 都失败时仍 reliable</li></ol>
+<h4>5.4 Tracker 设计</h4>
+<pre class="language-python"><code class="language-python">class ChunkTracker:
+    def __init__(self):
+        # chunk_id → set of node_ids
+        self.chunk_owners: dict[str, set] = defaultdict(set)
+        # node_id → set of chunk_ids
+        self.node_chunks: dict[str, set] = defaultdict(set)
+    
+    def register_chunk(self, node_id, chunk_id):
+        """Node downloaded a chunk and is now serving it."""
+        self.chunk_owners[chunk_id].add(node_id)
+        self.node_chunks[node_id].add(chunk_id)
+    
+    def get_peers(self, chunk_id, requester_id, k=5):
+        """Return up to k peers serving this chunk (prefer same region)."""
+        peers = list(self.chunk_owners[chunk_id] - {requester_id})
+        # Sort by region affinity (same region first)
+        peers.sort(key=lambda p: 0 if same_region(p, requester_id) else 1)
+        return peers[:k]
+    
+    def heartbeat(self, node_id):
+        """Node alive, update last_seen."""
+        # Remove from peer lists if not heartbeat for 60s
+        ...</code></pre>
+<p><strong>为什么 prefer same region</strong>：跨 region bandwidth 贵 + 慢。同 region peer pull 几乎 free。</p>
+<h4>5.5 Bandwidth 调度</h4>
+<p>Inference 节点 GPU 跑模型，<strong>网络带宽不能被 P2P 拉满</strong>（不然推理变慢）。</p>
+<pre class="language-python"><code class="language-python"># Per-node bandwidth limit
+MAX_UPLOAD_BW_GBPS = 5  # 不超过 NIC 50%
+MAX_DOWNLOAD_BW_GBPS = 10
+
+# Token bucket rate limiter on upload connections</code></pre>
+<p>如果 GPU 推理在跑，<strong>降低 upload bandwidth</strong>让出来给推理。Idle 时全速 P2P。</p>
+<h4>5.6 Hybrid: Stargz / Lazy Pull</h4>
+<p><strong>进一步优化</strong>：很多时候<strong>不需要全 model 加载完才能 inference</strong>。GPU memory 装不下整 70B model 时，<strong>按 layer 流式 load</strong>。</p>
+<pre class="language-python"><code class="language-python"># 用 Stargz / eStargz format
+- Layer 0-10: pulled, on GPU
+- Layer 11-30: still in S3, lazy loaded when forward pass reaches</code></pre>
+<p>适合：</p>
+<ul><li>模型大于 GPU memory 容量</li><li>冷启动需要尽快 serve（不等全模型）</li></ul>
+<h4>5.7 增量 update 完整流程</h4>
+<div class="ascii-diagram">v1.2.3 manifest → chunks [A, B, C, D, E, F, G]
+v1.2.4 manifest → chunks [A, B, X, D, Y, F, G]  (只改了 2 chunk)
+
+部署 v1.2.4 到节点：
+  Node 已有 [A, B, C, D, E, F, G] from v1.2.3
+  对比 v1.2.4 manifest:
+    A ✓ skip
+    B ✓ skip
+    X ✗ need to download
+    D ✓ skip
+    Y ✗ need to download
+    F ✓ skip
+    G ✓ skip
+  
+  → 只 download X, Y = 128 MB 而非全 100 GB</div>
+<p>→ <strong>增量 update 100x 快</strong>。模型 fine-tuning 后只改了 LoRA adapter（百 MB）：1 分钟完成。</p>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - 模型大小
+  - 节点数 + region
+  - 部署 SLA
+  - Cost 敏感度
+
+0:05 - 0:10  Capacity Estimation
+  - 朴素：100 TB egress = $9000，太贵
+  - P2P：第一批 seed → 其他从 peer
+  - 增量 update 30% chunk
+
+0:10 - 0:15  High-Level Architecture
+  - Chunking + content addressable
+  - S3 origin + P2P swarm + tracker
+  - Worker pull manifest + chunk
+
+0:15 - 0:30  Deep Dive
+  ★ Chunking + SHA256 dedup
+  ★ P2P swarm 增长
+  ★ Tracker / DHT 选择
+  ★ Verify + retry
+  ★ Bandwidth limit
+
+0:30 - 0:38  Follow-ups
+  - 怎么 verify model not tampered (签名)
+  - 跨 region 优化
+  - GPU 推理同时分发的 bandwidth
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK 这是 large model file distribution。我估算几件事：1000 nodes × 100 GB = 100 TB egress。如果都从 S3 拉，AWS egress $0.09/GB 是 $9000 一次，还会被 throttle。<strong>朴素方案不可行</strong>，需要 P2P。</p>
+<p>设计 idea: BitTorrent-style。把 model 切 64 MB chunk，每 chunk 用 SHA256 hash 作 ID（<strong>content-addressable</strong>）。这有 3 个好处：(1) verify integrity；(2) 不同 model version 共享 chunk → 增量 update；(3) 多 peer 并发 download。</p>
+<p>第一批 10 个 seed node 从 S3 拉。完成后它们成为 source。其他 990 节点优先从 peer 拉，S3 fallback。Swarm 指数增长，5 分钟内大部分 node 都能 serve chunks。</p>
+<p>Tracker 维护 chunk → owners 映射。Node 来问 'chunk X 谁有'，tracker 返回 5 个 peer（优先同 region）。中心 tracker 简单，1000 node QPS 完全撑得住，不用 DHT。</p>
+<p>Bandwidth 控制 —— P2P upload 限 NIC 50%，留余地给 inference workload。</p>
+<p>增量 update 关键：v1.2.4 比 v1.2.3 改 2 个 chunk，节点对比 manifest 只 download 2 chunk = 128 MB，1 分钟完成。这就是 content addressable 的力量。</p>
+<p>成本：朴素 $9000 → P2P $90 → 增量 $27。Time 17 min S3 throttled → 30 min P2P → 5 min 增量。</p>
+<p>Deep dive 想讲 tracker design 还是 bandwidth scheduling？"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: 如果 tracker 挂了？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Hot standby：另一台 tracker 同步 state，failover &lt; 30 sec</li><li>Fallback：node 直接 S3 拉（不优雅但 work）</li></ul>
+<h4>Q2: 怎么 detect 恶意 peer 篡改 chunk？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>每 chunk SHA256 verify (content-addressable 天然支持)</li><li>Manifest 由 publisher 签名 (RSA / Ed25519)</li><li>Verify manifest signature → 信任 chunk IDs</li></ul>
+<h4>Q3: GPU node 正在 inference，P2P 抢带宽？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Token bucket 限速：upload ≤ NIC 50%</li><li>动态调整：检测到 inference latency 上升 → 降速 P2P</li><li>Inference 不能 acceptable 时直接 pause P2P upload</li></ul>
+<h4>Q4: 多 region 怎么 optimize？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>每 region 一个 sub-tracker</li><li>Cross-region 流量贵 → only first seed 跨 region，之后 region 内 P2P</li><li>大模型可以 region-specific S3 镜像</li></ul>
+<h4>Q5: 怎么处理 node 频繁 join/leave？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Tracker heartbeat 60s 超时移除</li><li>Node download 时如果 peer 不响应 → 立即 fallback 其他 peer or S3</li><li>Swarm 中 node 数动态变化 BT 协议天然处理</li></ul>
+<h4>Q6: 如果 model 是 sensitive (商业秘密 / 用户数据)？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Chunks 加密存 S3（AES-256）</li><li>每 node 用 KMS 取 decryption key</li><li>Tracker / peers 只传密文，本地 decrypt</li><li>完整性 verify 在 plaintext 上</li></ul>
+<h4>Q7: 怎么 quickstart inference 不等全模型加载？</h4>
+<p><strong>答</strong>：Lazy load (Stargz format)。Inference engine 按需 fetch layer：</p>
+<ul><li>Layer 0-5 在 GPU</li><li>Forward pass 到 Layer 6 时 trigger fetch from local disk / peer</li><li>Trade-off：首次 inference 慢，但启动时间 5x 快</li></ul>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>朴素全节点拉 S3</strong> —— $9000 + 慢 + throttle； ❌ <strong>不 chunk</strong> —— 一处 fail 全重传； ❌ <strong>不 verify SHA256</strong> —— Corrupt chunk 不察觉 → model output garbage； ❌ <strong>不限制 P2P upload bw</strong> —— 抢 inference 带宽，GPU 闲； ❌ <strong>不版本化 manifest</strong> —— 升级时新旧混乱； ❌ <strong>跨 region P2P 不优化</strong> —— 跨洋 bandwidth 贵且慢； ❌ <strong>Tracker SPoF 无 standby</strong> —— 挂了所有 P2P 失败； ❌ <strong>Public chunk 不签名 manifest</strong> —— 攻击者注入恶意 weights。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>Differential update via LoRA/adapter</strong>：fine-tuned model 只发 LoRA 而非 full weights</li><li><strong>Smart pre-fetch</strong>：根据 deployment schedule 提前 push 到 candidate node</li><li><strong>Versioned A/B</strong>：同时部署 v1.2.3 + v1.2.4，按 traffic 分配</li><li><strong>Cold storage / archive</strong>：旧模型自动归档 Glacier</li><li><strong>Multi-cloud</strong>：GCP train，跨到 AWS deploy 用专门 transfer service</li><li><strong>Edge inference 分发</strong>：把模型推到 CDN edge GPU (Cloudflare Workers AI)</li><li><strong>Compression for delta</strong>：v1.2.4 vs v1.2.3 的 weight diff 用 binary diff (xdelta) 进一步减小</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Chunked + Content-addressable + P2P</strong> 是大文件全球分发的工业模式。BitTorrent / Docker stargz / IPFS 都是同思路。</li></ol>
+<ol><li><strong>Egress cost 是云时代成本灵魂</strong>。1000 节点 × 100 GB 这种 query 看似单纯，背后是 $9000 vs $90 的取舍。</li></ol>
+<ol><li><strong>Verify after download</strong> 在 ML / 安全系统是 must-have。SHA256 chunk + signed manifest 是 chain of trust。Bad weights = 整个 model废了。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) 跑通 Docker Stargz / eStargz 体验 lazy pull；(b) 读 BitTorrent 协议 BEP 3；(c) 看 Uber 的 Kraken (大规模 P2P container distribution paper)；(d) 自己 chunk 一个 100 MB 文件 + SHA256 试 verify；(e) 调研 OpenAI / Anthropic 公开 talks 里关于 model serving 的内容。</p></div>
   </section>
 
   

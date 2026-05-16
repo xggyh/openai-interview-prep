@@ -31,41 +31,341 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Global VM Monitoring System</strong>：监控全球数据中心 100k+ VMs 的健康（CPU / mem / disk / network / 服务状态）。Hyperscale cloud 必备。</p>
-<p>类似 [[cm6jwhimp0093dar9n0eo4lvt]] (Server Health Monitoring) 但更大规模 + 跨 region。</p>
-<h3>需求</h3>
-<ul><li>100k+ VMs across multiple regions/DCs</li><li>10 sec metric resolution</li><li>Real-time anomaly alerts &lt; 1 min</li><li>Historical trend 1 year+</li><li>Multi-tenant (per customer)</li></ul>
-<h3>Key differences vs single-region server monitoring</h3>
-<h4>1. 跨 region 数据收集</h4>
-<p>每 region 独立 collector + TSDB。Global aggregation via federation。</p>
-<ul><li>Local: low-latency, region-isolation</li><li>Global: cross-region view via Thanos / Cortex</li></ul>
-<h4>2. Multi-tenant isolation</h4>
-<p>每 customer / VM tag 自己 visibility。RBAC:</p>
-<ul><li>Customer A 只看 own VM metrics</li><li>Cloud operator 看 all</li><li>Per-tag dashboard, per-tag alert rules</li></ul>
-<h4>3. Auto-discovery</h4>
-<p>VMs 启动 / 终止动态。Monitoring agent 自动 register / deregister。Service discovery 用 K8s service or cloud API。</p>
-<h4>4. VM-specific metrics</h4>
-<p>不只是 generic CPU / mem，还有：</p>
-<ul><li>Hypervisor metrics (vCPU steal time，noisy neighbor detect)</li><li>Guest OS metrics (process list, file system)</li><li>Network: per-VM bandwidth, packet loss</li><li>Cloud-specific: instance type, AZ, billing tier</li></ul>
-<h4>5. Anomaly detection</h4>
-<p>100k VM × 30 metrics × 24/7 → 不可能 manual baseline。ML:</p>
-<ul><li>Per-VM baseline (1 周训练 + 滑动更新)</li><li>Group baseline (instance type 集群)</li><li>Anomaly = current vs baseline &gt; 3σ</li></ul>
-<h4>6. Capacity planning</h4>
-<p>不仅 monitoring，还 forecast：</p>
-<ul><li>VM 增长趋势</li><li>哪些 region capacity 紧张</li><li>推动 capacity allocation 决策</li></ul>
-<h4>7. Cost monitoring</h4>
-<p>跨 region cost dashboard。Per-VM hourly cost based on instance type × region。Detect cost waste（idle VMs, oversized instances）。</p>
-<h4>8. Failure escalation</h4>
-<p>层级 escalation:</p>
-<ol><li>Auto-remediation (restart VM, scale up)</li><li>Auto-alert on-call engineer</li><li>Auto-page senior on-call after 15 min</li><li>Customer notification for major outage</li></ol>
-<h3>架构</h3>
-<p>参考 [[cm6jwhimp0093dar9n0eo4lvt]] 整体架构 + 加：</p>
-<ul><li>Per-region collector + TSDB cluster</li><li>Global federation layer (Thanos)</li><li>Multi-tenant access layer</li><li>ML anomaly engine</li><li>Auto-remediation engine</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Single global TSDB → 跨洋延迟； ❌ 不 RBAC → customer A 看到 B 的 metrics； ❌ Static threshold → ML 异常 missing； ❌ Capacity planning 只看现状 → forecasting 缺； ❌ Auto-remediation 不限制 → 错误 fix 放大问题。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>单 region monitoring + (federation, multi-tenancy, auto-discovery, ML anomaly, auto-remediation) = enterprise hyperscale monitoring。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 detect noisy neighbor on hypervisor？" → 监控 steal time + ML correlation per-VM；"customer 自定义 metric？" → user-pushed metric endpoint + namespace；"VM live migration 时如何 maintain monitoring？" → metric stream resume by VM UUID not by IP。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>VM (Virtual Machine)</strong></td><td>虚拟机，跑在 hypervisor 上的虚拟服务器</td><td>一栋楼里隔出的多间公寓</td></tr><tr><td><strong>Hypervisor</strong></td><td>管 VM 的底层软件（KVM / Xen / Hyper-V）</td><td>公寓楼的管理处</td></tr><tr><td><strong>AZ / Region</strong></td><td>可用区 / 区域。AWS / GCP 把全球分成几十个 region，每 region 内几个 AZ</td><td>同城多分店</td></tr><tr><td><strong>Multi-tenant</strong></td><td>一套系统多客户共用，但数据/权限隔离</td><td>写字楼里多家公司</td></tr><tr><td><strong>OTel (OpenTelemetry)</strong></td><td>metric/log/trace 统一标准</td><td>通用医疗记录格式</td></tr><tr><td><strong>Federation</strong></td><td>多 region 各自跑 monitoring，中心层聚合</td><td>联邦制</td></tr><tr><td><strong>Cardinality</strong></td><td>不同 series 数。Label 多 → 爆炸</td><td>颜色板上多少色</td></tr><tr><td><strong>RBAC</strong></td><td>Role-Based Access Control，按角色赋权</td><td>不同等级钥匙开不同门</td></tr><tr><td><strong>Steal time</strong></td><td>hypervisor 不让你 vCPU 用足时间，被"偷"了</td><td>你订座但被别人挤了</td></tr><tr><td><strong>Noisy neighbor</strong></td><td>同 hypervisor 上另一 VM 抢资源，让你慢</td><td>楼上邻居半夜跳广场舞</td></tr><tr><td><strong>Self-service</strong></td><td>客户自己 onboarding 不需要 ops 帮</td><td>自助办理</td></tr><tr><td><strong>AIOps</strong></td><td>AI for IT operations，用 ML 自动找 root cause / detect anomaly</td><td>智能助手</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Global VM Monitoring System</strong> = hyperscale cloud（AWS / GCP / Azure / 阿里云）给客户提供"我所有 VM 健康状况"的 service。</p>
+<p><strong>典型场景</strong>：</p>
+<ul><li>AWS CloudWatch 监控你 EC2 instances</li><li>GCP Cloud Monitoring 看 GCE VMs</li><li>阿里云监控看 ECS</li><li>自建 OpenStack 私有云的运维 dashboard</li></ul>
+<p><strong>与基础 Server Health Monitoring 区别</strong>：</p>
+<table class="md-table"><thead><tr><th>维度</th><th>Server Health (内部)</th><th>Global VM Monitoring</th></tr></thead><tbody><tr><td>用户</td><td>自家 ops team</td><td>外部 customer (多租户)</td></tr><tr><td>Scale</td><td>50k 服务器</td><td>100k+ VMs，几千客户</td></tr><tr><td>隔离</td><td>不需要</td><td>必须（cross-customer leak = breach）</td></tr><tr><td>计费</td><td>不需要</td><td>需要（charge by data volume / retention）</td></tr><tr><td>特性</td><td>metric only</td><td>metric + log + alarm + dashboard</td></tr><tr><td>Hypervisor metric</td><td>不必</td><td>必备（noisy neighbor 等）</td></tr><tr><td>自服务</td><td>ops 直接 config</td><td>customer self-serve UI / API</td></tr></tbody></table>
+<p>考点：<strong>multi-tenancy + federation + hypervisor-aware + cost / billing</strong>。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：监控哪些 metric？ <strong>典型答</strong>：(a) Guest OS: CPU / mem / disk / network；(b) Hypervisor: steal time / vCPU throttling；(c) 网络 / 磁盘 latency；(d) Custom app metric。</p>
+<p><strong>你问</strong>：自服务用户能做什么？ <strong>典型答</strong>：(a) 看 dashboard；(b) 设 alarm rule；(c) 配 channel (email / webhook)；(d) 跨 VM aggregate。</p>
+<p><strong>你问</strong>：要不要 cost monitoring？ <strong>典型答</strong>：要。客户想知道哪些 VM 浪费钱（idle）+ 哪些超资源。</p>
+<p><strong>你问</strong>：要不要 anomaly detection？ <strong>典型答</strong>：基础 threshold alarm 必须。ML anomaly 是加分项。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：规模？ <strong>典型答</strong>：100k+ VMs，几千 customer。</p>
+<p><strong>你问</strong>：metric resolution？ <strong>典型答</strong>：默认 1 min（free tier），customer pay 可 10s / 1s (high freq)。</p>
+<p><strong>你问</strong>：保留？ <strong>典型答</strong>：1 min × 15 day free；5 min × 3 month；1 h × 1 year (long-term cold)。</p>
+<p><strong>你问</strong>：跨 region？ <strong>典型答</strong>：所有 region 都要 cover，customer 可看 cross-region 视图。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- Multi-tenant metric / log / alarm
+- 跨 region dashboard
+- Cost monitoring
+- Hypervisor metric (steal time, noisy neighbor)
+- Self-service onboarding
+
+非功能：
+- 100k+ VMs (3 倍冗余 → 300k entity monitor)
+- Strict per-customer isolation
+- 15min 内 alarm 触发
+- 多 region federation</code></pre>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 数据量</h4>
+<pre class="language-plaintext"><code class="language-plaintext">100k VMs × 50 metric × 1 sample/min = 5M samples/min = 83k samples/sec</code></pre>
+<p>5x peak buffer → ~400k samples/sec write。</p>
+<h4>3.2 跨 region 划分</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Region 1 (US-East):  30k VMs → local cluster 处理
+Region 2 (EU-West):  20k VMs
+Region 3 (APAC):     30k VMs
+Region 4 (US-West):  20k VMs</code></pre>
+<p>每 region 独立 TSDB；global federation 跨 region query。</p>
+<h4>3.3 存储</h4>
+<p>类似 [[cm6jwhimp0093dar9n0eo4lvt]] (Server Health) — multi-resolution 后 ~270 GB total / region。</p>
+<h4>3.4 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Write: 400k samples/sec aggregate
+Per region: 100k samples/sec
+Storage: ~1 TB total (across 4 regions, multi-resolution)
+Read: customer dashboard / alarm eval ~k QPS</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 1 步：单 region 单租户</h4>
+<p>参考 [[cm6jwhimp0093dar9n0eo4lvt]] (Server Health Monitoring) 架构。Agent → Kafka → indexer → TSDB → Grafana / Alert manager。</p>
+<h4>4.2 第 2 步：Multi-tenant 隔离</h4>
+<div class="ascii-diagram">                Customer A's VMs (~1000)         Customer B's VMs (~50000)
+                       │                                    │
+                       ▼                                    ▼
+                   ┌────────────────────────────────────────┐
+                   │ Ingest Endpoint                        │
+                   │  Auth → assign tenant_id               │
+                   │  Quota check                           │
+                   └─────────────────┬──────────────────────┘
+                                     │
+                                     ▼
+                              ┌──────────────┐
+                              │ Kafka        │  partition by tenant_id
+                              └──────┬───────┘
+                                     │
+                                     ▼
+                              ┌──────────────┐
+                              │ TSDB         │  per-tenant index/namespace
+                              │              │  data physically isolated
+                              └──────┬───────┘
+                                     │
+            ┌────────────────────────┼──────────────────────┐
+            ▼                        ▼                      ▼
+       Customer A's              Customer B's          Internal ops
+       Grafana                   Grafana               (sees all,
+       (only Customer A          (only Customer B       privileged)
+        VMs)                     VMs)</div>
+<p><strong>Tenant isolation 的多层防御</strong>：</p>
+<ol><li><strong>Auth</strong>：每 metric push 必带 customer API token</li><li><strong>Partition</strong>：Kafka by tenant_id，consumer 不会混</li><li><strong>TSDB namespace</strong>：每 customer 独立 prefix (<code>customer:abc/metrics</code>)</li><li><strong>Query RBAC</strong>：dashboard query 必带 tenant_id filter，service 强制 inject</li><li><strong>Network isolation</strong>：customer VM 不能直接访问其他 customer 的 ingest endpoint</li></ol>
+<h4>4.3 第 3 步：Multi-region Federation</h4>
+<div class="ascii-diagram">   per-region monitoring:
+   
+   US-East          EU-West          APAC          US-West
+   ┌──────┐         ┌──────┐         ┌──────┐      ┌──────┐
+   │ TSDB │         │ TSDB │         │ TSDB │      │ TSDB │
+   └───┬──┘         └───┬──┘         └───┬──┘      └───┬──┘
+       │                │                 │             │
+       └────────┬───────┴────────┬────────┴─────────────┘
+                │                │
+                ▼                ▼
+          ┌──────────────────────────┐
+          │ Federation Layer         │  Thanos / Cortex / VictoriaMetrics cluster
+          │ (global query API)       │
+          └──────────────────────────┘
+                       │
+                       ▼
+                  Customer dashboard
+                  (cross-region query)</div>
+<p><strong>为什么这样</strong>：</p>
+<ul><li>✅ Region 故障不影响其他</li><li>✅ 数据 local 处理，跨洋少</li><li>✅ 客户可自选 region（合规 / 数据驻留法）</li><li>✅ Global view 通过 federation 提供（query-time aggregate）</li></ul>
+<h4>4.4 第 4 步：Hypervisor-aware Metrics</h4>
+<p>cloud-specific：除了 guest OS metric，还看 hypervisor 层：</p>
+<pre class="language-plaintext"><code class="language-plaintext">- vCPU steal time     (hypervisor 调度让你的 vCPU 等待)
+- IO wait %           (磁盘瓶颈)
+- Network packets dropped at hypervisor
+- Memory ballooning   (hypervisor 把 host memory 还来)</code></pre>
+<p><strong>为什么这些重要</strong>：客户 VM CPU 100% 可能不是 app bug，是 noisy neighbor 抢资源。Cloud 厂商 dashboard 能告诉客户"你的慢是 neighbor 引起的，我们会 migrate 你的 VM"。</p>
+<h4>4.5 第 5 步：完整架构</h4>
+<div class="ascii-diagram">┌───────────────────────────────────────────────────────────┐
+│ Per-region (US-E, EU-W, APAC, US-W)                       │
+│                                                           │
+│  Customer VMs / Hypervisors                               │
+│       │                                                   │
+│       ▼ (push metric, auth+tenant_id)                     │
+│  ┌──────────────────┐                                     │
+│  │ Ingest GW        │                                     │
+│  └──────┬───────────┘                                     │
+│         │                                                 │
+│         ▼                                                 │
+│  ┌──────────────────┐                                     │
+│  │ Kafka            │  partition by tenant                │
+│  └──────┬───────────┘                                     │
+│         │                                                 │
+│         ▼                                                 │
+│  ┌──────────────────┐    ┌──────────────────┐             │
+│  │ Indexer          │    │ Stream Proc      │             │
+│  │ (pii_redact +    │    │ (alerts +        │             │
+│  │  enrich)         │    │  anomaly ML)     │             │
+│  └──────┬───────────┘    └──────┬───────────┘             │
+│         │                       │                         │
+│         ▼                       ▼                         │
+│  ┌──────────────────┐    ┌──────────────────┐             │
+│  │ TSDB             │    │ Alert Manager    │             │
+│  │ (tenant         │    │ (per-tenant      │             │
+│  │  namespaces)     │    │  channels)       │             │
+│  └──────┬───────────┘    └──────────────────┘             │
+└─────────┼─────────────────────────────────────────────────┘
+          │
+          ▼ (global federation)
+   ┌──────────────────┐
+   │ Thanos / Cortex  │  cross-region aggregation
+   └──────┬───────────┘
+          │
+          ▼
+   Customer dashboard (multi-region view)</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Tenant isolation 详细</h4>
+<pre class="language-python"><code class="language-python"># 1. Push with auth
+POST /v1/metrics
+Headers:
+  Authorization: Bearer &lt;customer_token&gt;
+Body:
+  {timestamp, metric, value, labels, vm_id}
+
+# 2. Backend extract tenant
+def ingest(request):
+    tenant_id = auth_resolve(request.headers['Authorization'])
+    if not tenant_id:
+        return 401
+    
+    # Inject tenant_id as label
+    request.body.labels['tenant_id'] = tenant_id
+    
+    # Rate limit
+    if exceeded(tenant_id):
+        return 429
+    
+    kafka.produce('metrics', request.body, partition_key=tenant_id)
+
+# 3. Query enforces tenant filter
+def query(user_id, promql):
+    tenant_id = get_tenant(user_id)
+    # 强制 inject tenant_id filter
+    parsed = parse_promql(promql)
+    parsed.add_label_filter('tenant_id', tenant_id)
+    return tsdb.query(str(parsed))</code></pre>
+<p><strong>关键</strong>：query path 强制 inject filter，<strong>用户写 promql 不能跳过</strong>。这是 multi-tenant 的灵魂。</p>
+<h4>5.2 RBAC 细化</h4>
+<pre class="language-yaml"><code class="language-yaml">roles:
+  customer_admin:
+    - read: own_tenant_metrics
+    - write: alarm_rules (own tenant)
+    - write: dashboards (own tenant)
+  
+  customer_developer:
+    - read: own_tenant_metrics (subset by tag)
+    - read: dashboards
+  
+  cloud_operator:
+    - read: ALL tenants (audit logged)
+    - write: ALL (危险，需双重 approval)</code></pre>
+<p><strong>Audit</strong>：cloud operator 看 customer metric 必须留 audit log（who saw what when why）。</p>
+<h4>5.3 Auto-discovery</h4>
+<p>VM 数量 dynamic（auto scale / 创建删除）。Monitoring 自动 register / deregister：</p>
+<pre class="language-python"><code class="language-python"># K8s / cloud API watch
+on_vm_created(vm):
+    # 自动 deploy agent 到 VM (via cloud-init script)
+    config = generate_agent_config(tenant_id, vm.id)
+    inject_to_vm(vm, config)
+
+on_vm_terminated(vm):
+    # 标记 metric series 为 inactive
+    # TSDB 周期清理 30 day 没数据的 series
+    pass</code></pre>
+<p>不需要 customer 手动 register。</p>
+<h4>5.4 Hypervisor Metric</h4>
+<pre class="language-plaintext"><code class="language-plaintext">metric_name                       label                    description
+─────────────────────────────────────────────────────────────────────
+vcpu_steal_time_seconds_total    vm_id, hypervisor_id    被 hypervisor 抢走的时间
+hypervisor_cpu_pressure_score    hypervisor_id            host 整体压力
+network_packets_dropped_total    vm_id, direction         hypervisor 丢包
+memory_balloon_pages             vm_id                    被 hypervisor 收回的 page
+io_wait_ratio                    vm_id                    等磁盘的时间比</code></pre>
+<p><strong>对客户的价值</strong>：客户看到 "你的 VM 慢是因为 noisy neighbor"，可以申请 migrate 或 upgrade dedicated host。</p>
+<h4>5.5 Cost Monitoring</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Per VM cost / hour = base + storage + network + custom_metric_volume
+
+Dashboard:
+  - VM cost by tag / project / region
+  - "Top 10 most expensive idle VMs" (低 util)
+  - Trend over time
+  - Forecast (model 学 monthly bill 预测)</code></pre>
+<p>帮客户 optimize cost (rightsize VM, terminate idle)。<strong>Cloud 公司 incentive 反过来</strong>？看似——但实际良好 cost mgmt = customer retention + 长期收入。</p>
+<h4>5.6 Anomaly Detection (ML)</h4>
+<p>Per metric × per VM 学 baseline：</p>
+<pre class="language-python"><code class="language-python">class MLAnomalyDetector:
+    def train(self, metric, vm_id):
+        history = load_4_weeks(metric, vm_id)
+        # per (hour, weekday) compute baseline
+        baseline = history.groupby([hour, weekday]).agg(['mean', 'std'])
+        return baseline
+    
+    def detect(self, value, metric, vm_id, t):
+        baseline = get_baseline(metric, vm_id)
+        expected = baseline[t.hour][t.weekday]
+        if abs(value - expected.mean) &gt; 3 * expected.std:
+            return 'anomaly'
+        return 'normal'</code></pre>
+<p>每 VM 独立 baseline → 个性化。例：vm1 在每天 8AM CPU 50% 是 normal（cron job），vm2 是 anomaly。</p>
+<h4>5.7 Auto-remediation</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Alarm: disk usage &gt; 90% on vm-123
+  → Automation runbook:
+    1. Detect log files / temp files
+    2. Auto-clear &lt; 30 day log files
+    3. Re-evaluate after 5 min
+    4. If still &gt; 90%, alert human</code></pre>
+<p><strong>Risk</strong>：自动 fix 错的话放大问题。所以仅对<strong>well-understood, low-blast-radius</strong> 操作 (clear log, restart service)，重要 ops 不自动化。</p>
+<h4>5.8 Failure isolation</h4>
+<pre class="language-plaintext"><code class="language-plaintext">US-East region 故障 → 
+  - 其他 region 仍 work
+  - US-East customers 暂时无 monitoring
+  - 全球 dashboard 显示 "US-East region degraded"
+
+避免：单 global TSDB 挂了全公司 monitoring 没了</code></pre>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - Scale, multi-tenant?
+  - Hypervisor metric?
+  - Self-service?
+  - Region coverage?
+
+0:05 - 0:10  Capacity Estimation
+  - 100k VMs, 400k samples/sec
+  - Federation 跨 region
+
+0:10 - 0:15  High-Level Architecture
+  - Per-region pipeline
+  - Federation layer
+  - Multi-tenant isolation
+
+0:15 - 0:30  Deep Dive
+  ★ Multi-tenant isolation (auth, RBAC, query injection)
+  ★ Hypervisor metric (steal time, noisy neighbor)
+  ★ Federation cross-region
+  ★ Cost monitoring + anomaly ML
+
+0:30 - 0:38  Follow-ups
+  - Auto-remediation
+  - Multi-cloud?
+  - VM live migration 监控？
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK 这是 cloud-scale VM monitoring。与单内部 server monitoring 关键区别：(1) <strong>multi-tenant</strong> 必须 strict isolation；(2) <strong>hypervisor metric</strong> —— customer 看 'noisy neighbor' 这种；(3) <strong>federation</strong> —— global view 跨 region。</p>
+<p>估算：100k VMs × 50 metric / min = 83k samples/sec, peak 400k aggregate。分 4 region 处理。</p>
+<p>整体：per-region pipeline (ingest → Kafka → TSDB)，cross-region 用 Thanos / Cortex federation。Customer 写 promql 时 query layer 自动 inject <code>tenant_id</code> filter —— 这是 isolation 的灵魂。</p>
+<p>Multi-tenant 多层防御：(1) auth 拿 tenant_id；(2) Kafka partition；(3) TSDB namespace；(4) query RBAC 强制 inject filter；(5) network isolation。</p>
+<p>Hypervisor metric 是 cloud-specific 价值：vCPU steal time / packets dropped at hypervisor / memory balloon。客户看 'CPU 100% 是因为 noisy neighbor' → 申请 migrate。</p>
+<p>Cost monitoring：per-VM cost dashboard + 'top idle VMs' helper → customer 自己优化成本。</p>
+<p>Anomaly：per VM × per metric × hour-of-day-baseline。VM A 早 8AM CPU 50% normal，VM B 异常 → ML 区分。</p>
+<p>Auto-remediation：仅限低风险（clear log，restart service），重大 ops 不自动。</p>
+<p>Deep dive multi-tenant isolation 还是 hypervisor metric？"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: Customer 突然 push 大量 metric，怎么防止它影响其他 customer？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Per-tenant rate limit at ingest GW</li><li>Kafka partition by tenant_id → noisy tenant 不影响其他 partition consumer</li><li>Per-tenant resource quota (TSDB cardinality, query QPS)</li><li>超额 alert + 限流</li></ul>
+<h4>Q2: VM live migration（VM 从 host A 搬到 host B）时怎么 maintain monitoring？</h4>
+<p><strong>答</strong>：Metric stream resume by <strong>VM UUID</strong>, not IP。VM IP 可能变，UUID 不变。Agent restart 后继续 push，series 不间断。</p>
+<h4>Q3: Multi-cloud (customer 用 AWS + GCP + Azure)?</h4>
+<p><strong>答</strong>：Each cloud 各自 agent + OTel 标准格式 → 数据汇到中心 federation。Customer dashboard 看 cross-cloud aggregated view。</p>
+<h4>Q4: 客户报"我 dashboard 数据不对 / 看到别人数据"怎么处理?</h4>
+<p><strong>答</strong>：极高优 incident。立即：</p>
+<ul><li>Audit log: 客户最近 query / who has access to that view</li><li>Check tenant_id injection logic</li><li>Page security team</li></ul>
+<p>预防：query path 全 unit test + integration test，bug bounty。</p>
+<h4>Q5: Hypervisor metric 客户拿不到自家 hypervisor 物理详情怎么办（合规要求）？</h4>
+<p><strong>答</strong>：抽象成 "noisy neighbor score" 这种 derived metric，不暴露 hypervisor ID。Customer 知道 "你的 VM 同 host 有压力"，但不知道具体 host 信息。</p>
+<h4>Q6: 全 region 数据汇总到 federation，跨洋延迟大怎么办?</h4>
+<p><strong>答</strong>：Federation 只查近 1 hour 实时；老数据每 region 各自 cold storage，cross-region query 用 async batch (Athena over S3 Parquet)。</p>
+<h4>Q7: 客户怎么 onboard 自己的 VM?</h4>
+<p><strong>答</strong>：</p>
+<ol><li>Customer 在 console 启用 monitoring (1 click)</li><li>系统给 API token</li><li>VM image / cloud-init 自动安装 agent + config token</li><li>5 分钟后 dashboard 看到数据</li></ol>
+<p>完全 self-service，无 ops involve。</p>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>Tenant id 不强制 inject</strong> —— customer A 查到 customer B 数据 → 巨大 incident； ❌ <strong>Single global TSDB</strong> —— 跨洋慢 + 单点故障； ❌ <strong>不监控 hypervisor metric</strong> —— 客户无法 diagnose noisy neighbor； ❌ <strong>不做 per-tenant rate limit</strong> —— noisy tenant 拖垮整个 ingest； ❌ <strong>Cost monitoring 缺失</strong> —— customer 用 invisible spend，churn； ❌ <strong>Audit log 不全</strong> —— compliance fail； ❌ <strong>Auto-remediation 范围过大</strong> —— 错误 fix 放大； ❌ <strong>不支持 VM live migration</strong> —— migrate 后 monitor 断 → false outage alarm。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>AIOps</strong>：correlation analysis 自动找 root cause</li><li><strong>Synthetic monitoring</strong>：模拟用户请求 (canary)</li><li><strong>Distributed tracing 集成</strong>：metric + log + trace 三合一</li><li><strong>Capacity forecasting</strong>：ML 预测 VM 何时需 upsize</li><li><strong>Custom metric</strong>：客户自定义 metric 名 + 维度</li><li><strong>Marketplace integration</strong>：第三方监控插件 plug-in</li><li><strong>Compliance pack</strong>：HIPAA / PCI 预设 alarm + audit</li><li><strong>Cost optimization recommendations</strong>：ML rightsizing</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Multi-tenant isolation 是 cloud monitoring 的灵魂</strong>。Auth → tenant_id → 各层强制 inject filter → audit log。任何一层漏洞 = customer data leak = 公司公关灾难。</li></ol>
+<ol><li><strong>Federation 比 single global cluster 好</strong>。每 region 独立 + global aggregate。Region 故障局部化，跨洋延迟规避。</li></ol>
+<ol><li><strong>Hypervisor-aware monitoring 是 cloud value-add</strong>。客户自己装的 monitoring 只能看 guest OS，cloud 厂商能 expose hypervisor 层（noisy neighbor / steal time）。这是客户为啥用 native monitoring 而非第三方的理由。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) 试 AWS CloudWatch / GCP Cloud Monitoring 实际操作；(b) 读 Thanos / Cortex 架构；(c) 看 Datadog multi-tenant talk；(d) 学 Prometheus exposition + relabeling；(e) 思考 "cloud monitoring 怎么不竞争自己的 customer SaaS biz" (AWS 自己卖 CloudWatch，但 Datadog 也跑在 AWS 上)。</p></div>
   </section>
 
   

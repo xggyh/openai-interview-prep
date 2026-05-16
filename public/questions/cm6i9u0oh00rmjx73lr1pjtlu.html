@@ -31,77 +31,400 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Navigation / Mapping System</strong> (Google Maps / Apple Maps)：用户输入起终点 → 返回最优路线 + ETA + 实时导航更新。</p>
-<p>Google 报告 7 次。考点：<strong>graph shortest path at scale + real-time traffic + map tile rendering + ETA prediction</strong>。</p>
-<h3>需求拆解</h3>
-<ul><li>全球地图，10B+ road segments</li><li>1M+ concurrent users navigating</li><li>路线 P95 &lt; 500ms</li><li>ETA 准确度 &lt; 10% error</li><li>Offline / online 混合</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Mobile App
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Routing</strong></td><td>找两点间最优路线</td><td>走迷宫找出口</td></tr><tr><td><strong>Graph</strong></td><td>由 node + edge 组成的数据结构。地图：node = 路口，edge = 路段</td><td>蜘蛛网</td></tr><tr><td><strong>Dijkstra</strong></td><td>经典最短路径算法，从起点扩散</td><td>漫水法找门</td></tr><tr><td><strong>A</strong>*</td><td>Dijkstra + heuristic，扩散有方向感更快</td><td>用指南针的漫水法</td></tr><tr><td><strong>Contraction Hierarchies (CH)</strong></td><td>预处理 graph 加 shortcut 边，查询超快</td><td>主城与城外修高速</td></tr><tr><td><strong>OSM (OpenStreetMap)</strong></td><td>开源全球地图数据</td><td>维基百科的地图版</td></tr><tr><td><strong>ETA</strong></td><td>Estimated Time of Arrival</td><td>"预计 1 小时到"</td></tr><tr><td><strong>Geohash / S2 / H3</strong></td><td>把地球切成 grid 的索引体系</td><td>经纬度的"邮编"</td></tr><tr><td><strong>Tile</strong></td><td>地图渲染的小方块 (256×256 像素)，按 zoom 层切</td><td>拼图的一片</td></tr><tr><td><strong>Vector tile</strong></td><td>地图 tile 用矢量描述（点线面），客户端渲染</td><td>矢量图 vs 位图</td></tr><tr><td><strong>Reverse geocoding</strong></td><td>把 GPS 转地址</td><td>(37.4, -122.0) → "Mountain View, CA"</td></tr><tr><td><strong>POI</strong></td><td>Point of Interest，餐厅 / 加油站 / 地标</td><td>地图上的兴趣点</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Navigation / Mapping System</strong> = Google Maps / Apple Maps / Waze 这类应用：</p>
+<ol><li>显示地图（视觉）</li><li>搜索地点（POI / 地址）</li><li><strong>算两点最短路线</strong>（routing）</li><li><strong>预测 ETA</strong>（实时 traffic）</li><li><strong>导航实时更新</strong>（绕道 / 重算）</li></ol>
+<p><strong>为什么这道题难</strong>：</p>
+<ol><li><strong>地图巨大</strong>：全球 1B+ road segment（OSM 数据库 100+ GB raw）</li><li><strong>Routing 对计算密集</strong>：朴素 Dijkstra 在 1B node graph 上跑半小时不出结果</li><li><strong>实时 traffic</strong> 大量数据流：千万用户每秒报位置</li><li><strong>ETA 准</strong> ≠ length / speed limit；要考虑历史 pattern + 实时 traffic + 天气</li><li><strong>全球部署 + 低延迟</strong>：APAC 用户不能等加州 server 响应 200ms</li><li><strong>离线</strong> mobile：网络断仍要能导航</li></ol>
+<p>考点：<strong>graph shortest path at scale + real-time traffic ingest + ETA ML + map tile delivery</strong>。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：用户主要场景是开车导航？还是步行 / 公共交通？ <strong>典型答</strong>：先做开车，扩展支持步行 / 公交。</p>
+<p><strong>你问</strong>：实时 traffic 怎么来？ <strong>典型答</strong>：(a) Anonymous GPS from app users (consent-based)；(b) 政府 / 路网 sensor；(c) 历史 pattern fallback。</p>
+<p><strong>你问</strong>：要不要 reroute on traffic change？ <strong>典型答</strong>：要。每 30 秒检查，明显更快路线 → 建议切换。</p>
+<p><strong>你问</strong>：离线模式？ <strong>典型答</strong>：下载某 region 数据后能离线导航。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：用户量 / 并发？ <strong>典型答</strong>：1M+ concurrent navigation。</p>
+<p><strong>你问</strong>：单 routing 查询延迟？ <strong>典型答</strong>：P95 &lt; 500ms (开始导航前用户能等)；reroute &lt; 200ms (导航中)。</p>
+<p><strong>你问</strong>：地图渲染延迟？ <strong>典型答</strong>：tile load &lt; 100ms (CDN cache hit 是常态)。</p>
+<p><strong>你问</strong>：ETA 准确度？ <strong>典型答</strong>：误差 &lt; 10%（30 min trip 准 ±3 min）。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- Routing (driving/walking/transit)
+- POI search
+- ETA prediction with traffic
+- Reroute on traffic change
+- Map tile rendering
+- Offline mode
+
+非功能：
+- 1M concurrent users
+- Routing P95 &lt; 500ms
+- Tile load &lt; 100ms (CDN)
+- ETA error &lt; 10%</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>这道题最难的部分是 <strong>routing scale</strong>。1B node graph 上跑 Dijkstra 直接死。<strong>Contraction Hierarchies</strong> 这个算法是 Google Maps / OSRM 真用的。要熟。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 地图数据</h4>
+<pre class="language-plaintext"><code class="language-plaintext">全球道路 ~100M road segment
+每 segment metadata 100 byte → 10 GB
++ POI 1B × 200 byte = 200 GB
++ Tile (multi-zoom): pre-rendered 几 TB</code></pre>
+<p>→ <strong>几 TB raw</strong>, 加索引 + multi-resolution → 几十 TB。</p>
+<h4>3.2 Routing QPS</h4>
+<pre class="language-plaintext"><code class="language-plaintext">1M concurrent × 路线请求 / 5 分钟 (开始 + 偶尔 reroute)
+= 200k routing QPS</code></pre>
+<p>每 routing 朴素 Dijkstra 1 秒 → 需要 200k cores。<strong>用 CH 降到 1ms</strong> → 几百 cores 够。</p>
+<h4>3.3 Traffic 上报</h4>
+<pre class="language-plaintext"><code class="language-plaintext">1M users × ping every 5s = 200k GPS pings/sec
+× 30 byte each = 6 MB/sec</code></pre>
+<p>Kafka 完全撑得住。</p>
+<h4>3.4 Tile QPS</h4>
+<pre class="language-plaintext"><code class="language-plaintext">1M users × 平均 10 tile / page × 1 page / min = 167k tile QPS
+CDN 99% hit → origin 1.7k QPS</code></pre>
+<h4>3.5 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Routing: 200k QPS, 必须用 CH (1ms/query)
+Traffic: 200k pings/sec → Kafka
+Tile: 167k QPS CDN, 1.7k origin
+Storage: ~50 TB total (map + tiles + POI)</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 0 步：朴素方案</h4>
+<div class="ascii-diagram">   User → Service
+   Service: Dijkstra(graph, start, end)</div>
+<p><strong>问题</strong>：1B node graph，Dijkstra O((V+E) log V) → 几分钟。User 等不了。</p>
+<h4>4.2 第 1 步：预处理 graph (CH)</h4>
+<p><strong>Contraction Hierarchies</strong> = 预处理把 graph 转换成有 shortcut edge 的形式。<strong>Query 时间从分钟降到 ms</strong>。</p>
+<pre class="language-plaintext"><code class="language-plaintext">原 graph: 1B nodes, 任意两点 Dijkstra 慢
+↓ 预处理（offline, 几小时）
+CH graph: 1B nodes + 100M shortcuts
+↓ Query
+A* 双向搜索 + 只走 "向上" 边 → 1ms</code></pre>
+<p>预处理思路：按 "importance" 顺序逐一 contract 节点 —— 把它从 graph 移除，加 shortcut 到它的 neighbors，保证最短路径性质。</p>
+<p><strong>为什么这样能加速</strong>：query 不必扫每个 node，只在"contracted hierarchy"中跳跃。highway 这种 important 节点更靠近 root，几跳就能跨越大距离。</p>
+<h4>4.3 第 2 步：实时 traffic 集成</h4>
+<div class="ascii-diagram">   Phone GPS → Kafka topic: gps.pings
+                 │
+                 ▼
+            ┌──────────────────┐
+            │ Stream Processor │  per-edge: aggregate speed
+            └──────┬───────────┘
+                   │
+                   ▼
+            ┌──────────────────┐
+            │ Edge speed       │  current_speed[edge_id] = avg of last 5min
+            │ Cache (Redis)    │
+            └──────────────────┘
+                   │
+                   ▼
+            Routing service reads from cache
+            uses current_speed instead of speed_limit</div>
+<p>每 road segment 当前估计速度从 GPS pings 聚合。Stream processor 5 分钟 window。</p>
+<h4>4.4 第 3 步：ETA prediction</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Naive ETA = sum(length[edge] / current_speed[edge])</code></pre>
+<p>不准。因为：</p>
+<ul><li>Stop signs / traffic lights 不在 speed 里</li><li>历史 pattern (周一 8AM vs 周日 10AM)</li><li>天气 / 特殊事件</li><li>司机驾驶习惯</li></ul>
+<p><strong>ML ETA Model</strong>:</p>
+<pre class="language-python"><code class="language-python">features = [
+    naive_eta,              # 朴素 sum 的 baseline
+    current_traffic_score,  # 当前 traffic
+    time_of_day,
+    day_of_week,
+    weather,
+    historical_pattern[edge][hour][weekday],
+    special_events_nearby,
+]
+predicted_eta = model.predict(features)</code></pre>
+<p>Gradient Boosting / DNN，每 5 分钟 retrain。Google Maps 实测 ETA 误差 &lt; 3%。</p>
+<h4>4.5 第 4 步：Tile + CDN</h4>
+<div class="ascii-diagram">Map tile (per zoom level z, x, y):
+  z=0: 1 tile covers whole world
+  z=10: ~1M tiles
+  z=18 (max): ~10B tiles
+  
+Storage: ~10 TB total (pre-rendered raster)
+Or: vector tiles (~1 TB, client renders)</div>
+<p><strong>Vector tiles 优势</strong>：</p>
+<ul><li>客户端渲染 → 更小（geometry + style）</li><li>Zoom 平滑（vector 可任意缩放）</li><li>主题切换不重新 download (dark mode / satellite)</li></ul>
+<p>CDN cache by (z, x, y, style)。<strong>Immutable</strong> → TTL 永久。</p>
+<h4>4.6 第 5 步：完整架构</h4>
+<div class="ascii-diagram">   Mobile / Web client
        │
-       │ start/end + current location
        ▼
-  ┌──────────────┐
-  │   Edge       │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────────┐         ┌────────────────┐
-  │ Routing Service  │ ──────▶ │ Map Graph      │
-  │ (Dijkstra/A*+CH) │         │ (preprocessed) │
-  └──────┬───────────┘         └────────────────┘
-         │
-         │ traffic / ETA
-         ▼
-  ┌──────────────────┐
-  │ Traffic Service  │ ◀── real-time GPS feeds
-  └──────────────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Tile Server      │  → map tiles to client
-  │ (vector / raster)│
-  └──────────────────┘</div>
-<h3>核心组件</h3>
-<h4>1. Map Graph 数据结构</h4>
-<p>道路是有向图：node = intersection，edge = road segment with (length, speed_limit, turn_restrictions, current_traffic)。</p>
-<p><strong>预处理</strong>：分层（Highway / Arterial / Local）+ <strong>Contraction Hierarchies (CH)</strong> 让 query 时间 sub-millisecond。</p>
-<h4>2. Routing 算法</h4>
-<ul><li><strong>Dijkstra</strong>：O((V+E) log V)。10B 边的全球图直接跑会爆。</li><li><strong>A</strong>*：加 heuristic (great-circle distance to destination)，剪枝大。</li><li><strong>Contraction Hierarchies</strong>：预处理 O(N log² N)，查询 O(log² N)。Google / OSRM 实战用法。</li><li><strong>Hierarchical Dijkstra</strong>：先在 highway level 搜，下沉到 local level。</li></ul>
-<p>实战：CH + landmark heuristic + bidirectional search。</p>
-<h4>3. Real-time traffic</h4>
-<p>来源：</p>
-<ul><li>Anonymized GPS from app users (consent-based)</li><li>Government / road sensor APIs</li><li>Historical patterns</li></ul>
-<p>每条 road segment 每分钟更新 estimated speed。Routing 时 cost = length / speed。</p>
-<pre class="language-plaintext"><code class="language-plaintext">edge_cost(e, t) = length(e) / current_speed(e, t)</code></pre>
-<h4>4. ETA prediction</h4>
-<p>不是简单 sum edge cost。ML model 加上：</p>
-<ul><li>Time of day / day of week patterns</li><li>Weather</li><li>Special events (concerts / sports)</li><li>Historical 同时段数据</li></ul>
-<p>Model 每 5 分钟 retrain（短期 ETA 准确）。</p>
-<h4>5. Re-routing</h4>
-<p>App 每 30 秒发当前位置。如果：</p>
-<ul><li>偏离 plan route → re-route</li><li>前方 traffic 变差，ETA +20% → 建议 alt route</li></ul>
-<p>Re-route 是 incremental Dijkstra from current location。</p>
-<h4>6. Tile rendering</h4>
-<p>地图分 256×256 像素 tile，z (zoom) × x × y 三维索引。Client 按 viewport 请求 tiles。</p>
-<ul><li>矢量 tile：客户端渲染（轻量 + zoom 平滑）</li><li>栅格 tile：服务端预渲染（兼容老设备）</li></ul>
-<p>CDN cache by (z, x, y, style)，hit rate 极高。</p>
-<h4>7. POI / Search</h4>
-<p>道路本身 + POI（餐厅 / 加油站 / ATM）。POI 用 geohash / S2 cell 索引，"附近 X 类型" 查询用 LC-style nearest-K。</p>
-<h4>8. Offline mode</h4>
-<p>下载 region tile + 路网 graph + POI 数据。本地 Dijkstra 跑离线导航。</p>
-<h3>关键技术</h3>
-<h4>Contraction Hierarchies 简介</h4>
-<p>预处理：按 importance 顺序 "contract" 每个 node —— 移除 node 时为它的邻居添加 shortcut edges 保持 shortest path 性质。</p>
-<p>Query：双向 A* 只用 contracted graph 中 "向上" 边 → query O(log² N) 比纯 Dijkstra 快 1000x。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Routing</td><td>CH + A*</td><td>纯 Dijkstra：query 慢</td></tr><tr><td>Traffic</td><td>Crowdsource GPS</td><td>静态：实时性差</td></tr><tr><td>ETA</td><td>ML model</td><td>rule-based：精度低</td></tr><tr><td>Tiles</td><td>Vector + CDN</td><td>Raster only：流量高</td></tr><tr><td>Re-route</td><td>Server-side</td><td>Client-side：算力不够</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1M concurrent users × 路线请求 / 5 分钟 = 200k QPS routing</li><li>CH query ~1ms × 200k = 200 cores 够（分布式 routing service）</li><li>Tile QPS：1M users × 10 tiles/page × 1 request/min = 167k QPS → CDN 99% hit，origin 1.7k</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 直接 Dijkstra 全球图 —— TLE； ❌ 用 Euclidean distance 算 cost —— 没考虑 road network； ❌ Real-time traffic 每秒收 GPS —— 太频繁，1 分钟 aggregate 就够； ❌ ETA 不考虑 historical pattern —— 周一 8AM 比周日 10AM 慢 3x，model 必须 capture； ❌ Tile 不 CDN —— 流量爆。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>CH preprocessing + bidirectional A</strong>* 把全球 graph routing 干到 ms 级；(2) <strong>Crowdsource GPS + ML ETA</strong> 实时准确；(3) <strong>Vector tile + CDN</strong> 服务地图。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Multi-mode (driving + transit + walking)？" → 多层 graph，cost function 不同；"Carpool / Ride share 路线？" → multi-stop TSP 启发式；"3D / AR 导航？" → 加海拔 + 楼层数据；"Bike / Pedestrian 不同 graph？" → 用 OSM tags 过滤可通行。</p></div>
+   ┌──────────────┐
+   │ Edge / CDN   │  ← geo-routed
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────────┐         ┌────────────────┐
+   │ Routing Service  │ ──────▶ │ Map Graph      │
+   │ (CH + A*)        │         │ (preprocessed) │
+   └──────┬───────────┘         └────────────────┘
+          │
+          │ traffic
+          ▼
+   ┌──────────────────┐
+   │ Traffic Service  │ ◀── Real-time GPS feeds (Kafka)
+   │ (per-edge speed) │
+   └──────────────────┘
+          │
+          ▼
+   ┌──────────────────┐
+   │ ETA Service      │  ML model
+   └──────────────────┘
+          
+   Separate:
+   ┌──────────────────┐         ┌──────────────────┐
+   │ Tile Server      │ ──────▶ │ CDN              │
+   │ (vector / raster)│         │ (immutable)      │
+   └──────────────────┘         └──────────────────┘
+   ┌──────────────────┐
+   │ POI Service      │  Elasticsearch + geo index
+   └──────────────────┘</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Map Graph 数据结构</h4>
+<pre class="language-python"><code class="language-python">class Node:
+    """Intersection / endpoint"""
+    id: int
+    lat: float
+    lon: float
+
+class Edge:
+    """Road segment between two nodes"""
+    id: int
+    from_node: int
+    to_node: int
+    length_m: float
+    max_speed_kmh: int          # speed limit
+    type: str                    # 'highway' / 'arterial' / 'local'
+    turn_restrictions: list     # 不允许转弯 (e.g. no left)
+    one_way: bool
+    
+class CurrentTraffic:
+    """Real-time overlay"""
+    edge_id: int
+    avg_speed_5min: float        # 实际平均速度
+    last_updated: timestamp</code></pre>
+<p><strong>存储</strong>：Spatial DB (PostGIS) 或专门 graph DB。OSM 原始数据 + 内部 enrichment。</p>
+<h4>5.2 Routing 算法</h4>
+<p><strong>Dijkstra (朴素)</strong>:</p>
+<pre class="language-python"><code class="language-python">def dijkstra(graph, source, target):
+    dist = {source: 0}
+    heap = [(0, source)]
+    while heap:
+        d, u = heappop(heap)
+        if u == target: return d
+        for edge in graph[u]:
+            new_dist = d + edge.cost
+            if new_dist &lt; dist.get(edge.to, inf):
+                dist[edge.to] = new_dist
+                heappush(heap, (new_dist, edge.to))</code></pre>
+<p>复杂度 O((V+E) log V)。1B node → 几分钟。<strong>太慢</strong>。</p>
+<p><strong>A</strong>* (Dijkstra + heuristic):</p>
+<pre class="language-python"><code class="language-python">def heuristic(node, target):
+    """Great-circle distance（最快可能）"""
+    return haversine(node, target) / MAX_SPEED
+
+# Priority = dist + heuristic
+heappush(heap, (dist[u] + heuristic(u, target), u))</code></pre>
+<p>A* prefer 朝目标方向扩展，剪枝大。但仍 O(big graph)。</p>
+<p><strong>Contraction Hierarchies (CH)</strong>:</p>
+<p>预处理 → query O(log² N)，1000x 比 Dijkstra 快。</p>
+<pre class="language-python"><code class="language-python"># Preprocessing (几小时 once)
+order = compute_node_order(graph)  # 按 importance
+for node in order:
+    add_shortcuts(graph, node)
+    contract(graph, node)
+
+# Query (1ms)
+def ch_query(start, end):
+    # Bidirectional A* in CH graph
+    # Only traverse "upward" edges (lower-importance → higher-importance)
+    return bidirectional_a_star(ch_graph, start, end)</code></pre>
+<p>工业 OSRM / Google Maps 真用。</p>
+<h4>5.3 实时 traffic 集成</h4>
+<pre class="language-python"><code class="language-python"># 收集 GPS pings
+def on_gps_ping(user_id, lat, lon, ts, speed):
+    # Map-match: GPS → 最近的 edge
+    edge_id = map_match(lat, lon)
+    # 写 Kafka
+    kafka.produce('gps.pings', {
+        'edge_id': edge_id,
+        'speed': speed,
+        'ts': ts,
+        'user_anon': hash(user_id),  # 匿名化
+    })
+
+# Stream processor
+gps_pings
+  .key_by(edge_id)
+  .window(SlidingWindow(5min, 1min))
+  .aggregate(avg_speed)
+  .sink(redis_edge_speed)
+
+# Routing 读 Redis
+def edge_cost(edge_id):
+    current = redis.get(f'speed:{edge_id}') or edge.max_speed_kmh
+    return edge.length_m / current</code></pre>
+<p><strong>Anonymization</strong>：用户隐私重要，GPS data 必须匿名化 (没有 user_id 关联，只看 edge 级聚合)。</p>
+<h4>5.4 ETA Prediction</h4>
+<pre class="language-python"><code class="language-python">class ETAModel:
+    def __init__(self):
+        self.gbm = lightgbm.Booster.load('eta_model.txt')
+    
+    def predict(self, route_edges, current_time):
+        eta = 0
+        for edge in route_edges:
+            features = self._build_features(edge, current_time)
+            edge_time = self.gbm.predict(features)
+            eta += edge_time
+        return eta
+    
+    def _build_features(self, edge, t):
+        return {
+            'edge_length': edge.length,
+            'edge_type': edge.type,
+            'speed_limit': edge.max_speed,
+            'current_speed': get_current_speed(edge),
+            'hour': t.hour,
+            'weekday': t.weekday(),
+            'historical_avg': self.history[edge.id][t.hour][t.weekday()],
+            'weather': get_weather(edge.location),
+            'event_nearby': check_events(edge.location, t),
+        }</code></pre>
+<p>Retrain 周期：每 5-15 分钟用最新数据训练（fast feature drift in traffic）。</p>
+<h4>5.5 Re-routing 流程</h4>
+<pre class="language-python"><code class="language-python"># Mobile app every 30s
+def on_location_update(current_loc, current_route):
+    # 1. 是否偏离 route
+    if distance(current_loc, current_route.nearest_point) &gt; 100m:
+        new_route = routing.compute(current_loc, dest)
+        notify("Re-routing")
+    
+    # 2. 是否前方 traffic 变差
+    remaining = current_route.remaining_edges()
+    current_eta = eta_model.predict(remaining)
+    if current_eta &gt; original_eta * 1.2:  # 20% 慢
+        alt_route = routing.compute(current_loc, dest)
+        if alt_route.eta &lt; current_eta * 0.9:  # alt 快 10%+
+            suggest("Alternate route saves 5 min")</code></pre>
+<p><strong>注意</strong>：不能太频繁建议重路 —— 用户烦。Threshold 至少 5 分钟差异才提示。</p>
+<h4>5.6 Tile 系统</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Tile naming convention (Slippy Map):
+  z = zoom level (0-18)
+  x = column
+  y = row
+  
+  URL: /tiles/{z}/{x}/{y}.png 或 .pbf (vector)</code></pre>
+<p>每 tile 预渲染。每次 OSM 数据 update → 增量 re-render 受影响 tile。</p>
+<p><strong>Vector tile format (MapBox / OSM)</strong>：</p>
+<pre class="language-plaintext"><code class="language-plaintext">.pbf (Protocol Buffer encoding):
+  layers: [
+    {name: "roads", features: [...]},
+    {name: "buildings", features: [...]},
+    {name: "labels", features: [...]},
+  ]</code></pre>
+<p>Client (Mobile / Web) 用 OpenGL / Canvas 渲染。</p>
+<h4>5.7 POI Search</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Index: Elasticsearch
+  fields: name, category, lat, lon, address, popularity
+  Geo-index: geo_point
+
+Query example:
+  POST /search
+  {
+    "text": "starbucks",
+    "near": {"lat": 37.4, "lon": -122.0, "radius_km": 5},
+    "sort": ["distance", "popularity"]
+  }</code></pre>
+<p>ES native <code>geo_distance</code> filter + scoring。</p>
+<h4>5.8 Offline mode</h4>
+<pre class="language-plaintext"><code class="language-plaintext">User downloads region (e.g. "San Francisco Bay Area"):
+  - Map tiles (vector, ~50 MB)
+  - Routing graph (subset, ~100 MB)
+  - POI database (~20 MB)
+  
+Total: ~200 MB per region</code></pre>
+<p>Mobile app 本地 Dijkstra (smaller graph 足够)。No traffic update offline.</p>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - Driving / walking / transit?
+  - Real-time traffic?
+  - Offline?
+  - Scale
+
+0:05 - 0:10  Capacity Estimation
+  - 200k routing QPS
+  - 200k GPS pings/sec
+  - 167k tile QPS
+
+0:10 - 0:15  High-Level Architecture
+  - Routing (CH)
+  - Traffic (GPS → Kafka)
+  - ETA (ML)
+  - Tiles (CDN)
+
+0:15 - 0:30  Deep Dive
+  ★ CH preprocessing + query
+  ★ Real-time traffic aggregation
+  ★ ETA ML features
+  ★ Vector tile + CDN
+
+0:30 - 0:38  Follow-ups
+  - Re-routing logic
+  - Anonymization
+  - Multi-modal (transit)
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK Maps system。先 clarify：driving first，offline support，real-time traffic 有。</p>
+<p>估算：1M concurrent × 路线请求 / 5min ≈ 200k QPS。Naive Dijkstra 1B node 几分钟 → 不可能。所以 <strong>核心是 routing 预处理算法</strong>。</p>
+<p>整体架构：(1) Routing service 用 Contraction Hierarchies 预处理过的 graph，query 1ms；(2) Traffic service 收 GPS pings 聚合 per-edge speed；(3) ETA ML 模型；(4) Tile + CDN serving 地图渲染；(5) POI ES index。</p>
+<p>Deep dive routing：CH 是关键 idea。预处理（几小时一次）按 importance 排 node，contract 时加 shortcut edge。Query 用 bidirectional A* 在 CH graph 只走 'upward' 边。Highway 这种 important 节点更高 priority，几跳就跨越大距离。比 Dijkstra 快 1000x。</p>
+<p>Traffic：phone GPS 每 5 秒报 location，Kafka topic 收，Flink keyBy edge_id 用 5min sliding window 算 avg speed → Redis 存。Routing service 用 Redis 当 cost factor。User 必须 opt-in，数据匿名化 (没有 user_id)。</p>
+<p>ETA：朴素 sum(len/speed) 不准。ML 模型 features 含 current_speed + hour-of-day pattern + weather + 历史 baseline。每 5 min retrain。Google 实测 &lt; 3% error。</p>
+<p>Tile：vector .pbf format (~比 raster 小 5x)，CDN cache immutable。Client 客户端渲染 (theme 切换不必重 download)。</p>
+<p>Re-route：每 30 秒检测偏离 + 前方 traffic 变差。Alt route 快 10%+ 才建议（避免过度提示）。</p>
+<p>想 deep dive CH preprocessing 还是 ETA ML?"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: CH preprocessing 怎么做？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>按 "importance score" 排 node（heuristic: degree, betweenness, edge difference）</li><li>从 lowest-importance 开始逐一 contract</li><li>Contract node v：移除 v，对每对邻居 (u, w)，如果 v 是 u→w 最短路径上 → 加 shortcut edge (u, w, dist) 替代</li><li>维护 contraction order (low → high)</li><li>Query 时 bidirectional：from start 只走"to higher rank" edges, from end 只走"from higher rank" edges</li></ul>
+<p>复杂度：preprocessing O(N log² N)，query O(log² N)。</p>
+<h4>Q2: 如果 user GPS 不连续 (隧道 / NAT)？</h4>
+<p><strong>答</strong>：Map-matching algorithm。即使 GPS 跳跃，HMM-based map matching 推断"用户在 edge X 上"。如果某段没 GPS 数据，fallback 到历史平均 / speed limit。</p>
+<h4>Q3: 怎么处理跨国家边界？</h4>
+<p><strong>答</strong>：每 country / region 独立 graph + ETA model（驾驶习惯 / 法规 / 限速制不同）。跨境路线在 border 节点拼接 (joint graph)。</p>
+<h4>Q4: 实时事故 / 道路施工怎么处理？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>政府 / 第三方 feeds (Waze 也是用户报告)</li><li>用户报告 (in-app "我看到事故")</li><li>Anomaly detection on edge speed drop</li><li>Edge cost: 临时 * 大系数 (driver 绕开)</li></ul>
+<h4>Q5: 离线 routing 怎么实现？</h4>
+<p><strong>答</strong>：用户下载 region (tiles + sub-graph + POI ~200 MB)。Mobile 端 Dijkstra/A* (smaller graph 够)。No traffic。Re-online 后传输离线产生的 GPS 数据。</p>
+<h4>Q6: ETA 加 weather 模型怎么训练？</h4>
+<p><strong>答</strong>：历史数据：weather conditions + actual travel time。模型学到 "rain → speed -20%, snow → -50%"。Real-time weather API feed in query。</p>
+<h4>Q7: 怎么 prevent 用户 GPS data 反推个人？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>不带 user_id 进 Kafka，hash 替代</li><li>Pings 只 keep 7 day raw，then aggregate to edge level</li><li>DP (differential privacy) 加 noise</li><li>Aggregation 至少 K 个用户才算 (k-anonymity)</li></ul>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>朴素 Dijkstra on 1B graph</strong> —— 几分钟，不可用； ❌ <strong>不用预处理 (CH/CRP)</strong> —— query 慢 1000x； ❌ <strong>ETA 用 speed limit</strong> —— 不准，必须实际 speed； ❌ <strong>GPS 不匿名化</strong> —— 隐私 / 法规风险； ❌ <strong>Tile 不 CDN</strong> —— origin QPS 爆； ❌ <strong>频繁 reroute alert</strong> —— 用户烦，5min+ diff 才提； ❌ <strong>静态 ETA model</strong> —— traffic pattern 季节 / 工作日变化，要 retrain； ❌ <strong>离线 graph 太大</strong> —— 几 GB 用户不愿下载；分 region 切。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>Customizable Routes</strong> (CRP): 比 CH 更新（Microsoft / BMW），支持动态 edge cost change 不重 preprocess</li><li><strong>3D / AR navigation</strong>: 楼层 navigation + 摄像头实景指引</li><li><strong>Multi-modal</strong>: driving + transit + walking 混合 trip</li><li><strong>Carpool / Ride share routing</strong>: multi-stop TSP heuristics</li><li><strong>EV-aware routing</strong>: 电动车考虑充电桩位置 + 电量</li><li><strong>Truck routing</strong>: 桥高 / 重量 限制</li><li><strong>Privacy-first</strong>: differential privacy on aggregations</li><li><strong>Crowd-sourced POI</strong>: 用户提交新 POI + 审核</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Contraction Hierarchies 是大规模 routing 的标配</strong>。1B node graph 不可能朴素 Dijkstra，CH 让 query 从分钟级降到毫秒级。能解释 contract + shortcut 的原理是面试加分。</li></ol>
+<ol><li><strong>实时 traffic 是 ETA 准确的灵魂</strong>。crowdsourced GPS + 5min sliding window aggregation + ML 模型，是 Google / Waze 实战。</li></ol>
+<ol><li><strong>CDN + vector tile</strong> 让地图加载丝滑。Pre-render + edge cache + immutable URL 是 web map 的标配。Mobile 也是同套思路（download tile to disk）。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) 跑 OSRM (Open Source Routing Machine) 本地体验 CH；(b) 读 Geisberger et al. "Contraction Hierarchies" paper；(c) 看 MapBox vector tile spec；(d) 学 PostGIS 做地理 query；(e) 思考"为什么 Waze 比 Google Maps 给的 ETA 经常不一样" (data source / aggregation 不同)。</p></div>
   </section>
 
   

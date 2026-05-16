@@ -31,80 +31,383 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Logger System</strong>：分布式应用产生 logs → ingest → store → query / alert / archive。100k+ services, 1PB+ logs/day。</p>
-<h3>需求</h3>
-<ul><li>1M events/sec ingest</li><li>10s lag from emit to queryable</li><li>30 days hot search, 1 year cold archive</li><li>Full-text search + filter by service / level / timestamp</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Apps
-     │ stdout / structured log
-     ▼
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Log</strong></td><td>程序运行时输出的事件记录（一行一行 text）</td><td>餐厅订单流水</td></tr><tr><td><strong>Structured log</strong></td><td>JSON / key-value 格式的 log（vs plain text）</td><td>表格 vs 散文</td></tr><tr><td><strong>Log Agent</strong></td><td>装在每台 server 上的小程序，收集 log 推到中心</td><td>餐厅里的收单员</td></tr><tr><td><strong>Fluent Bit / Fluentd / Vector</strong></td><td>工业级 log agent</td><td>商用版收单</td></tr><tr><td><strong>Kafka</strong></td><td>高吞吐消息队列，常作 log pipeline 中转</td><td>高速传送带</td></tr><tr><td><strong>Elasticsearch (ES)</strong></td><td>全文搜索 + 时序数据的 NoSQL DB，业界 log 主存</td><td>图书馆全文索引</td></tr><tr><td><strong>Parquet</strong></td><td>列式压缩文件格式，适合大数据</td><td>高效压缩档案</td></tr><tr><td><strong>S3</strong></td><td>对象存储，便宜但查询慢</td><td>仓库</td></tr><tr><td><strong>Hot / Warm / Cold tier</strong></td><td>数据分层 —— 热的快但贵，冷的便宜但慢</td><td>桌面 / 抽屉 / 仓库</td></tr><tr><td><strong>Live tail</strong></td><td>实时 streaming log（如 <code>tail -f</code> 但跨集群）</td><td>直播</td></tr><tr><td><strong>PII</strong></td><td>Personally Identifiable Info，敏感个人数据</td><td>身份证号</td></tr><tr><td><strong>Sampling</strong></td><td>不存全部数据，按比例存（如只存 1% INFO log）</td><td>抽样调查</td></tr><tr><td><strong>Index</strong></td><td>帮助快速查找的数据结构（vs scan 全表）</td><td>书目录</td></tr><tr><td><strong>Cardinality</strong></td><td>不同值的数量。High cardinality = label 值太多 → 索引爆</td><td>调色板有多少种颜色</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Logger System</strong> = <strong>公司内所有应用产生的 log 集中收集、存储、可搜索、可告警</strong>的系统。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li>Splunk（商业）</li><li>DataDog Logs / Loggly / Sumo Logic（云 SaaS）</li><li>ELK stack (Elasticsearch + Logstash + Kibana，开源）</li><li>阿里云 SLS / Grafana Loki</li></ul>
+<p><strong>为什么这道题考的多</strong>：</p>
+<ol><li><strong>规模炸裂</strong>：1M+ servers × 各种应用 = <strong>PB 级日志/天</strong></li><li><strong>写入巨大</strong>：1M events/sec peak（peak hour 翻倍）</li><li><strong>查询多样</strong>：开发者要 grep "error"，PM 要看 conversion funnel，安全要 detect attack</li><li><strong>保留时间长</strong>：30 天热搜索 + 1 年归档审计</li><li><strong>不允许丢日志</strong>（troubleshoot 时漏一条可能找不到 bug）</li><li><strong>PII / 合规</strong>：日志可能含用户数据，要 redact</li></ol>
+<p>考点：<strong>ingest 解耦 + 多 tier 存储 + 索引设计 + 成本控制</strong>。</p>
+<hr />
+<h3>2. 需求拆解 — 面试第一步问什么</h3>
+<h4>2.1 功能性</h4>
+<p><strong>你问</strong>：日志哪几种？ <strong>典型答</strong>：应用 log（每行结构化 JSON）、access log (nginx) 、infra log (kubelet)。</p>
+<p><strong>你问</strong>：怎么 ingest？ <strong>典型答</strong>：每 host 一个 agent (Fluent Bit) 推 → Kafka → indexer → store。</p>
+<p><strong>你问</strong>：查询方式？ <strong>典型答</strong>：(a) 按 service + level + time range；(b) 关键词 (full-text)；(c) 聚合统计 (count error by host)。</p>
+<p><strong>你问</strong>：要不要 alert？ <strong>典型答</strong>：要。如 "1 min 内 error &gt; 100" → PagerDuty。</p>
+<p><strong>你问</strong>：保留时间？ <strong>典型答</strong>：30 day hot searchable；90 day warm；1 year cold archive。</p>
+<h4>2.2 非功能性</h4>
+<p><strong>你问</strong>：ingest QPS？ <strong>典型答</strong>：peak 1M events/sec。</p>
+<p><strong>你问</strong>：每条 log 多大？ <strong>典型答</strong>：avg 500 bytes，max 10 KB (stack trace)。</p>
+<p><strong>你问</strong>：emit 到 queryable 多久延迟？ <strong>典型答</strong>：&lt; 10 sec。</p>
+<p><strong>你问</strong>：multi-tenant 还是单内部？ <strong>典型答</strong>：先做内部多 team，未来扩 SaaS。</p>
+<h4>2.3 需求清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">功能：
+- 多类型 log ingest
+- 全文 + filter + 聚合 query
+- Alert rules
+- Hot 30d / Warm 90d / Cold 1y
+
+非功能：
+- 1M events/sec peak
+- &lt; 10s ingest-to-queryable
+- 1 PB+/day raw
+- &lt; $200k/month total cost (假设)</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p>关键观察：<strong>写远大于读</strong>（1M writes/sec vs 几千 reads/sec）。Log 系统是 write-heavy。优化写入 + 控存储成本是核心。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>3.1 写入</h4>
+<pre class="language-plaintext"><code class="language-plaintext">1M events/sec × 500 byte = 500 MB/sec = 4 Gbps
+× 86400 sec/day = 43 TB/day raw</code></pre>
+<p>→ <strong>每天 43 TB 日志</strong>。一年 16 PB。</p>
+<h4>3.2 ES 存储成本</h4>
+<p>ES 节点 SSD 16 TB 一个 ~$1k/month。如果存 30 天 raw：</p>
+<pre class="language-plaintext"><code class="language-plaintext">43 TB × 30 = 1.3 PB → 80 ES nodes × $1k = $80k/month</code></pre>
+<p>→ 太贵。<strong>必须 sample + tier</strong>。</p>
+<h4>3.3 Sampling 之后</h4>
+<pre class="language-plaintext"><code class="language-plaintext">ERROR / FATAL 100% sample → 5% of total = 2 PB → 几千$
+WARN 50% → 5% of total → 几千$
+INFO 5% → 10% of total → 几千$
+DEBUG 1% → 5% of total → 1k$
+Total ~70-80% reduction → 1 PB hot/month → 30 ES nodes</code></pre>
+<h4>3.4 Cold tier (S3 Parquet)</h4>
+<p>冷数据存 S3 Parquet (列存，压缩 5x)：</p>
+<pre class="language-plaintext"><code class="language-plaintext">1 PB compressed → 200 TB on S3 = $5k/month storage</code></pre>
+<p>便宜 50x。代价：query 需要 Athena / Presto，分钟级响应。</p>
+<h4>3.5 估算清单</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Ingest: 1M events/sec = 4 Gbps
+Storage: 43 TB/day raw → sample to 10 TB/day to ES
+Total cost: ~$50k/month (sampled hot + cold archive)
+Naive (全 hot): $1M+/month</code></pre>
+<hr />
+<h3>4. 整体架构 step by step</h3>
+<h4>4.1 第 0 步：朴素方案</h4>
+<div class="ascii-diagram">   App → write directly to ES</div>
+<p><strong>问题</strong>：</p>
+<ul><li>ES 写入有 burst 时 throttle → app sync write 慢</li><li>ES 挂了 → app log 写丢</li><li>1M apps 都连 ES → connection overload</li></ul>
+<h4>4.2 第 1 步：Agent + Kafka 解耦</h4>
+<div class="ascii-diagram">   App stdout/stderr / file write
+        │
+        ▼
    ┌──────────────┐
-   │ Log Agent    │  fluent-bit / Vector
-   │ (on each box)│
+   │ Log Agent    │  收集 + batch + ship
+   │ (Fluent Bit) │
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Kafka        │  buffer，按 service 分 partition
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Indexer      │  写入 ES
+   └──────────────┘</div>
+<p><strong>为什么这条链</strong>：</p>
+<ul><li><strong>Agent local file tail</strong> → app 不 sync block log write</li><li><strong>Kafka buffer</strong> → indexer 慢或 ES 慢时不丢 log</li><li><strong>Partition by service</strong> → 同 service log 顺序保留</li></ul>
+<h4>4.3 第 2 步：Sampling + Parse</h4>
+<p>Indexer 在写 ES 前做：</p>
+<pre class="language-python"><code class="language-python">def process(event):
+    # 1. Parse: JSON 直接，plain text 用 grok regex
+    parsed = parse(event)
+    
+    # 2. Enrich: 加 server geo, user_id resolve from session
+    parsed['geo'] = geoip(parsed.get('ip'))
+    
+    # 3. Sample by level
+    if parsed['level'] == 'ERROR':
+        keep = True
+    elif parsed['level'] == 'INFO':
+        keep = random.random() &lt; 0.05  # 5% sample
+    else:
+        keep = random.random() &lt; 0.01  # 1% DEBUG
+    
+    # 4. PII redact
+    parsed = pii_redact(parsed)
+    
+    if keep:
+        es_write(parsed)
+    
+    # 5. ALL events 都进 cold S3 (满足 audit 需求)
+    s3_archive(event)</code></pre>
+<p><strong>Sampling 是 cost 控制关键</strong>。即使 INFO sample 5%，DEBUG sample 1%，依然能 debug —— 用 trace_id 关联其他相关 events。</p>
+<h4>4.4 第 3 步：Tier 化存储</h4>
+<div class="ascii-diagram">   Hot (ES, last 30d):
+     - 索引齐全，秒级 query
+     - 适合 debugging、recent alert
+     
+   Warm (S3 Parquet, 30-90d):
+     - 列存压缩 5x
+     - 通过 Athena query，分钟级
+     - 适合趋势分析
+     
+   Cold (S3 Glacier, 90d-1y):
+     - 极便宜
+     - Retrieve 几小时
+     - 合规审计用</div>
+<p>每天定时 job：30 天前数据从 ES export → S3 Parquet + delete ES index。</p>
+<h4>4.5 第 4 步：Alert + 实时分析</h4>
+<div class="ascii-diagram">   Kafka topic logs.raw
+          │
+          ▼
+   ┌──────────────┐
+   │ Stream       │  Flink job
+   │ Processor    │  实时跑 alert rules + aggregation
+   └──┬───────────┘
+      │
+   ┌──┼─────────┬──────────┐
+   ▼  ▼         ▼          ▼
+  ES  Alert    Real-time  Anomaly
+      Engine   Dashboard  Detection (ML)</div>
+<p>Alert rule 例：</p>
+<pre class="language-yaml"><code class="language-yaml">- name: high_error_rate
+  query: level:ERROR
+  group_by: service
+  threshold: count &gt; 100 per 5min
+  action: pagerduty + slack</code></pre>
+<p>实时 Flink job 维护 sliding window count，超阈值触发。</p>
+<h4>4.6 第 5 步：完整架构</h4>
+<div class="ascii-diagram">   Apps (1M instances)
+       │ write log (stdout, file)
+       ▼
+   ┌──────────────┐
+   │ Log Agent    │  (per host, Fluent Bit)
    └──────┬───────┘
           │ batched, compressed
           ▼
    ┌──────────────┐
-   │ Kafka        │  topic: logs.raw
+   │ Kafka        │  per-service partition, retention 7d
+   └──┬───────┬───┘
+      │       │
+      ▼       ▼
+  ┌────────┐ ┌──────────────────┐
+  │ Indexer│ │ Stream Processor │ Flink: alerts + agg
+  │ Pool   │ │                  │
+  └────┬───┘ └──────────────────┘
+       │
+       ▼
+   ┌──────────────┐
+   │ ES Cluster   │  ← hot tier 30d
+   │ (30 nodes)   │
    └──────┬───────┘
-          │
+          │ daily export
           ▼
    ┌──────────────┐
-   │ Indexer      │  → Elasticsearch / OpenSearch
-   │ (write-heavy)│
-   └──────┬───────┘
-          │
-          ▼
-   ┌──────────────┐
-   │ Hot tier     │  → ES cluster (last 30 days)
-   └──────┬───────┘
-          │ scheduled archive
-          ▼
-   ┌──────────────┐
-   │ Cold storage │  S3 + Parquet
+   │ S3 Parquet   │  ← warm 90d / cold 1y
    └──────────────┘
 
-   ┌──────────────┐
-   │ Query API    │  → Kibana / custom UI
-   └──────────────┘</div>
-<h3>核心组件</h3>
-<h4>1. Agent</h4>
-<p>每 host run agent：</p>
-<ul><li>Tail log files / capture stdout</li><li>Parse 结构化（JSON）+ unstructured（regex / grok）</li><li>Batch + compress + send to Kafka</li></ul>
-<p>Async + buffered，不阻塞 app。</p>
-<h4>2. Kafka 缓冲</h4>
-<p>Decouple agent / indexer。Indexer 慢时 Kafka 缓冲，不丢日志。</p>
-<p>按 service 分 partition，保证同 service 日志顺序。</p>
-<h4>3. Indexer + ES</h4>
-<p>每条 log entry → ES document，按时间 daily index。每 service 一个 index alias。</p>
-<p>ES 提供 full-text search + filter + aggregation。</p>
-<p>但 ES 贵且不适合 PB 级长期存储 → <strong>hot/cold tier 分离</strong>。</p>
-<h4>4. Hot/Cold tier</h4>
-<ul><li>Hot (last 30 days): ES → instant search，秒级返回</li><li>Cold (30 days - 1 year): S3 Parquet → batch query via Athena / Presto，分钟级</li></ul>
-<p>每天定时 job 把 31 天前数据从 ES export 到 S3 + drop ES index。</p>
-<h4>5. Query API</h4>
-<pre class="language-plaintext"><code class="language-plaintext">GET /logs?service=foo&amp;level=error&amp;from=...&amp;to=...&amp;query="connection refused"</code></pre>
-<p>按时间范围决定 hot vs cold：</p>
-<ul><li>&lt; 30 days: 查 ES</li><li>&gt; 30 days: trigger Athena query S3</li></ul>
-<h4>6. Sampling for 高频</h4>
-<p>某些 service 1M log/sec，全存浪费。<strong>Adaptive sampling</strong>:</p>
-<ul><li>DEBUG / INFO: 1% sample</li><li>WARN: 10%</li><li>ERROR / FATAL: 100%</li></ul>
-<p>但 always emit "sampling header" let downstream知道 sample rate。</p>
-<h4>7. PII Scrubbing</h4>
-<p>Agent / indexer 上做 PII regex（email / phone / credit card）→ redact 或 hash。Compliance 必备。</p>
-<h4>8. Alert integration</h4>
-<p>Log pattern 触发 alert：</p>
-<ul><li>1 分钟内 error &gt; 100 → page on-call</li><li>特定 error signature → 立即 alert</li></ul>
-<p>通过 ES Watcher 或独立 Stream processor。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Transport</td><td>Kafka</td><td>direct HTTP：丢日志</td></tr><tr><td>Hot store</td><td>ES</td><td>DB：search 慢</td></tr><tr><td>Cold store</td><td>S3 Parquet</td><td>Glacier：太慢；ES 全 hot：贵</td></tr><tr><td>Sampling</td><td>level-based adaptive</td><td>All log：成本爆</td></tr><tr><td>Indexing</td><td>Per-day index</td><td>Per-week：query 跨多 index 慢</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1M events/sec × 500B avg = 500 MB/s = ~45 TB/day raw</li><li>30 days hot：1.4 PB in ES → expensive；用 sampling 后 140 TB OK</li><li>1 year cold: 16 PB Parquet on S3 (compressed 4-5x → 3-4 PB stored)</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Sync log emit → app 卡； ❌ ES 全部 30 天 + 1 年 → 成本爆 1000 万美金/年； ❌ 不 sample → noise drowns signal； ❌ 不做 PII scrub → compliance disaster； ❌ Per-event index → ES write bottleneck；要 bulk insert。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Agent + Kafka 解耦 ingest</strong>；(2) <strong>Hot ES + Cold S3 分层</strong>；(3) <strong>Adaptive sampling</strong> 控成本。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Real-time aggregation (count errors by service)？" → Flink subscribe Kafka 实时算；"Cross-service trace correlation？" → 加 trace_id field 在所有 log，OpenTelemetry；"如何 detect anomalous log patterns？" → ML model + log similarity clustering (Drain algorithm)；"GDPR delete user data？" → mark for deletion + rebuild affected indices。</p></div>
+   Query UI (Kibana / custom):
+       - &lt;30 day: ES
+       - &gt;30 day: Athena → S3 Parquet</div>
+<hr />
+<h3>5. 每个组件深挖</h3>
+<h4>5.1 Log Agent 详细</h4>
+<pre class="language-yaml"><code class="language-yaml"># fluent-bit.conf
+[INPUT]
+    Name tail
+    Path /var/log/app/*.log
+    Tag app.*
+    Multiline.parser python  # 多行 stack trace 合一条
+
+[FILTER]
+    Name parser
+    Match app.*
+    Parser json
+    Reserve_Data On
+
+[FILTER]
+    Name modify
+    Match app.*
+    Add hostname ${HOSTNAME}
+    Add region ${AWS_REGION}
+
+[OUTPUT]
+    Name kafka
+    Match app.*
+    Brokers kafka-cluster.internal:9092
+    Topics logs.raw
+    Format json
+    Compression gzip</code></pre>
+<p><strong>关键 features</strong>：</p>
+<ul><li><strong>Tail file</strong> 不 block app（async）</li><li><strong>Multiline parser</strong> 把 Python stack trace 合一条</li><li><strong>Batch + compress</strong> → 网络成本降 5x</li><li><strong>Buffer to disk</strong> 当 Kafka 不可用时</li></ul>
+<h4>5.2 Schema (ES mapping)</h4>
+<pre class="language-json"><code class="language-json">{
+  "mappings": {
+    "properties": {
+      "@timestamp": {"type": "date"},
+      "service":    {"type": "keyword"},        // 不分词
+      "host":       {"type": "keyword"},
+      "level":      {"type": "keyword"},
+      "trace_id":   {"type": "keyword"},
+      "user_id":    {"type": "keyword"},
+      "message":    {"type": "text"},           // 全文搜索
+      "fields":     {"type": "object"},
+      "duration_ms":{"type": "long"},
+      "geo":        {"type": "object"}
+    }
+  }
+}</code></pre>
+<p><strong>新手 question</strong>：</p>
+<p>❓ <strong><code>keyword</code> vs <code>text</code> 什么区别？</strong> <code>keyword</code> 不分词，整字段做 exact match (filter by service=foo)。<code>text</code> 分词，做 full-text search ("connection refused")。<strong>service / host / level 必须 keyword</strong>，message 必须 text。</p>
+<p>❓ <strong>Time-based index（daily）vs 单一大 index？</strong> 按 day 建 index：<code>logs-2026-05-16</code>。优点：(1) delete 老数据只 drop index，比 delete by query 快 1000x；(2) query 跨日期可 parallel；(3) 单 index 大小可控。</p>
+<h4>5.3 ES 配置</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Cluster: 30 nodes
+  - 10 master-eligible
+  - 20 data nodes (SSD 16 TB each)
+  
+Shard strategy:
+  - 1 day = 1 index
+  - 1 index = 10 primary shards × 1 replica
+  - 总 shard 数 30d × 10 = 300 → manageable
+
+Refresh interval: 5 sec
+  (vs default 1 sec; tradeoff: 5s search lag for 5x indexing throughput)</code></pre>
+<p><strong>Refresh interval</strong> 是 log 系统的关键 tuning：1s 实时但写慢；5-30s 写快但 query lag。</p>
+<h4>5.4 Cold Tier (S3 Parquet)</h4>
+<pre class="language-python"><code class="language-python"># Daily export job
+def archive_day(date):
+    index = f"logs-{date}"
+    # Stream from ES, write Parquet to S3
+    for batch in es.scroll(index):
+        write_parquet(batch, f"s3://logs-archive/{date}.parquet")
+    # Delete ES index
+    es.indices.delete(index)</code></pre>
+<p><strong>为什么 Parquet</strong>：</p>
+<ul><li>列存：query "all errors in service=X" 只读相关列，不扫全行</li><li>Compression：5-10x vs raw JSON</li><li>Athena / Presto 原生支持</li></ul>
+<p>Query cold tier：</p>
+<pre class="language-sql"><code class="language-sql">SELECT service, COUNT(*)
+FROM "logs"."archive"
+WHERE date = '2026-05-01' AND level = 'ERROR'
+GROUP BY service;</code></pre>
+<p>Athena 跑分钟级，但成本 $5/TB scanned。</p>
+<h4>5.5 PII Redaction</h4>
+<pre class="language-python"><code class="language-python">PII_PATTERNS = {
+    'email':       r'\b[\w.-]+@[\w.-]+\.\w+\b',
+    'phone':       r'\b\d{3}-\d{3}-\d{4}\b',
+    'ssn':         r'\b\d{3}-\d{2}-\d{4}\b',
+    'credit_card': r'\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b',
+    'ip':          r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b',
+}
+
+def redact(event):
+    msg = event['message']
+    for name, pattern in PII_PATTERNS.items():
+        msg = re.sub(pattern, f'&lt;{name}_redacted&gt;', msg)
+    event['message'] = msg
+    return event</code></pre>
+<p>GDPR / HIPAA / PCI 都要求。Indexer 处理时统一过滤。</p>
+<h4>5.6 Alert Pipeline</h4>
+<pre class="language-python"><code class="language-python"># Flink job
+events.key_by('service')\
+      .window(SlidingWindow(5min, 1min))\
+      .process(lambda window: {
+          'service': window.key,
+          'error_count': window.count_where(level='ERROR'),
+          'warn_count': window.count_where(level='WARN'),
+      })\
+      .filter(lambda agg: agg['error_count'] &gt; 100)\
+      .sink(PagerDutyAlert)</code></pre>
+<p><strong>Anti-flapping</strong>：alert 必须持续 N 分钟才触发，避免一过性 spike。<code>for: 5m</code> 在 PromQL alert rule。</p>
+<h4>5.7 实时 vs 历史 query 路由</h4>
+<pre class="language-python"><code class="language-python">def query(filter, time_range):
+    now = current_time()
+    start, end = time_range
+    
+    if end &gt; now - 30_days:
+        # 至少部分在 hot tier
+        result_hot = es.search(filter, [max(start, now-30d), end])
+    
+    if start &lt; now - 30_days:
+        # 至少部分在 cold tier
+        result_cold = athena.query(filter, [start, min(end, now-30d)])
+    
+    return merge(result_hot, result_cold)</code></pre>
+<p>UI 显示"超过 30 天的数据查询可能需要 1-5 分钟"提醒用户。</p>
+<hr />
+<h3>6. 面试节奏 — 45 分钟怎么讲</h3>
+<pre class="language-plaintext"><code class="language-plaintext">0:00 - 0:05  Clarifying Questions
+  - 日志类型 / 数量
+  - Query 模式
+  - 保留时间
+  - PII？
+
+0:05 - 0:10  Capacity Estimation
+  - 1M events/sec, 43 TB/day raw
+  - Sample / tier 大幅压缩
+  - Cost target
+
+0:10 - 0:15  High-Level Architecture
+  - Agent → Kafka → Indexer → ES
+  - Stream processor for alerts
+  - S3 cold tier
+
+0:15 - 0:30  Deep Dive
+  ★ Agent (Fluent Bit), sampling
+  ★ ES schema + sharding
+  ★ Hot/cold tier
+  ★ Alert pipeline
+
+0:30 - 0:38  Follow-ups
+  - PII
+  - Multi-tenant
+  - Cardinality 问题
+  - Trace 关联
+
+0:38 - 0:45  Wrap-up</code></pre>
+<hr />
+<h3>7. 面试样板讲解</h3>
+<blockquote><p>"OK 这是 logger system。先估算：1M events/sec × 500 byte = 4 Gbps，每天 43 TB raw。30 天全 ES 存 1 PB 是 $1M/month —— <strong>不可行</strong>，必须 sample + tier。</p>
+<p>整体设计：每 host 装 Log Agent (Fluent Bit) → Kafka buffer → indexer → ES (hot 30 day) → S3 Parquet (cold)。</p>
+<p>Agent 是关键 —— <strong>不能同步阻塞 app log call</strong>。Agent tail 本地文件，async batch + compress 推 Kafka。Kafka buffer 让下游慢或挂时不丢 log。</p>
+<p>Indexer 做三件：parse / sample / PII redact。Sampling：ERROR 100%，INFO 5%，DEBUG 1%。这样压缩 70-80% 存储成本，但 debug 时 ERROR 完整 + trace_id 能 join 其他 sampled events 找到关联 INFO。</p>
+<p>ES：每天一个 index <code>logs-YYYY-MM-DD</code>，10 primary shard × 1 replica。Refresh interval 5 秒（trade search lag for indexing throughput）。Field type keyword (service/host/level) vs text (message)。</p>
+<p>Cold tier：每天 export 30 天前数据到 S3 Parquet。Athena query。比 ES 便宜 50x。</p>
+<p>Alert：Flink job 实时 sliding window，超阈值触发 PagerDuty。<code>for: 5m</code> 防 spike 误报。</p>
+<p>想 deep dive multi-tenant 隔离还是 cardinality 问题？"</p></blockquote>
+<hr />
+<h3>8. Follow-up 演练</h3>
+<h4>Q1: 同一个 user 的请求跨多 service，怎么关联？</h4>
+<p><strong>答</strong>：Trace ID。请求进入 system 时分配一个 (OpenTelemetry context propagation)，每 service 处理时把 trace_id 加到自己 log。Query 时按 trace_id filter。</p>
+<h4>Q2: Cardinality 爆炸（如有人加 user_id 当 ES field）？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>限制 high-cardinality field 必须用 <code>_source</code> keep 而非 index</li><li>强制 schema review for new fields</li><li>监控 ES heap usage：fielddata cache + doc values 占用过高 alert</li></ul>
+<h4>Q3: 怎么 ensure no log loss?</h4>
+<p><strong>答</strong>：</p>
+<ul><li>Agent 本地 disk buffer（Kafka 不可用时缓冲）</li><li>Kafka replication factor = 3</li><li>Indexer ack only after ES bulk insert success</li><li>周期 sample 对账（agent emit count vs ES indexed count）</li></ul>
+<h4>Q4: 多 tenant 隔离？</h4>
+<p><strong>答</strong>：</p>
+<ul><li>ES index 按 tenant 分（<code>logs-{tenant}-{date}</code>）</li><li>RBAC 限 user 只查自家 index</li><li>Resource quota per tenant (CPU / disk / QPS)</li></ul>
+<h4>Q5: 如何防止某 tenant 噪声 log 影响其他？</h4>
+<p><strong>答</strong>：Kafka 也按 tenant 分 partition。Indexer 用单独 worker pool per tenant（或 weighted scheduling）。</p>
+<h4>Q6: 全文搜索性能 vs filter 性能？</h4>
+<p><strong>答</strong>：filter (keyword) O(log N) inverted index，超快。Full-text (text) 需要分词 + scoring，慢 10x。所以 design schema 时把"过滤"字段（service/host/level）设 keyword，content 设 text。</p>
+<h4>Q7: GDPR 删除 user 数据？</h4>
+<p><strong>答</strong>：用 trace_id 找 user 所有 log → ES <code>_delete_by_query</code> (慢) 或下次 reindex 时 strip。S3 Parquet 用 partition rewrite。<strong>最佳实践</strong>：log 不直接存 user_id，存 hash 或 reference id。</p>
+<hr />
+<h3>9. 常见易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ <strong>App 同步写 ES</strong> —— app 卡 + ES 慢；用 agent + Kafka； ❌ <strong>不 sample</strong> —— $1M+/month；INFO/DEBUG 必须 sample； ❌ <strong>ES 全做 hot tier</strong> —— 30 天 1 PB，成本爆；30+ 天必须 cold； ❌ <strong>High-cardinality field 当 keyword index</strong> —— ES heap 爆 (user_id, request_id)； ❌ <strong>不做 PII redact</strong> —— GDPR/HIPAA 巨额罚款； ❌ <strong>Refresh interval 1s</strong> —— write throughput 限制 5x；调到 5-30s； ❌ <strong>Per-event ES insert</strong> —— write 不批量，10x 慢；用 bulk API； ❌ <strong>Alert 无 anti-flapping</strong> —— 1 个 spike 触发 100 条 page。</p></div>
+<hr />
+<h3>10. 加分项</h3>
+<ul><li><strong>Distributed tracing 集成</strong>：log + trace + metric (Three Pillars of Observability)</li><li><strong>AI log analysis</strong>：异常 pattern detection (Drain algorithm，log clustering)</li><li><strong>Auto schema discovery</strong>：第一次见到的 field 自动加 mapping</li><li><strong>GraphQL query</strong>：let user 灵活组合 filter</li><li><strong>Cost dashboard</strong>：per-service cost breakdown 鼓励团队 optimize log volume</li><li><strong>Log replay</strong>：能 "回放" 历史 log 到 dev 环境 reproduce bug</li><li><strong>Compliance archive</strong>：WORM (Write-Once-Read-Many) storage for legal hold</li></ul>
+<hr />
+<h3>11. 总结：你应该记住的 3 件事</h3>
+<ol><li><strong>Write-heavy system 的核心 = ingest 解耦 + tier 化</strong>。Agent + Kafka 让 app 不 block；hot/warm/cold tier 让成本可控。</li></ol>
+<ol><li><strong>Sampling 不是 weakness，是 feature</strong>。 Production log 99% 是 noise。聪明 sample + trace_id 关联，能保留 debug 能力同时省 80% 成本。</li></ol>
+<ol><li><strong>High-cardinality 是 ES 杀手</strong>。任何 unique-per-request 的字段（trace_id, request_id）不要 index 当 keyword。</li></ol>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p><strong>学习推荐</strong>：(a) 跑通本机 ELK stack quickstart；(b) 读 Drain 算法 paper（log template extraction）；(c) 看 Datadog / Honeycomb 工程博客；(d) 思考"如果不用 ES，能用什么替代"（Loki + S3 + chunk index 也是新趋势）；(e) 学 OpenTelemetry 标准。</p></div>
   </section>
 
   
