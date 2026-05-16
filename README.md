@@ -6,9 +6,6 @@
 - Python 解法（Coding 题）
 - 易错点 & 延伸追问
 
-## 在线浏览
-
-➡️ https://xggyh.github.io/interview-prep/
 
 ## 题目分布
 
