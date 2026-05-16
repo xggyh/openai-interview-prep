@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a MapReduce Shuffler · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a MapReduce Shuffler</div>
+  <h1>Design a MapReduce Shuffler</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/mapreduce-shuffle-service/cmm2b6v6001lw0eadzd6fim9u" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Late February, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a shuffler component for MapReduce that enables efficient communication and data transfer between Mapper and Reducer nodes. The system should handle data partitioning, sorting, and distribution across the cluster.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>MapReduce Shuffler</strong>：MapReduce 框架中 map output → reducer input 的 shuffle 阶段。把 N mappers 的 keyed output 按 key partition + sort + transport 给 M reducers。</p>
+<p>经典 distributed systems 题。</p>
+<h3>整体流程</h3>
+<pre class="language-plaintext"><code class="language-plaintext">Map output: list of (key, value)
+   │
+   │ partition by hash(key) % R
+   ▼
+Per-mapper R buckets (one per reducer)
+   │
+   │ sort each bucket by key
+   ▼
+Local disk spill (intermediate file)
+   │
+   │ reducer pulls relevant bucket from each mapper
+   ▼
+Reducer input: merged sorted (key, value list)
+   │
+   │ reduce function
+   ▼
+Final output</code></pre>
+<h3>核心组件</h3>
+<h4>1. Partitioner</h4>
+<p><code>partition(key) = hash(key) % R</code>。同 key 永远去同 reducer。</p>
+<p>可自定义（如 by date range）实现 locality。</p>
+<h4>2. Per-mapper local sort + spill</h4>
+<p>Map output 累积到内存 buffer。达 spill threshold → sort + write disk。Sorting 用 in-place quicksort（per partition）。</p>
+<p>最后 mapper 完成时多个 spill file 需要 merge。</p>
+<h4>3. Sort vs hash shuffle</h4>
+<p><strong>Sort shuffle (Hadoop)</strong>：mapper output 排序 + reducer 接 merge sorted streams。优势：sorted input 让 reducer 同 key 自然 group。劣势：sort 开销大。</p>
+<p><strong>Hash shuffle</strong>：不 sort，按 partition 切分写文件。Reducer 自己 group by key。简单但 reducer 端工作多。</p>
+<p>Spark 早期用 hash，后改 sort（更可扩展）。</p>
+<h4>4. Shuffle service / pull</h4>
+<p>Reducer 主动 pull from mappers。问题：mapper finish 后 reducer 没拉就挂会丢数据。</p>
+<p>解决：</p>
+<ul><li>Mapper output 写本地 disk + commit 到 external shuffle service（Spark 用此）</li><li>Mapper 进程退出后数据还在</li><li>Reducer 任意时刻 pull</li></ul>
+<p>External shuffle service = 中心 daemon per worker box，专门处理 shuffle data 请求。</p>
+<h4>5. Bandwidth optimization</h4>
+<ul><li><strong>Compression</strong>：spill file 用 Snappy / LZ4 压缩 ~2-3x</li><li><strong>Combiner</strong>：在 mapper 本地先做 partial reduce（如 word count 在 map 端就 sum 同 word），减少 shuffle data</li><li><strong>Map-side aggregation</strong>：tree reduce</li></ul>
+<h4>6. Failure handling</h4>
+<ul><li>Mapper task 重试：原 output 失效，重新 spill</li><li>Reducer fetch fail：retry from same mapper or fallback to another replica</li><li>Reducer crash：重启 + re-fetch all mapper output（expensive，所以 mapper 数据要 persist long）</li></ul>
+<h4>7. Skew handling</h4>
+<p>Some key 极不均衡（如 90% data 在 key="" 上）→ 一个 reducer overload。</p>
+<p>Mitigation:</p>
+<ul><li><strong>Salting key</strong>：append random suffix → split to N reducers → final aggregate</li><li><strong>Sampling</strong>：先 sample 找 heavy keys → 给它们专 reducer</li></ul>
+<h4>8. Memory management</h4>
+<p>Reducer pulling 多 mapper data 不能全装内存。<strong>External sort + merge</strong>：buffer 一定量 → spill → merge K-way 流式。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Shuffle type | Sort shuffle | Hash：可扩展性差 | | Storage | Local disk + external service | Memory：OOM | | Compression | Snappy/LZ4 | None：网络爆 | | Combiner | Yes when associative | No：浪费 | | Skew | Salting + sampling | None：straggler |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不 partition by hash → reducer 收到非聚合 key； ❌ 不 sort → reducer 同 key 不连续； ❌ Mapper 进程退出 data 没 persist → reducer fetch 失败； ❌ 不处理 skew → 1 个 reducer 跑几小时； ❌ Reducer 全装内存 → OOM。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Partition (hash) + sort</strong> by key；(2) <strong>External shuffle service</strong> decoupling mapper / reducer lifecycle；(3) <strong>Skew + memory management</strong> 工程难点。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Spark vs Hadoop shuffle 区别？" → Spark 早期 hash → sort (Tungsten)；in-memory vs disk priority；"如何 streaming shuffle？" → 类似 Flink 的 pipelined exchange，无 spill；"GPU shuffle？" → RAPIDS / GPU MR，shuffle 仍是 disk bottleneck。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Google</strong> · Staff</div>
+  <div>As part of the MapReduce, design a shuffler that basically is the way Mapper and Reducer communicate.</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">This question is so specific. I'd just disconnect from the interview.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmgjodbag04hl08ad8h12hlh1.html">← Design a data migration service for GCP</a>
+    <a href="cmhi1hhbh05wt08ad2knqdyh2.html">Design CoderPad →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tell me about a conflict you had at work. · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Tell me about a conflict you had at work.</div>
+  <h1>Tell me about a conflict you had at work.</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Junior-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/work-conflict-perspectives/cmbhko677005iad09y02ykfyv" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior-Senior · 📋 6 · 🕒 Late April, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">The interviewer focused on a conflict that comes from different perspectives or ideas on how to execute a certain task.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Tell me about a conflict you had at work"</strong> —— Google "Googlyness" 核心题。报告 6 次（含 Senior、Staff、Manager 各 level）。考察：<strong>冲突处理成熟度 + 同理心 + 解决导向</strong>。</p>
+<p>不要回答得让自己显得"无冲突 = 没原则"，也不要"我总是赢"。要展示<strong>有原则 + 有共情 + 找到双赢</strong>。</p>
+<h3>STAR 框架</h3>
+<p><strong>S</strong>ituation（30 秒）：背景 + 利害关系 <strong>T</strong>ask（10 秒）：你的角色 / 期望 <strong>A</strong>ction（60-90 秒）：你怎么做 —— 这是重点 <strong>R</strong>esult（30 秒）：结果 + 学到什么</p>
+<h3>选故事的标准</h3>
+<ul><li><strong>真实</strong>（面试官嗅得出虚构）</li><li><strong>冲突 = 工作判断分歧</strong>，不是人际撕逼</li><li><strong>你的行动是关键变量</strong>（不是"团队最终自己想通了"）</li><li><strong>结果可量化 / 关系修复 / 长期受益</strong></li></ul>
+<h3>高质量故事模板</h3>
+<h4>模板 A：技术决策冲突（适合 IC / Tech Lead）</h4>
+<p><strong>S</strong>：去年 Q3，我和另一位 Senior 工程师在团队 cache 层选型上分歧 —— 我主张 Redis Cluster，他坚持自研 in-memory cache 用现有的 thrift RPC。这影响整个 search infra 6 个月的 roadmap。</p>
+<p><strong>T</strong>：作为 tech lead 我需要做最终决策，但要确保团队达成共识，不能强压。</p>
+<p><strong>A</strong>：我做了三件事：</p>
+<ol><li><strong>暂停争论，回到数据</strong>：约他先一起写 design doc，列出两方案的 5 个评估维度（延迟 / 运维成本 / 灾备 / 扩展性 / 学习曲线）。</li><li><strong>承认他的合理性</strong>：明确说 "你担心 Redis 在 99.9 percentile 不可控，这点我没充分回应"，让他知道我听到了。</li><li><strong>设计实验</strong>：提议用 1 周做 prototype 对比 P99 延迟和 failover 行为，让数据说话。</li><li><strong>决策时邀请他主持</strong>：实验结果出来后让他 present 给团队，包括他的反对意见。</li></ol>
+<p><strong>R</strong>：实验显示 Redis P99 47ms vs 自研 89ms（GC 抖动）。他接受了。他还在 design doc 上加了"如何监控 Redis JIT 抖动"的章节 —— 后来真的救了我们一次 incident。3 个月后他成了 Redis migration 的主推手。</p>
+<p><strong>学到</strong>：技术冲突 80% 是因为"对方的顾虑没被听到"。先 acknowledge 再用数据。</p>
+<h4>模板 B：跨组冲突（适合 Manager / Staff）</h4>
+<p><strong>S</strong>：我 team 和 platform team 因 SLO ownership 争议 3 个月没解决 —— 我们 service 的 P99 latency 超标，但根因是 platform 提供的 RPC framework 慢。Platform 不承认这是他们的 bug，我们也无法独立 fix。</p>
+<p><strong>T</strong>：作为 EM 我要给我 team SLO；同时不撕破跟 platform 的合作。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>避免邮件升级</strong>：第一时间 1:1 跟 platform EM 喝咖啡，开门见山："这事拖三个月对两组都不好"。</li><li><strong>共建 root cause</strong>：约两个 senior 工程师一周共同 debug，明确 bug 是双方共同的 —— platform 框架有问题 + 我们的 retry policy 也加重了。</li><li><strong>承担一半</strong>：先 commit 我们改 retry policy（其实只解决 30% 问题），让对方愿意 reciprocate。</li><li><strong>写 joint commitment</strong>：联合 oncall 流程 + 责任分摊 doc，两 EM 签字。</li></ol>
+<p><strong>R</strong>：6 周内 P99 从 280ms 降到 92ms。Platform team 主动重构了 framework。两组之后每月共做 capacity review。最重要：我们组的 mid-level 工程师学到"冲突不是要赢，是要解决问题"。</p>
+<h3>加分项</h3>
+<ul><li>提到<strong>listen-first</strong>（"我先复述了他的担忧"）</li><li>提到<strong>先 give to get</strong>（先 commit 一些事让对方 reciprocate）</li><li>提到<strong>长期关系</strong>（不只是解决眼前事，而是怎么改了流程）</li><li>承认<strong>自己也有 bias / mistake</strong></li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "对方完全错了，我教育了他" —— 听起来傲慢； ❌ "我们最终都同意" 但没说怎么同意 —— 太抽象； ❌ 故事的冲突是非工作（pizza 谁付钱）—— 显得幼稚； ❌ 没数字 / 没影响 —— "我们最终发布了" 太弱； ❌ "我让步了 / 我赢了" 二选一思维 —— 真正的成熟是找第三选项。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Google 想看的不是"无冲突的人"，是<strong>"有冲突时能让团队变得更好的人"</strong>。把冲突当成 leadership opportunity 而非负担。3-5 分钟讲清一个故事，留细节给追问。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>准备这些追问：</p>
+<ul><li>"What if the other person had refused to compromise?"</li><li>"Did you escalate to your manager? Why or why not?"</li><li>"What would you do differently today?"</li><li>"Have you ever 'lost' a similar conflict? What happened?"</li><li>"How do you decide when to compromise vs. hold your ground?"</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (55 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Google</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>N</strong> · Nielsen</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Capital One</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>DoorDash</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Rubrik</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Staff</div>
+  <div>Tell me about a time you had a conflict with another team.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Principal</div>
+  <div>How did I go about resolving it .. building trust, getting product management involved to curb some open source enthusiasm that would have spread us too thin on the project</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>JPMorgan Chase</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Datadog</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Monzo</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Datadog</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Salesforce</strong> · Senior</div>
+  <div>The interviewer focused on a conflict that comes from different perspectives or ideas on how to execute a certain task</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nri04wn838o9sazfr53.html">← Leetcode 347. Top K Frequent Elements</a>
+    <a href="cm6jwzt5y00x3ui4bion7uzka.html">Tell me about a time when your manager set reasonable demands. Follow up asked for a situation with unreasonable demands. →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Uber · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design Uber</div>
+  <h1>Design Uber</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Junior, Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/rideshare-architecture/cm6u9yzg000y87oi9k1oi7qx8" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior, Senior Manager · 📋 2 · 🕒 Mid March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a ride-sharing service like Uber that allows users to request rides, matches them with nearby drivers, handles real-time tracking, and processes payments.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Uber</strong> 级 ride-hailing 平台：乘客 → 匹配司机 → 实时定位 → 计价 + 支付。1B+ users，多 region。</p>
+<h3>需求</h3>
+<ul><li>乘客 request ride（pickup + drop-off）</li><li>系统匹配最近 driver</li><li>实时跟踪 location + ETA</li><li>完成后计费</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Rider App           Driver App
+       │                  │
+       │ location          │ location ping (5s)
+       │ ride request      │ status (online/onroute/busy)
+       ▼                  ▼
+  ┌─────────────────────────────┐
+  │   Location Service          │  S2 cell / geohash index
+  │   (driver geo index)        │
+  └──────────┬──────────────────┘
+             │ nearby query
+             ▼
+  ┌─────────────────────────────┐
+  │   Matching Service          │  优化 ride-driver pair
+  └──────────┬──────────────────┘
+             │
+             ▼
+  ┌─────────────────────────────┐
+  │   Ride Service              │  ride lifecycle state
+  └──────────┬──────────────────┘
+             │
+             ▼
+  ┌─────────────────────────────┐
+  │   Pricing + Payment         │
+  └─────────────────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Location Service：地理索引</h4>
+<p>司机每 5 秒 push 位置。1M 在线司机 → 200k QPS。</p>
+<p>数据结构：<strong>S2 cells / H3 hexagon</strong>（Uber 实际用 H3）：</p>
+<ul><li>把地球分成 hex cells (各 resolution)</li><li>司机 located at cell ID</li><li>"附近 driver" 查询 = 取中心 cell + k-ring 邻居 → union 出 candidates</li></ul>
+<pre class="language-python"><code class="language-python"># Redis GEO 或自建 H3 + Redis Set per cell
+redis.geoadd('drivers', longitude, latitude, driver_id)
+nearby = redis.geosearch('drivers', longitude, latitude, radius=2, unit='km')</code></pre>
+<h4>2. Matching 算法</h4>
+<p><strong>朴素</strong>：取最近的 K driver，选 ETA 最小者。问题：同时多 rider 抢同一 driver。</p>
+<p><strong>Batched matching</strong>：每 5 秒 batch all pending rides + all available drivers，跑<strong>Hungarian / minimum-cost bipartite matching</strong> 全局最优。</p>
+<pre class="language-plaintext"><code class="language-plaintext">cost(rider, driver) = ETA(driver_pos → rider_pos) + driver_rating_penalty</code></pre>
+<p>batched 让全局更优（减少空驶 + 更短 wait）。</p>
+<h4>3. Ride state machine</h4>
+<pre class="language-plaintext"><code class="language-plaintext">requested → matched → en_route_pickup → in_progress → completed
+             ↓ no driver
+           cancelled</code></pre>
+<p>每 transition 写 DB + emit event。State stored in <strong>strongly consistent DB</strong>（Spanner / CockroachDB）。</p>
+<h4>4. Realtime tracking</h4>
+<p>WebSocket / SSE 把 driver 位置 push 给 rider。每 5 秒一次（不需要更高频）。</p>
+<pre class="language-plaintext"><code class="language-plaintext">driver pings location → server → push to (rider in this ride)</code></pre>
+<h4>5. Pricing</h4>
+<ul><li>Base fare + per-km + per-min</li><li><strong>Surge pricing</strong>：实时 demand / supply ratio per zone → 乘倍数</li><li>出发前 give estimate（用 Maps API ETA + distance）</li></ul>
+<h4>6. Payment</h4>
+<p>完成后调 payment gateway。前 5 秒可 dispute（cancel before charge）。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Geo index | H3 + Redis | DB B-tree on (lat, lng)：慢 | | Matching | Batched bipartite | Greedy per request：局部最优 | | State | Strong consistency DB | Eventual：state confusion | | Tracking | WebSocket 5s | Polling 1s：浪费电池 | | Pricing | Real-time surge | Static：失 elasticity |</p>
+<h3>容量估算</h3>
+<ul><li>1M concurrent rider + 500k driver</li><li>Location ping QPS: 500k / 5s = 100k QPS</li><li>Match QPS: peak 10k rides / sec</li><li>DB writes: ride state changes, ~30k QPS peak</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Greedy matching → 全局次优； ❌ Strong consistency 不重要 (state confusion 导致用户体验差)； ❌ Location 用 (lat, lng) DB query —— 慢； ❌ 每秒 ping —— 电池 + 流量爆； ❌ 不做 surge pricing —— supply / demand 失衡。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>H3 / S2 geo index</strong> 处理大规模 nearby query；(2) <strong>Batched bipartite matching</strong> 全局最优；(3) <strong>Strong consistency state machine</strong> 防 race。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Uber Pool (carpool)？" → multi-stop TSP，detour ≤ threshold；"自动驾驶 driver？" → driver pool 加 robotaxi subset，dispatch 算法区分；"国际 + 多 currency？" → per-region pricing engine + currency convert；"如何 prevent fraud (假乘客 / 假司机)？" → ML risk score + manual review。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (20 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Visa</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Google</strong> · Senior Manager</div>
+  <div>Build a system that allows shared rides, like UberX Share</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Oracle</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Rider is given a list of candidate drivers for their request and rider selects one of them</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Asked at Blue Origin. Phone interview with Engineering manager. She asked about how to design uber. gave func and non func requirements and asked to deep dive on how to avoid drivers getting multiple requests and also how can drivers get just 1 request for a ride at a time and how can a given ride only have 1 request sent</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Amazon</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Salesforce</strong> · Staff</div>
+  <div>Design a ride sharing service, like an Uber. Make assumptions that you can use 3P APIs to reuse already solved problems such as drivers near certain location coordinates.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>L</strong> · LiveRamp</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Oracle</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>uber</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Amazon</strong> · Senior Manager</div>
+  <div>It was part of the Initial Hiring Manager round, it was a high level discussion on How to design Uber</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Design ride sharing service like uber</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Microsoft</strong> · Mid-level</div>
+  <div>High-level design for a ride-sharing app, focusing on Monolithic APK based design · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhac02ms838oy2au8k7t.html">← Leetcode 806. Number of Lines To Write String</a>
+    <a href="cm5ehcf6e0599838oop9wivfq.html">Tell me about a time you had a conflict with a coworker. How did you resolve it? →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

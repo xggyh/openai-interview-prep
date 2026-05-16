@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design an Anti-Phishing System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design an Anti-Phishing System</div>
+  <h1>Design an Anti-Phishing System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/anti-phishing-system/cmboz6nwc01ye08adekfzuwol" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Manager · 📋 1 · 🕒 Early June, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an anti-phishing backend system for Chrome that intercepts navigation to malicious websites and shows users a warning page, while still allowing them to proceed if they choose. The system should handle daily updates of the complete malicious URL list from internal security analysts.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Anti-Phishing System</strong>：检测 + 阻断 phishing URLs / emails / domains。保护用户。Google Safe Browsing / 邮件 spam filter 同类。</p>
+<h3>需求</h3>
+<ul><li>Real-time URL check (&lt; 50ms)</li><li>10B+ URL DB</li><li>High recall (catch most phishing)</li><li>Low FP (不阻 legit)</li><li>Multi-source signal (URL, content, sender)</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Browser / Mail client
+       │ URL / message
+       ▼
+  ┌──────────────┐
+  │ Real-time    │  check vs Safe Browsing API
+  │ Check API    │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Phishing DB  │  Bloom filter + Redis + Spanner
+  └──────┬───────┘
+         │
+   ┌─────┼──────────────┐
+   ▼     ▼              ▼
+  Threat intel sources Crawler  ML classifier
+  (vendor feeds)       (active phish hunt)</div>
+<h3>核心组件</h3>
+<h4>1. Real-time check</h4>
+<p>Browser SDK 把 URL → hash → check <strong>client-side Bloom filter</strong> (small, distributed offline)。Bloom hit → query server (encrypted prefix) → confirm or deny。</p>
+<p><strong>Privacy-preserving</strong>：client sends only 4-byte hash prefix (k-anonymity)，server returns all full hashes matching prefix → client local compare。</p>
+<pre class="language-python"><code class="language-python"># Client-side check
+hash = sha256(url)
+prefix = hash[:4]  # 4 bytes
+if prefix in client_bloom:   # cached locally
+    server_response = server.lookup_prefix(prefix)
+    if hash in server_response:
+        block(url)</code></pre>
+<h4>2. Phishing DB</h4>
+<p>100M+ known phishing URLs / domains。Update 每分钟新加 from sources：</p>
+<ul><li>Vendor feeds (PhishTank, OpenPhish, internal threat intel)</li><li>User reports</li><li>ML classifier real-time</li><li>Honeypot crawler</li></ul>
+<h4>3. ML detection</h4>
+<p>URL features:</p>
+<ul><li>Domain age, TLD, IP vs domain</li><li>Lexical (lookalike domain "goog1e.com")</li><li>Content features (after fetching page)</li><li>Cert anomalies</li></ul>
+<p>Model: 离线 retrain daily on labeled examples。</p>
+<h4>4. Email-specific signals</h4>
+<ul><li>SPF / DKIM / DMARC fail</li><li>Sender reputation</li><li>Body content (suspicious URLs + urgency keywords + image-based content)</li></ul>
+<h4>5. Lookalike domain detection</h4>
+<pre class="language-python"><code class="language-python">def is_lookalike(domain):
+    legit_brands = load_protected_brands()
+    for brand in legit_brands:
+        if edit_distance(domain, brand) &lt;= 2:
+            return True
+    return False</code></pre>
+<p>Plus Unicode homograph detection (paypal.com vs pаypal.com with Cyrillic 'а').</p>
+<h4>6. Active crawler / honeypot</h4>
+<p>主动爬 suspicious URLs（from spam / phish reports）。Sandbox 渲染 → 看是否登陆窃取信息。Found → add to DB。</p>
+<h4>7. False positive 处理</h4>
+<p>User / domain owner appeal → manual review。Whitelist 误判 domain。Track FP rate to retrain model。</p>
+<h4>8. Distributed delivery</h4>
+<p>10B+ URLs。Bloom filter 客户端只装 popular subset；rare URLs 必须 server-side check。每天分发 incremental Bloom updates。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Privacy | k-anonymity prefix | Send full URL：privacy leak | | Speed | Bloom + Redis + Spanner | DB-only：50ms+ | | Detection | ML + signature + crowdsource | Single signal：low recall | | FP | Appeal + ML retrain | None：user backlash |</p>
+<h3>容量估算</h3>
+<ul><li>10B URLs hashed → 10B × 32 bytes = 320 GB (full hash)</li><li>Bloom filter client-side: 1M popular URL × 8 bits = 1 MB (low overhead)</li><li>Check QPS: 100M URL/sec aggregate worldwide → mostly client-bloom local</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Server logs all URLs → privacy disaster； ❌ Single ML signal → FP / FN 都高； ❌ 不快速 incremental update → 新 phish 几小时 unprotected； ❌ Block 后用户没 reason → confused；显示 warning 解释。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>k-anonymity prefix</strong> privacy-preserving check；(2) <strong>Multi-signal ML + signature + crowdsource</strong>；(3) <strong>Active crawler</strong> find new phish。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Mobile app phishing？" → in-app SDK check before render；"Encrypted DoH / VPN bypass？" → 影响有限，主要 URL 还需 client-side check；"如何应对 AI-generated phishing emails？" → content semantic ML + sender behavior。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Google</strong> · Manager</div>
+  <div>Desing and anti-physing backend system that stops users from navigating to malicious websites. The user will see a warning instead of the website and they can still navigate to the URL if they want to. Assume that we are inside google an this only needs to work for chrome. Also the list of malicious websites is updated once a day by a team of internal analysts. The full list of URLs is published, not only changes. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (3 条)</h2>
+  <div class="comment">Default to local checks even if the network is down; when the remote verification service is unavailable, show a softer warning or proceed with caution rather than hard-blocking.</div><div class="comment">Enforce max staleness on the local list (e.g., warn if older than X days) and include an emergency blocklist/allowlist channel for zero-day outbreaks and false positives. Keep interstitial UX consistent and auditable: log anonymized metrics, version-tag warnings, and provide admin/enterprise policies to override behavior where required.</div><div class="comment">A fan of the way the whole hello interview question breakdowns, patterns, key techs are written but statements like above are spread across all Real interview question solutions and similar responses are provided by the "Ask Tutor" functionality as well. While these statements try to be complete in nature, they are very terse and end up confusing and scaring more than needed :). Would appreciate more, even if the response touches only 2 pieces instead of 5 but provides more details like "Sign the manifest file using private-public key &lt; more details&gt; and use staged rollout &lt;more details&gt;" instead of writing every possible solution that can fit for that item. Just a suggestion!</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6jwywuf00rtui4blucf5rko.html">← Implement Restaurant Waitlist API</a>
+    <a href="cm5eguhae02zx838oeshehcvt.html">Leetcode 1279. Traffic Light Controlled Intersection →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

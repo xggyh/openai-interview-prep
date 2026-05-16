@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Describe your approach to solving new and unfamiliar problems, including any strategies or methodologies you use. · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Describe your approach to solving new and unfamiliar problems, including any strategies or methodologies you use.</div>
+  <h1>Describe your approach to solving new and unfamiliar problems, including any strategies or methodologies you use.</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/problem-solving-approach/cm6zhccg1000h3b6q12uwmzhr" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Late March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Describe your approach to solving new and unfamiliar problems"</strong> —— Googlyness。考察：<strong>学习能力 + 方法论 + 元认知</strong>。</p>
+<p>这题不是讲"某个具体故事"，而是讲<strong>你的思维框架</strong>。但仍要用具体例子佐证。</p>
+<h3>推荐框架（5 步）</h3>
+<ol><li><strong>Understand</strong>：问清楚问题边界 + 已知/未知。不假设。</li><li><strong>Decompose</strong>：把大问题拆成几个可独立验证的子问题。</li><li><strong>Research + analogize</strong>：找已知的相似问题（学术 paper / 内部 doc / 工业实践），借鉴框架。</li><li><strong>Prototype + measure</strong>：先做最小可验证版本，数据驱动迭代。</li><li><strong>Reflect + generalize</strong>：解决后回看 —— 哪些适用更大类问题？</li></ol>
+<h3>故事示例：第一次做 ML infrastructure</h3>
+<p><strong>S</strong>：去年 team 要把 search ranking 从 XGBoost 迁到 deep learning model。我之前是 backend 工程师，对 ML infra 不熟。</p>
+<p><strong>Approach</strong>：</p>
+<ol><li><strong>Understand</strong>：跟 ML 研究员 1:1 5 次，画一张 "training-serving pipeline" 图，标出我哪些懂 / 哪些不懂。</li><li><strong>Decompose</strong>：分 4 块 —— data prep / model training infra / serving / monitoring。每块独立攻克。</li><li><strong>Research</strong>：读 papers (DLRM, DCN-V2)、读 Meta/Google 公开博客、跟内部 ML platform team 借鉴。形成"reference architecture"。</li><li><strong>Prototype</strong>：先做一个 toy pipeline（1% data, single GPU），跑通 end-to-end。3 周后扩到 full pipeline。</li><li><strong>Reflect</strong>：完成后写一份"ML infra checklist for backend engineers" 分享给 team。3 个同事后来 ramp up 快很多。</li></ol>
+<p><strong>Result</strong>：6 个月迁完。Serving latency 持平 XGBoost。NDCG +3.2%。</p>
+<h3>关键展示点</h3>
+<ul><li><strong>不假设懂</strong>：明确列出 unknowns</li><li><strong>借鉴而非重造</strong>：先看业界 / 内部已有方案</li><li><strong>数据 + 迭代</strong>：先 prototype 再 scale</li><li><strong>沉淀</strong>：把学习变成 team asset</li></ul>
+<h3>加分项</h3>
+<ul><li>提到 <strong>不耻于问 "stupid questions"</strong>（最有效的学习）</li><li>提到<strong>用类比解释自己</strong> —— "对我，TF training loop 就像 backend 的 long-running service，只不过 state 在 GPU memory"</li><li>提到 <strong>失败的探索</strong> —— "我也试过 X，发现不 work because Y"</li><li>提到 <strong>timebox</strong> —— 不允许无限 explore，定 deadline 强制 commit</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 全程纸上谈兵 没具体例子 —— 显得 abstract； ❌ "I just learn fast" —— no methodology； ❌ 故事的"unfamiliar problem" 其实是熟练领域 —— 没说服力； ❌ 没 reflect / generalize —— 显得 one-off。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Google 想看：<strong>你能在 unfamiliar 领域用结构化方法快速 ramp up</strong>，而不是"靠经验"。这正是 staff+ 跨领域 lead 项目的核心能力。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"How long would you spend on research before committing?"</li><li>"When do you ask for help vs figure it out yourself?"</li><li>"What if your prototype shows the approach won't work?"</li></ul></div>
+<ul><li>"Has this approach ever failed you?"</li></ul>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Microsoft</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5ya8dsz004rrfqrigawxzak.html">← Tell me about time when you were working on an initiative or goal and saw an opportunity to do something much bigger or better than the initial focus.</a>
+    <a href="cm73nlsio0009426mlm9qyl1a.html">Tell me how you helped someone in your team to get better at some task →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

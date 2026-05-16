@@ -15,17 +15,21 @@
 | 公司 | 题数 |
 |---|---|
 | **OpenAI** | 44 题（全岗位） |
-| **Google** | 75 题（Coding 前 3 页） |
-| 共有 | 1 题（Leetcode 253. Meeting Rooms II） |
-| **总计** | 118 题 unique |
+| **Google** | 151 题（Coding 前 3 页 + All-types 前 5 页 dedup 后） |
+| **总计** | 191 题 unique |
 
 | 类型 | 题数 |
 |---|---|
 | Coding | 94 |
-| System Design | 18 |
-| People Management | 4 |
+| System Design | 56 |
+| Googlyness（Google 行为面试） | 26 |
+| People Management | 6 |
+| Low Level Design | 3 |
+| Product Architecture | 2 |
 | Behavioral | 1 |
 | Mobile System Design | 1 |
+| ML System Design | 1 |
+| Technical Project Retrospective | 1 |
 
 ## 仓库结构
 

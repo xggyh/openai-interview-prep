@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Can you share an example where you resolved a significant conflict between different teams or departments in your organization? · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Can you share an example where you resolved a significant conflict between different teams or departments in your organization?</div>
+  <h1>Can you share an example where you resolved a significant conflict between different teams or departments in your organization?</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Junior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/team-department-conflict/cm5ehcf6e059b838ok8og7kvc" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Junior · 📋 1 · 🕒 Early February, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Can you share an example where you resolved a significant conflict between different teams or departments?"</strong> —— Googlyness。考察：<strong>cross-functional leadership + facilitation + 系统思维</strong>。</p>
+<p>不是"我跟某个同事 conflict"。是<strong>两个/多个组织 entity 之间</strong>的冲突你 driving 解决。</p>
+<h3>STAR 框架</h3>
+<p>参考 [[cm5ya8516000irfqrdurp0qmj]] (Bringing different perspectives together) framework。这里 angle 是 <strong>conflict 而非 perspectives</strong>。</p>
+<h3>故事：Mobile vs Backend SLA 战争</h3>
+<p><strong>S</strong>：mobile team 抱怨 backend API P95 latency 太高（300ms+），影响 app retention。Backend team 反驳"我们 SLA 是 500ms，你们 mobile 太挑了"。两组 leadership 在 monthly review 上隔空 finger-pointing 3 个月。Director 让我作为 staff 工程师 facilitate。</p>
+<p><strong>T</strong>：作为 third-party Tech Lead，driving solution。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Initial 1:1 私下 conversation</strong>：分别约 mobile EM + backend EM 各 30 分钟。listen each side full grievance。</li><li><strong>找 root cause not blame</strong>：跟 senior 工程师们 deep dive 数据。发现：(a) backend P95 确实 320ms (b) 但同时 mobile retry policy 在 timeout 1s 上 too aggressive，引起 cascading retry。<strong>两边都有 contribute</strong>。</li><li><strong>Joint debug session</strong>：4 hours，两组 senior 同坐一桌。我 facilitate。共同 distributed trace。</li><li><strong>共建 unified SLO</strong>：从前各家 SLA 独立 → 共同定义 end-to-end SLO（用户 page load）。Each team 知道 own bucket。</li><li><strong>Joint commitment</strong>：mobile 改 retry policy + backend 优化两个 hot endpoint。一起写 commitment doc，两 EM 签字。</li><li><strong>30 天 review meeting</strong>：跟踪数据 + 庆祝改善。</li></ol>
+<p><strong>R</strong>：30 天 P95 从 320ms 降到 110ms。Mobile retention 回升。最重要：<strong>两 EM 之后建立了 monthly cross-team perf sync</strong>，避免 future conflict。</p>
+<h3>关键展示点</h3>
+<h4>1. 你不是 stakeholder 是 facilitator</h4>
+<p>第三方 role 让你 neutral。Senior+ Tech Lead 经常做此 role。</p>
+<h4>2. 1:1 listening 先于 group meeting</h4>
+<p>让每方 feel heard。这是 facilitation 第一原则。</p>
+<h4>3. Root cause 不 blame</h4>
+<p>最关键洞察：<strong>双方都 contribute</strong>。让 finger-pointing 停。</p>
+<h4>4. Joint artifact</h4>
+<p>End-to-end SLO + commitment doc。让 abstract "我们合作" 变 concrete。</p>
+<h4>5. Sustained mechanism</h4>
+<p>不只是 fix 这次 incident，建立 monthly sync 防止 future conflict。</p>
+<h3>加分项</h3>
+<ul><li>提到 <strong>director / VP 的 role</strong>（你不抢他们 spotlight，但 keep them informed）</li><li>提到 <strong>emotional aspect</strong>（两 EM 个人也 frustrated）</li><li>提到 <strong>personal cost</strong>（这事占了你 30% time 3 个月）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 站队（"我 obviously 觉得 mobile 是对的"）—— 失败 facilitator； ❌ "我让 VP 来 align" —— escalate 失败； ❌ Joint action 没数据支撑 —— 听起来 abstract； ❌ 没 sustained mechanism —— 一次性 fix； ❌ 故事 fix 后两组关系仍紧张 —— missing closure。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Cross-team conflict 解决 = <strong>listen separately → find shared root cause → joint artifact (SLO, doc) → sustained mechanism (recurring sync)</strong>。Senior+ 必备。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"What if one team had refused to participate?"</li><li>"How did you build trust with both teams?"</li><li>"What would you do differently?"</li><li>"Have you escalated to leadership before?"</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (61 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>JPMorgan Chase</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>I was asked this question in the Technical Round (First round before loop).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Justworks</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Anthropic</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>SoFi</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  <div>Can you share an example where you resolved a significant conflict between different teams or departments in your organization?</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Google</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Amazon</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Uber</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>As part of my initial interview.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eh7nrh04te838oog2p509p.html">← Leetcode 230. Kth Smallest Element in a BST</a>
+    <a href="cm5eh7nri04wm838ohohaia3c.html">Leetcode 346. Moving Average from Data Stream →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

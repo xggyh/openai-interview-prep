@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Top-K System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Top-K System</div>
+  <h1>Design a Top-K System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/top-k-counts/cm4t0twp0004pvszmvb2qeg0u" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that efficiently retrieves top-k items (songs, videos, hashtags, etc.) based on user activity or engagement metrics within specified time windows. The system should handle real-time data aggregation and support queries like "top 10 songs in the last 7 days" or "trending hashtags in the past 24 hours."</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Top-K System</strong>：实时从数据流中找出 top K items（按 count / score）。Twitter trending tags、search query top suggestions、e-commerce top products。</p>
+<p>参考类似题：[[cm7honmgk0278imqn03o95rtg]] (Trending Hashtags)。这里更通用的 framework。</p>
+<h3>核心算法</h3>
+<h4>1. Exact top-K</h4>
+<p>适合数据量小（&lt; 1M items / window）：</p>
+<ul><li>HashMap counter + min-heap of size K</li><li>Each event: counter[item]++; if among top-K push heap</li></ul>
+<h4>2. Approximate top-K — Count-Min Sketch + Heavy Hitters</h4>
+<p>适合 high cardinality（10M+ items）：</p>
+<pre class="language-python"><code class="language-python">class HeavyHitters:
+    def __init__(self, k, cms_width=10000, cms_depth=5):
+        self.cms = CountMinSketch(cms_width, cms_depth)
+        self.heap = []      # min-heap of (estimated_count, item)
+        self.k = k
+        self.in_heap = set()
+
+    def add(self, item):
+        self.cms.add(item)
+        est = self.cms.estimate(item)
+        if item in self.in_heap:
+            # rebuild heap entry for this item
+            # 复杂度优化：lazy delete
+            heapq.heappush(self.heap, (est, item))
+        elif len(self.heap) &lt; self.k:
+            heapq.heappush(self.heap, (est, item))
+            self.in_heap.add(item)
+        elif est &gt; self.heap[0][0]:
+            _, evicted = heapq.heapreplace(self.heap, (est, item))
+            self.in_heap.discard(evicted)
+            self.in_heap.add(item)</code></pre>
+<h4>3. Approximate — Misra-Gries</h4>
+<p>固定 K+1 counters。新 item：if 已有 ++；else if 有 counter = 0 替换；else 所有 counter -1。</p>
+<p>guarantee：true frequency &gt; total/K 的 item 一定被找到。简单且 O(K) memory。</p>
+<h3>整体架构（分布式）</h3>
+<div class="ascii-diagram">   Event stream (Kafka)
+         │
+         ▼
+   ┌──────────────────┐
+   │ Partition (by    │  shuffle by item hash
+   │ item hash)       │
+   └──────┬───────────┘
+          │
+          ▼
+   ┌──────────────────┐
+   │ Local top-K per  │  每 worker 维护 local CMS + heap
+   │ worker (Flink)   │
+   └──────┬───────────┘
+          │ 每 N 秒 emit local top-K
+          ▼
+   ┌──────────────────┐
+   │ Global aggregator│  union top-K from all workers
+   │ → final top-K    │
+   └──────┬───────────┘
+          ▼
+   ┌──────────────────┐
+   │ Redis top-K cache│
+   └──────────────────┘</div>
+<h4>关键：分而合并的近似性</h4>
+<p>不能保证 global exact top-K，但 union of local top-K + scoring 在实践上误差极小（top-K 都是 high-frequency item，分到各 shard 仍会是 local top）。</p>
+<h3>Sliding window</h3>
+<p>如果要"最近 5 分钟 top-K"而非"all-time"：每分钟一个 sub-window CMS + heap，5 个 sub-window union 计算。</p>
+<p>老 sub-window expire 自然滑动。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Exact vs approx | Approx for high cardinality | Exact：内存爆 | | Algo | CMS + heavy hitters | Sort all every interval：O(N log N) | | Partition | by item hash | by random：top-K shuffle 不准 | | Window | sliding | tumbling：bursty 不平滑 |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 HashMap counter for 10M cardinality —— OOM； ❌ CMS 不加 heavy hitters → 没法快速 enumerate top-K； ❌ 全 global single counter —— 写热点； ❌ Sliding window 不 expire 老数据 —— count 累计成 all-time； ❌ Approx error 不告知用户 —— UI 不应表达"准确"。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Top-K 高基数 = <strong>CMS + heavy hitters + sliding window</strong>。LC 风格的 top-K 题（Top K Frequent Elements）是 in-memory exact 版；分布式 streaming 版用 approximate。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Personalized top-K per user？" → per-user counter（如果 user 多就分布式）；"Top-K with decay (新事件权重高)？" → exponential decay 在 CMS 上；"Top-K with constraints (category)？" → 加 filter 维度 sharding。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (102 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>TopK but for search queries.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Meta</strong> · Staff</div>
+  <div>Trending hashtags in the last few hours with the following parameters for consideration. · - Timeliness: recent hashtags have more weightage compared to the older hashtags. · - Novelty: repeated hashtag or posted before with lower frequency. · - Popularity: Trending hashtags are regionally segregated.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>Design top 10 songs listened by a user in 7 days.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>top 10 songs for 7 days by a user</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Microsoft</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  <div>Asked in Meta product arch · users see top 10 songs on fb based on their listening history, songs connected through 3rd party service</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>H</strong> · Harness</div>
+  <div>Staff</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Senior</div>
+  <div>Leader Board of a game. · Rank of a user globally · Top 5 above/below ranks of the user globally · Top 5 above/below ranks of the user's friends(friends list)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Atlassian</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Asked in Atlassian · Give top K confluence pages, if user see onces dont show them the pages again.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Asked to design a trending top k keywords for instagram</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Bloomberg</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Monzo</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Bloomberg</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Trending hashtags.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Top k songs listened by a given user of Facebook, along with the top k songs listed by their friends and the top k songs listened by the entire world.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Oracle</strong> · Senior</div>
+  <div>Design a service to show top k purchases to users. Top k across all purchases till date.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design a top n system to track top videos viewed in a minute, hour, day, etc. You can assume that there will be stream of views.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Essentially the above question, but with a Spotify-like service for songs instead.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Top-K Spotify and the interviewer went straight to the HLD and Deep Dives</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Amazon</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Design Top 10 songs for Spotify in the past 7-day timeframe. · Questions asked: · 1. What eviction policy will you use if you are using Redis, and why? · 2. How will you calculate the 7-day timeframe and the top 10 songs during this duration? · 3. What table schema/primary key/unique keys will you use to calculate 7 days?</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>When you check a person's FB profile, how do you show their top-k songs from Spotify in the last N days.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Top N hashtags for Facebook posts, arbitrary time windows.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Top 10 Songs for the past 7 days</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>viral hashtags</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>K has to reset weekly</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Top k  songs for a given user profile not for the whole system.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Atlassian</strong> · Mid-level</div>
+  <div>Design Confluence top documents feature</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Uber</strong> · Manager</div>
+  <div>Find top 20 trending restaurants based on order counts within 24 hr timeperiod</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design a system to return most popular Instagram hashtags.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Top 10 songs in 7 days</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Uber</strong> · Senior</div>
+  <div>Asked in the context of Catalog Service surfacing popular items by time period and categories.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Uber</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Top 10 Spotify songs from the past 7 days. This API is used from a service in the system and it runs every day. No emphasis on the system overall, mainly focused on the service and how the songs are retrieved</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Please design a backend system that outputs a trending tags feed</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>For Spotify where we need to shows your 10 most listened to songs from the last week</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Design top-k trending hashtags in the past 24 hours.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2024 · <strong>Meta</strong> · Mid-level</div>
+  <div>Was asked a to design a system that shows top 10 most viewed videos per region on a video streaming platform.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Meta</strong> · Mid-level</div>
+  <div>Provided 3 solutions with time + space complexities: 1. Sorting 2. Heap 3. QuickSelect Asked to code heap approach but asked follow up of a solution that takes O(n) time, bucketing algorithm.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>Google System design</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Design the backend for a service that will return top-10 songs that user listened to most often during  the last 7 days</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2023 · <strong>Meta</strong> · Mid-level</div>
+  <div>Top X songs  per individual in the last Y days</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2022 · <strong>Bloomberg</strong> · Intern</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmikmkva406q908adb5780xku.html">← Design a photo search application</a>
+    <a href="cmi7qoka2009008ad6tm1csdb.html">Design an e-commerce offer subscription system →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

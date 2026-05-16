@@ -69,8 +69,12 @@ a:hover { text-decoration: underline; }
 }
 .tag-coding { color: #0a3069; background: #ddf4ff; border-color: #b6e3ff; }
 .tag-system-design { color: #4d2d00; background: #fff8c5; border-color: #f0e068; }
-.tag-people-management, .tag-behavioral { color: #5a1e02; background: #ffebe9; border-color: #ffaba8; }
+.tag-people-management, .tag-behavioral, .tag-googlyness { color: #5a1e02; background: #ffebe9; border-color: #ffaba8; }
 .tag-mobile-system-design { color: #1f3a26; background: #dafbe1; border-color: #aceebb; }
+.tag-low-level-design { color: #573c00; background: #fff4cc; border-color: #f0d068; }
+.tag-product-architecture { color: #5c1f00; background: #ffe0c2; border-color: #ffb380; }
+.tag-ml-system-design { color: #401b6f; background: #efe6ff; border-color: #c8b3f0; }
+.tag-technical-project-retrospective { color: #3d3a00; background: #eef0c0; border-color: #d0d068; }
 .tag-level { color: #57606a; background: #f6f8fa; border-color: #d0d7de; font-weight: 500; }
 
 /* Company badge on cards: small filled pill with brand color */

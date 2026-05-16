@@ -29,7 +29,11 @@ OUT_PATH = ROOT / "site" / "data" / "questions.json"
 
 SOURCES = [
     ("OpenAI", ROOT / "openai-interview-questions.json"),
+    # Google coding-only pages 1-3 (initial round)
     ("Google", ROOT / "site" / "data" / "google-questions.json"),
+    # Google all-types pages 1-5 (expanded round) — overlapping with above is fine,
+    # merge dedupes by slug. Both contribute the same "Google" badge.
+    ("Google", ROOT / "site" / "data" / "google-all-questions.json"),
 ]
 
 def main():

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Describe a time when you brought different perspectives together to solve a problem. · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Describe a time when you brought different perspectives together to solve a problem.</div>
+  <h1>Describe a time when you brought different perspectives together to solve a problem.</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/perspectives-problem-solution/cm5ya8516000irfqrdurp0qmj" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 1 · 🕒 Mid March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Describe a time when you brought different perspectives together to solve a problem"</strong> —— Googlyness。考察：<strong>facilitation + synthesis + cross-functional leadership</strong>。</p>
+<p>不是"我 + 一同事 disagree"。是<strong>多方 (3+) 不同视角</strong>你 facilitate 找到 unified solution。</p>
+<h3>故事：跨 4 组的 mobile app perf 战役</h3>
+<p><strong>S</strong>：mobile app 启动时间 P95 从 1.8s 涨到 3.2s 用户 retention 下降 5%。涉及 4 个 team：</p>
+<ul><li>iOS team：app cold start</li><li>Backend：API latency</li><li>ML team：on-device model load</li><li>DevOps：CDN / network</li></ul>
+<p>每个 team 都说"不是我的问题"。</p>
+<p><strong>T</strong>：我作为 cross-team Tech Lead，被指派 driving 这个问题。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>召集 unified meeting</strong>：所有 4 team 的 senior + tech lead 一起。我用 1 小时把所有"已知问题"画在一张 flow 图上：cold start → API call → model load → 渲染。</li><li><strong>共建 metrics</strong>：之前每 team 用自己的 metrics。我们一起定 unified end-to-end latency breakdown：每段时间打 distributed trace。</li><li><strong>数据破 silos</strong>：trace 显示瓶颈 60% 是 model load + 30% 是 API + 10% 是 cold start。这分配让每 team 知道自己 share。</li><li><strong>每周 sync 把 progress 公开</strong>：dashboard 每 team 该有的目标 + 当前。Public commitment 提升 accountability。</li><li><strong>庆祝小胜</strong>：每段时间降 10% 就在 team chat 公开庆祝。让协作有正反馈。</li></ol>
+<p><strong>R</strong>：6 周 P95 降到 2.1s。Retention 回升。最重要：<strong>4 个 team 之后有了共同 trace + dashboard</strong>，跨组 perf 工作变 routine。</p>
+<h3>关键展示点</h3>
+<ul><li><strong>画图 unify mental model</strong>：每 team 之前看局部，我画 end-to-end 让他们看到全图</li><li><strong>共建 metrics</strong>：避免"我家指标 vs 你家指标"</li><li><strong>数据破 finger-pointing</strong>：让每 team 看到自己客观贡献了多少 latency</li><li><strong>Sync rhythm + public commitment</strong>：从 ad-hoc 到 systematic</li><li><strong>正反馈循环</strong>：庆祝小胜让 team 愿意 continue</li></ul>
+<h3>加分项</h3>
+<ul><li>提到<strong>会前准备</strong>（你不是开会才开始，你提前跟每 team 1:1 了解他们的 perspective）</li><li>提到<strong>自己是 outsider</strong> 反而是优势（没 silos bias）</li><li>提到 <strong>遗留的 process</strong>（建立的 dashboard / sync 之后仍在用）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "我让 manager 来 align" —— 没体现你的 facilitation； ❌ 故事中你最有专长 —— 不是 cross-functional 是 individual lead； ❌ 没数据 —— "我们 align 了" 但没 outcome 数字； ❌ 没说会后 sustained 改善 —— 一次性 fix 不算。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Senior+ 跨组协作信号：<strong>facilitator that produces shared understanding through artifacts (diagrams, metrics, dashboards), not authority</strong>。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"What if one team refused to participate?"</li><li>"How did you build credibility with teams that didn't know you?"</li><li>"Did anyone resist the new metrics?"</li><li>"Have you ever failed at unifying perspectives?"</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Describe a time when you brought different perspectives together to solve a problem. What types of different perspectives were represented? How did you seek out different points of view? What was the outcome? Were there any key learnings from this experience? Knowing what you know now, would you have done anything different? · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5ehcf6e059d838o2l2fhwy4.html">← Give an example of a situation where you had to overcome a significant setback or obstacle to achieve a goal</a>
+    <a href="cm6zh0pli00063b6qv9jqq5hv.html">Tell me something about yourself I won't find on your resume →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

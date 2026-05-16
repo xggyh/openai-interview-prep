@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Music Player Shuffle Algorithm · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Low Level Design / Design a Music Player Shuffle Algorithm</div>
+  <h1>Design a Music Player Shuffle Algorithm</h1>
+  <div class="header-meta">
+    <span class="tag tag-low-level-design">Low Level Design</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/music-shuffle-algorithm/cm6jwys3b00qfui4bb6l8gm5j" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 3 · 🕒 Mid August, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a music player shuffle algorithm to avoid grouping songs by the same artist.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Music Player Shuffle Algorithm</strong> (LLD)：playlist shuffle，每首歌恰好播一次，random order。变种：smart shuffle (artist diversity / no repeat artist back-to-back)。</p>
+<p>参考 [[cm6jwvh80005vui4b4epro213]] (Song Shuffler) - 系统设计版。这里 LLD focus on data structure + class design。</p>
+<h3>核心：Fisher-Yates Shuffle</h3>
+<pre class="language-python"><code class="language-python">import random
+
+class Playlist:
+    def __init__(self, songs: list['Song']):
+        self.songs = list(songs)
+        self._shuffled: list[int] = []      # indices into self.songs
+        self._cursor: int = 0
+        self.shuffled_mode: bool = False
+        self.repeat_mode: 'none' | 'one' | 'all' = 'none'
+
+    def _fisher_yates(self):
+        self._shuffled = list(range(len(self.songs)))
+        for i in range(len(self._shuffled) - 1, 0, -1):
+            j = random.randint(0, i)
+            self._shuffled[i], self._shuffled[j] = self._shuffled[j], self._shuffled[i]
+        self._cursor = 0
+
+    def shuffle(self):
+        self.shuffled_mode = True
+        self._fisher_yates()
+
+    def unshuffle(self):
+        self.shuffled_mode = False
+        self._shuffled = list(range(len(self.songs)))
+        self._cursor = 0
+
+    def next_song(self) -&gt; 'Song' | None:
+        if not self.songs: return None
+        if self.repeat_mode == 'one':
+            return self.songs[self._shuffled[self._cursor] if self.shuffled_mode else self._cursor]
+        self._cursor += 1
+        if self._cursor &gt;= len(self.songs):
+            if self.repeat_mode == 'all':
+                if self.shuffled_mode:
+                    self._fisher_yates()   # 新一轮 shuffle
+                else:
+                    self._cursor = 0
+            else:
+                return None
+        idx = self._shuffled[self._cursor] if self.shuffled_mode else self._cursor
+        return self.songs[idx]
+
+    def prev_song(self) -&gt; 'Song' | None:
+        if self._cursor == 0:
+            return None
+        self._cursor -= 1
+        idx = self._shuffled[self._cursor] if self.shuffled_mode else self._cursor
+        return self.songs[idx]
+
+    def jump_to(self, song_idx: int):
+        """User selects specific song. 切回非 shuffled or adjust cursor."""
+        if self.shuffled_mode:
+            # 找 song_idx 在 _shuffled 中的 position
+            new_cursor = self._shuffled.index(song_idx)
+            self._cursor = new_cursor
+        else:
+            self._cursor = song_idx</code></pre>
+<h3>进阶: Smart Shuffle (Artist Diversity)</h3>
+<p>普通 Fisher-Yates 可能让同 artist 歌曲连播。<strong>Constraint shuffle</strong>:</p>
+<pre class="language-python"><code class="language-python">def smart_shuffle(self):
+    """Avoid same artist back-to-back"""
+    import random
+    songs = list(self.songs)
+    random.shuffle(songs)
+    result = []
+    while songs:
+        candidate = None
+        for i, s in enumerate(songs):
+            if not result or s.artist != result[-1].artist:
+                candidate = (i, s); break
+        if candidate is None:
+            # 没有 different-artist 选项，prefer 最早的
+            candidate = (0, songs[0])
+        result.append(candidate[1])
+        songs.pop(candidate[0])
+    self._shuffled = [self.songs.index(s) for s in result]</code></pre>
+<p>更高级：avoid same album / same genre back-to-back。Constraint satisfaction problem。</p>
+<h3>进阶: Spotify-style Pseudo-random Shuffle</h3>
+<p>Pure random 让用户 perceived "not random enough"（cluster effect）。Spotify 用 <strong>interleave by artist</strong> —— 把同 artist 歌均分散开。</p>
+<pre class="language-python"><code class="language-python">def spotify_shuffle(songs):
+    # 1. Group by artist
+    by_artist = defaultdict(list)
+    for s in songs:
+        by_artist[s.artist].append(s)
+    # 2. Shuffle within each group
+    for group in by_artist.values():
+        random.shuffle(group)
+    # 3. Distribute: 总 length N，每 artist 之间 spacing ~= N / len(group)
+    # ...</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Naive shuffle 在 next 时每次随机抽 song —— 同 song 可能重复； ❌ Repeat mode 不重 shuffle → 第二轮顺序同； ❌ Jump 后 shuffle 顺序乱 → 需要 sync cursor； ❌ Smart shuffle 完全 deterministic → user 觉得不 random；加点随机； ❌ Stateful （cursor 在 playlist object）→ 切 playlist 不重置。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Music shuffle 看似简单实有讲究：(1) <strong>Fisher-Yates</strong> unbiased base；(2) <strong>State (cursor + shuffled order)</strong> for prev/next；(3) <strong>Constraint-based smart shuffle</strong> for UX。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 sync shuffle order across devices？" → server-side seed + 每 user playlist version；"如何加 personalization (listening history)？" → shuffle weight by user preference；"实时 add song 到 shuffled queue？" → insert at random valid position；"如何 undo shuffle？" → 保存 shuffle 前 cursor + 原顺序。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (3 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Design a music player shuffle algorithm to avoid grouping songs by the same artist</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm6ffodsw00013b6pt5izxwps.html">← Tell me about your job and role</a>
+    <a href="cm69gjz7n020be7bzjsf6a663.html">Design Google Docs →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

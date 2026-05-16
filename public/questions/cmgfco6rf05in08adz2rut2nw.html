@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Twitter · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Low Level Design / Design Twitter</div>
+  <h1>Design Twitter</h1>
+  <div class="header-meta">
+    <span class="tag tag-low-level-design">Low Level Design</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/twitter-clone-feed/cmgfco6rf05in08adz2rut2nw" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 1 · 🕒 Early October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a social media platform similar to Twitter that allows users to follow/unfollow other users, post tweets, and view a personalized news feed of tweets from people they follow.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>Design Twitter (LLD version)</strong> —— Low Level Design (OOP)：实现 Twitter core feature 的 class diagram + interface。区别于 System Design 的架构，重点是<strong>类设计 + 模式 + extensibility</strong>。</p>
+<h3>核心实体</h3>
+<pre class="language-python"><code class="language-python">class User:
+    user_id: UUID
+    name: str
+    followers: set[User]    # who follows me
+    following: set[User]    # who I follow
+    tweets: list[Tweet]
+    feed: 'NewsFeed'
+
+class Tweet:
+    tweet_id: UUID
+    author: User
+    text: str
+    media: list[Media]
+    created_at: datetime
+    likes: set[User]
+    retweets: set['Tweet']     # retweeted_by tweets
+    parent: 'Tweet' | None     # for replies / retweets
+
+class NewsFeed:
+    user: User
+    cached_tweets: list[Tweet]   # paginated
+
+class TwitterService:
+    users: dict[UUID, User]
+    tweets: dict[UUID, Tweet]
+
+    def post_tweet(self, user_id, text, media) -&gt; Tweet
+    def follow(self, follower, followee)
+    def unfollow(self, follower, followee)
+    def like(self, user, tweet)
+    def get_feed(self, user_id, limit) -&gt; list[Tweet]
+    def search(self, query) -&gt; list[Tweet]</code></pre>
+<h3>设计 patterns</h3>
+<h4>1. Strategy: Feed generation</h4>
+<pre class="language-python"><code class="language-python">class FeedStrategy(ABC):
+    @abstractmethod
+    def get_feed(user, limit) -&gt; list[Tweet]: ...
+
+class PullModelStrategy(FeedStrategy):
+    """Query 所有 followed users' tweets, sort, top-K"""
+    def get_feed(user, limit):
+        all_tweets = []
+        for followed in user.following:
+            all_tweets.extend(followed.tweets[-100:])
+        return sorted(all_tweets, key=lambda t: -t.created_at.timestamp())[:limit]
+
+class PushModelStrategy(FeedStrategy):
+    """Each tweet upon post fan-out to followers' feed cache"""
+    def get_feed(user, limit):
+        return user.feed.cached_tweets[:limit]
+
+class HybridStrategy(FeedStrategy):
+    """Push for normal user, pull for celebrities (avoid fan-out爆)"""
+    def get_feed(user, limit):
+        merged = list(user.feed.cached_tweets)
+        for celeb in user.following_celebs:
+            merged.extend(celeb.tweets[-20:])
+        return sorted(merged, key=...)[:limit]</code></pre>
+<h4>2. Observer: Notification</h4>
+<p>User likes tweet → tweet author receives notification。Observer pattern：</p>
+<pre class="language-python"><code class="language-python">class TweetObserver(ABC):
+    def on_like(tweet, user): ...
+    def on_retweet(tweet, user): ...
+
+class NotificationObserver(TweetObserver):
+    def on_like(tweet, user):
+        notify(tweet.author, f"{user.name} liked your tweet")</code></pre>
+<h4>3. Decorator / Composite: Media</h4>
+<p>Tweet can have text + image + video. Composite media:</p>
+<pre class="language-python"><code class="language-python">class Media(ABC): ...
+class Image(Media): ...
+class Video(Media): ...
+class Gif(Media): ...</code></pre>
+<h4>4. Factory: Tweet creation</h4>
+<pre class="language-python"><code class="language-python">class TweetFactory:
+    @staticmethod
+    def create(text, author, media=None, parent=None) -&gt; Tweet:
+        t = Tweet(uuid4(), author, text, media or [], now(), set(), set(), parent)
+        # validation
+        if len(text) &gt; 280:
+            raise ValueError
+        # extract mentions, hashtags
+        for mention in extract_mentions(text):
+            notify(mention)
+        return t</code></pre>
+<h3>Code 关键</h3>
+<pre class="language-python"><code class="language-python">class TwitterService:
+    def __init__(self, feed_strategy: FeedStrategy):
+        self.users: dict[UUID, User] = {}
+        self.tweets: dict[UUID, Tweet] = {}
+        self.feed_strategy = feed_strategy
+        self.observers: list[TweetObserver] = []
+
+    def post_tweet(self, user_id: UUID, text: str, media: list[Media] = None):
+        user = self.users[user_id]
+        tweet = TweetFactory.create(text, user, media)
+        self.tweets[tweet.tweet_id] = tweet
+        user.tweets.append(tweet)
+        # Push model: fan-out
+        if isinstance(self.feed_strategy, PushModelStrategy):
+            for follower in user.followers:
+                follower.feed.cached_tweets.insert(0, tweet)
+                if len(follower.feed.cached_tweets) &gt; 100:
+                    follower.feed.cached_tweets.pop()
+        return tweet
+
+    def follow(self, follower_id, followee_id):
+        f = self.users[follower_id]
+        ft = self.users[followee_id]
+        f.following.add(ft)
+        ft.followers.add(f)
+
+    def get_feed(self, user_id, limit=20):
+        return self.feed_strategy.get_feed(self.users[user_id], limit)</code></pre>
+<h3>关键设计点</h3>
+<h4>1. Pull vs Push vs Hybrid</h4>
+<p>参考 System Design Twitter。<strong>Strategy pattern</strong> 让 service 切换。</p>
+<h4>2. 数据集中 vs 分布</h4>
+<p>LLD focus on objects + relationships，不深入 storage。但要注意 <strong>不要把所有 tweet 放 User 类里</strong> —— 用单独 dict + reference。</p>
+<h4>3. Lazy loading</h4>
+<p>Tweet detail（media URL, likes count）lazy load。Don't preload everything。</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ User 类 own all tweets → memory model 错； ❌ Followers / Following 互相 reference → cycle，hard for serialization。用 ID 而非 object reference； ❌ 不用 Strategy → feed algorithm hardcode； ❌ 不用 Observer → coupling tight； ❌ Composite media 不抽象 → 新 media type 改 Tweet 类。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Twitter LLD = <strong>User / Tweet / NewsFeed entities + Strategy (feed) + Observer (notif) + Factory (validation)</strong>。展示 design pattern 熟练度。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何实现 search？" → ES integration + tweet indexing；"Reply tree 深嵌套？" → parent_id pointer + Tree traversal；"Media moderation？" → 加 moderation service queue，async processing；"如何 unit test？" → mock observers + inject strategy。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Google</strong> · Senior</div>
+  <div>Design twitter LLD for follow, unfollow, getNewsFeed and postTweet</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">How is the question's difficulty compare to leetcode 355. Design Twitter?</div><div class="comment">This is not DSA topic, it comes under System Design, a differengt subject.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmgiasw5h00ab08adl0dwdgqg.html">← Design an ANN index system</a>
+    <a href="cmbskxz3y004n07adimbogre1.html">Unix Cd Command with Symbolic Link Resolution →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

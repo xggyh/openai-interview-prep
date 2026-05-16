@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Netflix/Video Streaming Platform · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design Netflix/Video Streaming Platform</div>
+  <h1>Design Netflix/Video Streaming Platform</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/video-streaming-platform/cm4szxbhv0033w579rjh2r8j8" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Manager · 📋 1 · 🕒 Early September, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a video streaming platform like Netflix that supports video playback across multiple devices (mobile, web, smart TVs) with seamless resume functionality, subscription management, personalized recommendations, and content upload capabilities.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Netflix / Video Streaming Platform</strong>：videos 上传 → encode 多分辨率 → CDN 分发 → ABR 客户端播放。亿用户级。</p>
+<p>参考 [[cm6wu2x3y0000356pl299toa0]] (YouTube) - 整体框架同。这里 angle 是<strong>长尾内容 + 个性化推荐</strong>而非 UGC scale。</p>
+<h3>与 YouTube 区别</h3>
+<p>| 维度 | Netflix | YouTube | |---|---|---| | 内容 | 自制 + licensed (~10k titles) | UGC (billions) | | Upload 频率 | 慢 / 高质 | 高频 / 杂 | | Encoding | 顶级（4K HDR per-title optimization） | Mass scale fast encode | | 推荐 | 重 personalization (CF + content) | recency + engagement | | 离线 | downloads | 大 limit | | Live | 少 | 大 |</p>
+<h3>核心组件</h3>
+<h4>1. Per-title encoding</h4>
+<p>Netflix 著名"per-title encoding" —— 不是固定 bitrate ladder。Action movie 复杂场景 high bitrate；卡通 low bitrate 也 OK。每 title encode 时 optimize 参数。</p>
+<p><strong>Encoding pipeline</strong>:</p>
+<ul><li>Master ingest → multi-pass analysis</li><li>决定 ladder (e.g. 1080p needs 5 Mbps for this title vs 8 Mbps for another)</li><li>Encode N ladders × M codecs (H.264, H.265, AV1)</li><li>QC + 自动 quality scoring</li><li>推 CDN</li></ul>
+<h4>2. Adaptive Bitrate (ABR)</h4>
+<p>参考 YouTube。Client measure bandwidth → select bitrate variant per chunk。</p>
+<p>Netflix 用 <strong>Dynamic Optimizer</strong> —— 不只看 bandwidth，还估 device screen size + quality preference (some user 偏 mobile data 省)。</p>
+<h4>3. CDN 多层</h4>
+<p>Netflix 自建 OpenConnect Appliance：装在 ISP 数据中心 → 内容从 ISP 内部 deliver，bypass internet backbone。</p>
+<p>每 ISP 一台 appliance 装 popular titles cache。冷内容 fall back 中心 CDN。</p>
+<h4>4. 推荐系统</h4>
+<p>两阶段：</p>
+<ul><li><strong>Candidate</strong>：collaborative filtering (similar users watch what) + content-based (genre/cast/director similarity)</li><li><strong>Ranking</strong>：DNN scoring per user</li></ul>
+<p>Netflix 著名"row-based" UI：homepage 是 N rows，每 row 是一个 theme（"Continue Watching", "Action Thrillers"）。Row selection + within-row ordering 都 personalized。</p>
+<h4>5. A/B testing</h4>
+<p>Netflix everything is A/B tested:</p>
+<ul><li>Thumbnail (per-show 不同 user 看不同 thumbnail)</li><li>Row order</li><li>Autoplay behavior</li><li>New UI</li></ul>
+<p>Massive A/B framework underlying。</p>
+<h4>6. 离线下载</h4>
+<p>下载 = encode 一份特殊格式 (DRM wrap + offline-friendly)，client 缓存 SD card / local。播放时 license server verify。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Encoding | Per-title optimized | Fixed ladder：浪费 | | CDN | OpenConnect (ISP-local) | Generic CDN：高 backbone cost | | 推荐 | 重 personalization | Top trending：低 retention | | DRM | Widevine / FairPlay | None：被盗 |</p>
+<h3>关键 metric</h3>
+<ul><li>Bits per pixel per second</li><li>Stall rate (re-buffering occurrences)</li><li>Time-to-first-frame</li><li>Hours watched per user</li><li>Subscription retention</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>Netflix vs YouTube：<strong>前者重 quality + personalization + CDN penetration，后者重 scale + speed</strong>。Per-title encoding + OpenConnect 是 Netflix unique。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Live streaming on Netflix（boxing match）？" → 单独 pipeline，sub-second latency CDN。"如何防止 password sharing？" → device fingerprint + sometimes-IP-checks；2023 enforcement。"4K HDR 增加 storage？" → 但 OpenConnect cache 大部分 popular 内容。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (58 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>HubSpot</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>HubSpot</strong> · Staff</div>
+  <div>More emphasis on homepage personalization</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>MongoDB</strong> · Manager</div>
+  <div>Asked to implement Netflix. The interviewer focused a lot on how the large movie files were stored rather than on the streaming delivery. Very open ended problem, hard to cover it all in 40m.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>video streaming system where should be able to watch videos, search videos, resumable play from where it stopped the last time, personalized recommendations</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design Netflix/Video Streaming Platform. Users can search and watch. Uploading and transcoding videos, distributing to CDNs, caching, etc is in scope</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>MongoDB</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Emphasis on the video watch metrics (watch duration, views)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Design Netflix supporting streaming on different devices. Video playback from exact timestamp across devices. · Recommendation engine. · Subscription model.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Asked to Design Netflix Feed and Video Playback. Follow ups - Video Manifest contents,</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Read-only with fixed amount of content but with ON/OFF subscription and recommendations list of movies/shows.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Let's design the video streaming service Netflix, requirements - · 1) Video streaming · 2) Subscription model · 3) Multiple clients (Mobile, Smart TVs, Web) · 4) Can start/resume on any client · 5) Recommendations</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>Asked to design both upload and the recommendations page</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2024 · <strong>HubSpot</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2021 · <strong>MongoDB</strong> · Manager</div>
+  <div>Company - Fynd · Round - 2, 3 · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Do you have excalidraw that you used or any info you used to design the system?</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5ya8aho0036rfqrlt1bib5t.html">← Tell me about a time when you had to make tradeoffs between quality and cost.</a>
+    <a href="cm5eguhah03va838ozuanzsde.html">Leetcode 2408. Design SQL →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design an Identity and Access Management system for AI agents · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design an Identity and Access Management system for AI agents</div>
+  <h1>Design an Identity and Access Management system for AI agents</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/ai-agent-iam/cmgsd52f200gi07ad5f7knnsk" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Mid October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design an IAM system for a cloud provider that allows customers and enterprises to create and manage multiple AI agents with proper access controls and permissions.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Identity and Access Management (IAM) system for AI agents</strong>：管理 AI agent（LLM-powered automated workers）的 identity + 访问权限。AI agent 调用 internal APIs / 外部 service，需 secure auth + audit。</p>
+<p>OpenAI / Anthropic / Google 都需要。新兴 problem。</p>
+<h3>需求</h3>
+<ul><li>每 agent 有 unique identity</li><li>细粒度权限（什么 API 可访问，什么 data 可读）</li><li>Time-bounded credentials（避免永久暴露）</li><li>Full audit log</li><li>Cross-org agent federation</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   User / Org
+       │ create agent + policy
+       ▼
+  ┌──────────────────┐
+  │ Agent Identity   │  → assign agent_id, attach IAM policy
+  │ Service          │
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Token Issuer     │  STS-like, issue short-lived JWT
+  │ (per agent run)  │
+  └──────┬───────────┘
+         │
+   Agent runtime
+         │ call with token
+         ▼
+  ┌──────────────────┐
+  │ Resource API     │  → policy check
+  └──────┬───────────┘
+         │ audit
+         ▼
+  ┌──────────────────┐
+  │ Audit Log        │  immutable, append-only
+  └──────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Agent identity</h4>
+<p>每 agent 一个 stable identity：</p>
+<ul><li><code>agent_id</code> UUID</li><li>Owner (user / org)</li><li>Type (<code>code-assistant</code> / <code>customer-support</code> / <code>research</code>)</li><li>Creator's role 决定 max permission scope</li></ul>
+<h4>2. Policy 设计</h4>
+<p>IAM policy JSON（类 AWS IAM）：</p>
+<pre class="language-json"><code class="language-json">{
+  "agent_id": "...",
+  "policies": [
+    {"action": "read", "resource": "code/repo:foo", "effect": "allow"},
+    {"action": "write", "resource": "*", "effect": "deny"},
+    {"action": "call", "resource": "tool:web-search", "effect": "allow",
+     "conditions": {"max_calls_per_min": 30}}
+  ]
+}</code></pre>
+<h4>3. Token lifecycle</h4>
+<p>每 agent run / session 颁发 short-lived JWT (15 min):</p>
+<pre class="language-plaintext"><code class="language-plaintext">agent invocation → STS issues JWT (claims: agent_id, policies summary, exp)
+agent stores in env → use in API calls
+expired → refresh via refresh token (also bounded)</code></pre>
+<p>Long-running agent run → 周期 refresh。</p>
+<h4>4. Resource server auth check</h4>
+<pre class="language-python"><code class="language-python">@require_agent_auth
+def api_handler(request):
+    token = parse_jwt(request.headers['Authorization'])
+    if not policy_engine.allows(token.agent_id, action='read', resource=...):
+        raise Forbidden
+    # ... handle
+    audit.log(agent_id=token.agent_id, action=..., resource=..., result='allowed')</code></pre>
+<p>Policy engine = OPA (Open Policy Agent) or custom Rego-like。</p>
+<h4>5. Rate limiting per agent</h4>
+<p>防止 agent runaway 调用：per-agent QPS cap, daily cost cap. 超额 → token revoke + alert owner。</p>
+<h4>6. Audit log</h4>
+<p>每 agent action 写 immutable log:</p>
+<ul><li>Who (agent_id, owner)</li><li>What (action + resource + parameters)</li><li>When (timestamp)</li><li>Result (allowed / denied)</li><li>Cost ($$/tokens used)</li></ul>
+<p>Append-only Spanner / S3 + WORM。Compliance + forensics。</p>
+<h4>7. Agent-to-agent delegation</h4>
+<p>Agent A 调用 agent B（multi-agent system）：A 把自己 token delegated to B，B 继承 A's scope <strong>intersect</strong> B's policy。Prevent privilege escalation。</p>
+<h4>8. Revocation</h4>
+<p>Owner 可立即 revoke agent。Resource server 每次 verify token 时 check revocation list (Redis cached)。</p>
+<h4>9. Cross-org federation</h4>
+<p>Agent 跨 org 调用：OAuth-like consent flow，owner org confirm。Token claim 含 source org + target org。</p>
+<h3>关键安全考虑</h3>
+<ul><li><strong>No long-lived secrets</strong> in agent code</li><li><strong>Per-invocation tokens</strong> not per-agent</li><li><strong>Policy review</strong> 强制 human approval for sensitive permissions</li><li><strong>Anomaly detection</strong> on agent behavior (突然调用 different APIs)</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Static API key per agent → 泄漏永久； ❌ 不 audit → forensics 时无线索； ❌ Token lifetime 太长 → 攻击窗口大； ❌ Multi-agent delegation 不 intersect policy → privilege escalation； ❌ Rate limit only at API → agent 内部死循环消耗自己 budget。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Short-lived per-invocation JWT</strong> + STS；(2) <strong>OPA-style policy + audit log</strong>；(3) <strong>Delegation with intersection</strong> 防 privilege escalation。本质是 AWS IAM 应用到 AI agent。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Agent 在 sandbox 里跑 untrusted code？" → 加 process sandboxing (Firecracker)；"Cost attribution per agent？" → 每 token / API call 记 cost + bill owner；"How to deprecate agent？" → revoke + grace period notice。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Build an Identity and Access Management system for AI agents in a cloud provider with customers and enterprises being able to create N ai agents. Your team works for a big cloud provider · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmgs26zx800vx08ad6f8ncnxh.html">← Design a global VM monitoring system</a>
+    <a href="cmbskz7ck004r07ad6f1jxlni.html">Resumable Iterator →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design an ANN index system · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design an ANN index system</div>
+  <h1>Design an ANN index system</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/vector-search-index/cmgiasw5h00ab08adl0dwdgqg" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior Manager · 📋 1 · 🕒 Early October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that can efficiently retrieve the IDs of the most similar ~50 vectors to a given query vector from a dataset of ~10 billion vectors, supporting high-throughput read and write operations with approximate nearest neighbor search capabilities.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>ANN Index System</strong>：Approximate Nearest Neighbor search 系统。给 query vector 找 top-K nearest from 100M-10B 向量。向量搜索引擎核心组件。</p>
+<p>参考 [[cmikmkva406q908adb5780xku]] (photo search) 提到 ANN 概念。这里 deep dive ANN 系统本身。</p>
+<h3>需求</h3>
+<ul><li>1B+ vectors，每 768-3072 dim</li><li>Query latency P99 &lt; 100ms</li><li>Recall &gt;= 95% (vs exact)</li><li>Online ingest (新 vector 实时加入)</li><li>Filter (metadata)</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Vectors + metadata
+       │ ingest
+       ▼
+  ┌──────────────┐
+  │ Indexer      │  build / update index
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Vector Index │  Sharded HNSW / IVF / ScaNN
+  │ (sharded)    │
+  └──────┬───────┘
+         │
+   Query gateway routes
+         │
+         ▼
+  ┌──────────────────┐
+  │ Search Nodes     │  query each shard，merge top-K
+  └──────────────────┘</div>
+<h3>核心算法</h3>
+<h4>HNSW (Hierarchical Navigable Small World)</h4>
+<p>Graph-based。Build：每个 vector add 时连接 M nearest neighbors at each layer。Query：从顶层 entry point 贪心走，下沉到底层。</p>
+<ul><li>优势：state-of-art recall / latency trade-off</li><li>缺点：内存大（~1.5x vector size for graph）</li></ul>
+<h4>IVF (Inverted File)</h4>
+<p>K-means cluster vectors → 每 query 只搜 nearest clusters。</p>
+<ul><li>优势：低内存，scale 到亿级</li><li>缺点：edge of cluster recall 差</li></ul>
+<h4>IVF-PQ (Product Quantization)</h4>
+<p>IVF + 把 vector compress 到 256 bits (PQ codes)。</p>
+<ul><li>优势：能 1B vectors fit 在 100GB RAM</li><li>缺点：精度损失</li></ul>
+<h4>ScaNN (Google)</h4>
+<p>IVF-PQ + anisotropic quantization (优化 high-relevance vector 精度)。</p>
+<h3>系统设计</h3>
+<h4>1. Sharding</h4>
+<p>1B vectors / shard 100M = 10 shards。Sharding by:</p>
+<ul><li><strong>Random hash</strong>：均衡，但每 query 都要 fan-out 所有 shard</li><li><strong>Cluster-based</strong>：相近 vector 同 shard，query 只去几个 shard。复杂但 fan-out 少。</li></ul>
+<h4>2. Replication</h4>
+<p>每 shard 3 replicas。Read 任一 replica，write 同步所有。</p>
+<h4>3. Indexing pipeline</h4>
+<p>新 vector 到来：</p>
+<ul><li>Direct insert into HNSW（graph build incrementally）</li><li>OR：append to "delta" 索引（flat list），定期 merge into main HNSW (减少 build cost)</li></ul>
+<h4>4. Filter</h4>
+<p>混合搜索（vector + metadata）：</p>
+<p><strong>Pre-filter</strong>：先按 metadata 缩 candidate (<code>WHERE category=X</code>)，再 brute force / ANN candidate set。</p>
+<ul><li>适合 selective filter (small candidate)</li></ul>
+<p><strong>Post-filter</strong>：ANN top-K' (K' &gt; K) → filter → return top-K</p>
+<ul><li>适合 broad filter</li></ul>
+<p>Hybrid：判断 filter selectivity 选 strategy。</p>
+<h4>5. 多向量（multi-vector）</h4>
+<p>某些 query 有多 vector（e.g. ColBERT late interaction）。Search by max sim across query vectors。Index支持 multi-vector entity（per-entity 多个 vector）。</p>
+<h4>6. 版本化</h4>
+<p>Embedding model 升级 → 老 vector incompatible。Index 支持 multi-version：v1 主，v2 后台 backfill，cutover 后 deprecate v1。</p>
+<h4>7. 监控</h4>
+<ul><li>Recall@K：周期 sample queries with ground truth 验证</li><li>Latency P50/P99</li><li>QPS / shard utilization</li></ul>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Algorithm | HNSW for accuracy, IVF-PQ for scale | exact KNN：O(N) | | Shard | Cluster-based for low fanout | Random：always fanout | | Filter | Hybrid pre/post | One only：suboptimal | | Storage | RAM | Disk：latency 高 |</p>
+<h3>容量估算</h3>
+<ul><li>1B × 768 dim × 4 bytes (fp32) = 3 TB raw</li><li>HNSW graph ~50% overhead → 4.5 TB total → distribute 50 nodes × 100GB RAM each</li><li>1k QPS / shard / replica → 30 shards × 3 replica = 90 nodes total</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Brute force search for 1B → 不可能 fit latency； ❌ Pre-filter for broad filter → 缓存破坏 ANN locality； ❌ 不 normalize vector → cosine sim 错； ❌ 不 monitor recall → silent quality degrade； ❌ Index 不版本化 → model upgrade 时灾难。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>HNSW for accuracy</strong> / <strong>IVF-PQ for scale</strong>；(2) <strong>Hybrid pre/post filter</strong>；(3) <strong>Sharding + replication for QPS</strong>。Vector DB 是新 hot DB category（Pinecone, Weaviate, Milvus）。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 delete vector？" → HNSW 不易，标记 deleted + periodic rebuild；"GPU 加速？" → GPU-friendly index (FAISS-GPU)；"Hybrid sparse + dense search？" → BM25 + dense vector → rerank。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Google</strong> · Senior Manager</div>
+  <div>Design a system for retrieving the IDs of the most similar ~50 vectors (by e.g. Euclidean distance) to a given query vector from a dataset of ~10B (~10^10) vectors.  Each vector is an ordered list of 100 floats and has a corresponding unique ID.  The dataset receives ~10K requests / second to overwrite a vector with a new one and ~10K query (read) requests per second.  Vectors are never inserted or deleted, only overwritten (i.e. IDs are never inserted or removed). · Community Solutions · No community solutions yet · Be the first to share your solution to this question and get feedback from AI and your peers! · Add Solution · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02v0838oji4e95ib.html">← Leetcode 1102. Path With Maximum Minimum Value</a>
+    <a href="cmgfco6rf05in08adz2rut2nw.html">Design Twitter →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

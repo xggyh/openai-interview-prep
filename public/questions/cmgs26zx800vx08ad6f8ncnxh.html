@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a global VM monitoring system · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a global VM monitoring system</div>
+  <h1>Design a global VM monitoring system</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/global-vm-monitor/cmgs26zx800vx08ad6f8ncnxh" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior · 📋 1 · 🕒 Mid October, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that allows users to view and monitor their virtual machines across multiple global regions, displaying key information such as node name, region, and health status.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Global VM Monitoring System</strong>：监控全球数据中心 100k+ VMs 的健康（CPU / mem / disk / network / 服务状态）。Hyperscale cloud 必备。</p>
+<p>类似 [[cm6jwhimp0093dar9n0eo4lvt]] (Server Health Monitoring) 但更大规模 + 跨 region。</p>
+<h3>需求</h3>
+<ul><li>100k+ VMs across multiple regions/DCs</li><li>10 sec metric resolution</li><li>Real-time anomaly alerts &lt; 1 min</li><li>Historical trend 1 year+</li><li>Multi-tenant (per customer)</li></ul>
+<h3>Key differences vs single-region server monitoring</h3>
+<h4>1. 跨 region 数据收集</h4>
+<p>每 region 独立 collector + TSDB。Global aggregation via federation。</p>
+<ul><li>Local: low-latency, region-isolation</li><li>Global: cross-region view via Thanos / Cortex</li></ul>
+<h4>2. Multi-tenant isolation</h4>
+<p>每 customer / VM tag 自己 visibility。RBAC:</p>
+<ul><li>Customer A 只看 own VM metrics</li><li>Cloud operator 看 all</li><li>Per-tag dashboard, per-tag alert rules</li></ul>
+<h4>3. Auto-discovery</h4>
+<p>VMs 启动 / 终止动态。Monitoring agent 自动 register / deregister。Service discovery 用 K8s service or cloud API。</p>
+<h4>4. VM-specific metrics</h4>
+<p>不只是 generic CPU / mem，还有：</p>
+<ul><li>Hypervisor metrics (vCPU steal time，noisy neighbor detect)</li><li>Guest OS metrics (process list, file system)</li><li>Network: per-VM bandwidth, packet loss</li><li>Cloud-specific: instance type, AZ, billing tier</li></ul>
+<h4>5. Anomaly detection</h4>
+<p>100k VM × 30 metrics × 24/7 → 不可能 manual baseline。ML:</p>
+<ul><li>Per-VM baseline (1 周训练 + 滑动更新)</li><li>Group baseline (instance type 集群)</li><li>Anomaly = current vs baseline &gt; 3σ</li></ul>
+<h4>6. Capacity planning</h4>
+<p>不仅 monitoring，还 forecast：</p>
+<ul><li>VM 增长趋势</li><li>哪些 region capacity 紧张</li><li>推动 capacity allocation 决策</li></ul>
+<h4>7. Cost monitoring</h4>
+<p>跨 region cost dashboard。Per-VM hourly cost based on instance type × region。Detect cost waste（idle VMs, oversized instances）。</p>
+<h4>8. Failure escalation</h4>
+<p>层级 escalation:</p>
+<ol><li>Auto-remediation (restart VM, scale up)</li><li>Auto-alert on-call engineer</li><li>Auto-page senior on-call after 15 min</li><li>Customer notification for major outage</li></ol>
+<h3>架构</h3>
+<p>参考 [[cm6jwhimp0093dar9n0eo4lvt]] 整体架构 + 加：</p>
+<ul><li>Per-region collector + TSDB cluster</li><li>Global federation layer (Thanos)</li><li>Multi-tenant access layer</li><li>ML anomaly engine</li><li>Auto-remediation engine</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Single global TSDB → 跨洋延迟； ❌ 不 RBAC → customer A 看到 B 的 metrics； ❌ Static threshold → ML 异常 missing； ❌ Capacity planning 只看现状 → forecasting 缺； ❌ Auto-remediation 不限制 → 错误 fix 放大问题。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>单 region monitoring + (federation, multi-tenancy, auto-discovery, ML anomaly, auto-remediation) = enterprise hyperscale monitoring。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 detect noisy neighbor on hypervisor？" → 监控 steal time + ML correlation per-VM；"customer 自定义 metric？" → user-pushed metric endpoint + namespace；"VM live migration 时如何 maintain monitoring？" → metric stream resume by VM UUID not by IP。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Google</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">Both require near real-time fanout of frequent updates to many clients, with considerations for WebSockets/SSE, batching, and filtering by subscription context (tenant/stream).</div><div class="comment">Driver location updates resemble VM heartbeats: high-frequency writes, last-write-wins semantics, and a read path that needs fast, fresh state with spatial/attribute filters.</div><div class="comment">Read Practice Ad Click Aggregator</div><div class="comment">High-velocity event ingestion, deduplication, and aggregate computation mirror monitoring pipelines that must process and summarize signals reliably at scale.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmgsdjdqq00r707adsq128i76.html">← Design an Elevator Control System</a>
+    <a href="cmgsd52f200gi07ad5f7knnsk.html">Design an Identity and Access Management system for AI agents →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

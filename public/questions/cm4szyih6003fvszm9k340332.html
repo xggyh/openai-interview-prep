@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design Wikipedia Crawler · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design Wikipedia Crawler</div>
+  <h1>Design Wikipedia Crawler</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/wikipedia-crawler/cm4szyih6003fvszm9k340332" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Manager · 📋 1 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a distributed web crawler system that can crawl and store Wikipedia pages at scale using multiple machines or edge devices, with focus on coordination, deduplication, and efficient resource utilization.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Wikipedia Crawler</strong>：专门爬 Wikipedia（vs general web crawler）。规模小、结构化更强。</p>
+<p>与 [[cm80gligm049vtvyjklc6gxdw]] (general Web Crawler) 共享 framework，但有特殊点：</p>
+<h3>Wikipedia 特殊性</h3>
+<ol><li><strong>Single host</strong>：所有 page 在 wikipedia.org → politeness 简化但 throughput 限制大</li><li><strong>Structured</strong>：有标准 URL pattern <code>/wiki/Topic_Name</code>，有 sitemap，有 API</li><li><strong>Frequently updated</strong>：每秒数千 edits → 需要持续 re-crawl</li><li><strong>多语言</strong>：300+ 语言子域名</li><li><strong>已有 export</strong>：dumps.wikimedia.org 提供完整 dump</li></ol>
+<h3>推荐策略</h3>
+<h4>Option A：用 dumps（推荐）</h4>
+<p>Wikipedia 每 2 周发布完整 dump（~80 GB compressed XML for English）。下载 + 解析。</p>
+<ul><li>优点：单次下载 vs 几百万 HTTP request；正式 ToS 鼓励</li><li>缺点：lag 2 周</li></ul>
+<h4>Option B：爬 + dump 混合</h4>
+<p>Initial: 用最新 dump 加载所有 page。 持续：用 Wikipedia EventStream API 订阅 real-time edits → incremental update。</p>
+<h4>Option C：纯爬（不推荐）</h4>
+<p>爬 ~6M page × 50 KB = 300 GB。HTTP rate limit (Wikipedia 容忍 ~200 req/s for bots)。需 17 小时不停爬，但<strong>违反 ToS</strong>（要求用 API or dump）。</p>
+<h3>整体架构（Option B 最推荐）</h3>
+<div class="ascii-diagram">   Initial Load
+       │
+       ▼
+   ┌──────────────┐
+   │ Dump Loader  │  parse XML.bz2 → extract page records
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Page Parser  │  Wikitext → plain text / structured fields
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Storage      │  Postgres + ES for search
+   └──────┬───────┘
+
+   Continuous Updates
+        │
+        ▼
+   ┌──────────────┐
+   │ EventStream  │  ← https://stream.wikimedia.org
+   │ subscriber   │     SSE / WebSocket of edits
+   └──────┬───────┘
+          │ revision event
+          ▼
+   ┌──────────────┐
+   │ API Fetcher  │  → fetch page via Action API
+   └──────┬───────┘    /w/api.php?action=parse&amp;page=...
+          ▼
+   Update Storage</div>
+<h3>核心组件</h3>
+<h4>1. Wikipedia EventStreams</h4>
+<pre class="language-plaintext"><code class="language-plaintext">GET https://stream.wikimedia.org/v2/stream/recentchange
+SSE: 每个 edit event JSON 推送</code></pre>
+<p>订阅后 real-time 收到所有 wiki 的 edits。Filter by wiki (enwiki / zhwiki / etc.)。</p>
+<h4>2. Wikitext parsing</h4>
+<p>Wikipedia 用 MediaWiki Wikitext，不是 plain HTML。需要 parser：</p>
+<ul><li>提取 plain text（剥 link / template / table syntax）</li><li>解析 infobox（structured 数据）</li><li>解析 categories</li><li>解析 references / citations</li></ul>
+<p>工具：<a href="https://github.com/earwig/mwparserfromhell">mwparserfromhell</a>（Python）。</p>
+<h4>3. 页面 schema</h4>
+<pre class="language-sql"><code class="language-sql">CREATE TABLE pages (
+  page_id      BIGINT PRIMARY KEY,
+  title        TEXT,
+  language     TEXT,
+  revision_id  BIGINT,             -- 最新 revision
+  content_raw  TEXT,                -- wikitext
+  content_plain TEXT,               -- parsed plain text
+  categories   TEXT[],
+  infobox      JSONB,
+  links        TEXT[],
+  updated_at   TIMESTAMPTZ
+);</code></pre>
+<h4>4. Revision history</h4>
+<p>每 page 可能想保留 N 个历史 revision（diff 分析 / dispute resolution）。单独表 + foreign key。</p>
+<h4>5. Multilingual</h4>
+<p>按 (page_id, language) 复合 key 或 partition。Wikipedia 同 topic 不同语言不一定 ID 一致 (Wikidata Q-ID 连接)。</p>
+<h4>6. 搜索</h4>
+<p>ES 全文索引 plain text + title boost + category filter。Wikipedia 自己用 CirrusSearch (ES based)。</p>
+<h4>7. Rate limit</h4>
+<p>即使用 API：</p>
+<ul><li>API 限 ~200 req/s for bots (User-Agent 必须含 contact info)</li><li>大量并发用 batch API（<code>titles=A|B|C</code>，一次 50 page）</li></ul>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Initial | Dump | Crawl：浪费 | | Update | EventStream + API | Polling sitemap：lag | | Parser | mwparserfromhell | Custom：reinvent | | Schema | Per-page record + history | Append-only：query 麻烦 |</p>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 HTTP 爬 page → ToS 违反； ❌ 用 HTML parsing → wikitext source 才是正版； ❌ 不订阅 EventStream → 数据 lag； ❌ 不 separate language → 数据混； ❌ 不记 revision history → dispute 无法 trace。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Wikipedia 不是普通 web。Use <strong>dumps + API + EventStream</strong> instead of raw HTML crawl。Respect ToS + provide User-Agent.</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"解析 Citations 做 knowledge graph？" → mwparserfromhell 提取 + entity linking；"如何 detect vandalism / hoax？" → ML on edit patterns；"实时 search index update？" → ES index alias rotation；"如何 contribute back / verify 爬取数据正确？" → cross-check against Wikipedia search API。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (36 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>G</strong> · glean</div>
+  <div>Senior</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>You have 10k machines and no other infra like S3 or Redis. You need to download 1B wikipedia pages and need to minimise network traffic.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Lyft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Lyft</strong> · Manager</div>
+  <div>Web Crawler</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Lyft</strong> · Staff</div>
+  <div>A system that can use edge devices to archive wikipedia</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Design a Wikipedia Web Crawler if 10,000 users are willing to help us with the crawling process.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Lyft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Hacker who hacked 10^9 computers to download pages from wikipedia.com</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Design a system to crawl and store Wikipedia pages at scale</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Specifically asked to design a "system to scrape a particular website" where the scraping was done by mobile clients and the coordination between the scraping clients was done by a cloud service, which also stored the results.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>They specifically asked me to design the web scraping solution without using any cloud provider. So I was to use some 1,000's servers and discuss how to handle exactly 1x processing for each URL and also how to scale out using the fleet of servers I was given.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>Hacker who hacked 10^9 computers to download pages from wikipedia.com</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>Design a web Crawler starting with one seed URL. · Latency is not a big deal. · High availability. High parallelization</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2024 · <strong>Meta</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (4 条)</h2>
+  <div class="comment">One of the Red Flags to avoid Single centralized queue or coordinator for all URLs</div><div class="comment">Wikipedia has around 65M pages, why can't a stateless central service manage that much load? It can horizontally scale as it is stateless, the real issue is DB, if each crawler crawls a page every 5s, that's 1 page/5s for 10K crawlers = 2000 pages/ if each page has 100 links = 200K new urls/s</div><div class="comment">DB has to support writing these many URLs, DB can be sharded but this data is also highly skewed, once a URL has been identified, going forward new urls are going to be very few, and pages don't change that much and if we can cache 64M urls and last fetched timestamp in memory our subsequent writes will be much lower. I see upserting URLs to DB as a bottleneck but DB can be sharded or data can be cached and with batching even DB upserts can be fast.</div><div class="comment">The central service is not a optimal if you have billions of urls, but even then DB will be the bottleneck. M y question is what is the anti-pattern with having a stateless central service, and not considering queues because edge devices should not have access to queue directly, edge devices should also not have sharding logic embedded in them, so we do need a gateway/LB to route to any queue.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm80gligm049vtvyjklc6gxdw.html">← Design a Web Crawler</a>
+    <a href="cm5eguhac02kr838olwvfh9me.html">Leetcode 733. Flood Fill →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

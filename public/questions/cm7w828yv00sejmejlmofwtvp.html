@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Job Scheduler · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Job Scheduler</div>
+  <h1>Design a Job Scheduler</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/job-scheduler-cron-history/cm7w828yv00sejmejlmofwtvp" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior Manager · 📋 1 · 🕒 Mid August, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a distributed job scheduler that can handle high-throughput job processing (10,000+ jobs per second), support both scheduled (cron-based) and ad-hoc job execution, include retry mechanisms for failed jobs, and maintain execution history for up to one year.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Job Scheduler</strong>：accept job 定义（func + schedule） → 按时执行 → handle failure / retry。如 cron at scale, Airflow, Kubernetes Jobs.</p>
+<h3>需求</h3>
+<ul><li>Cron-style + one-shot schedules</li><li>Million+ jobs</li><li>Distributed execution</li><li>Failure retry + alerting</li><li>Job dependencies (DAG)</li><li>Idempotency guarantee</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Job definition (API/UI)
+       │
+       ▼
+  ┌──────────────┐
+  │ Scheduler    │  parse cron, compute next fire times
+  │ Service      │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Schedule     │  upcoming-fire heap (next 1 hour)
+  │ Wheel/Heap   │
+  └──────┬───────┘
+         │ fire
+         ▼
+  ┌──────────────┐
+  │ Job Queue    │  Kafka / SQS
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Worker Pool  │  execute, retry on fail
+  └──────┬───────┘
+         │ done
+         ▼
+  ┌──────────────┐
+  │ Job Status   │  DB + audit
+  └──────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Schedule parsing</h4>
+<ul><li>Cron format: <code>0 9 * * 1</code> (Mondays at 9am)</li><li>Custom: every N hours, every Friday after 5pm</li><li>Use library: cronexpr / croniter</li></ul>
+<h4>2. Schedule wheel / heap</h4>
+<p>Min-heap of (next_fire_ts, job_id)。Scheduler:</p>
+<ul><li>Pop fired jobs → enqueue to job queue</li><li>Compute next fire time (cron) → push back</li></ul>
+<p>每秒 wake 一次，process expired heap entries。</p>
+<p>For million jobs: shard heap by hash(job_id) across multiple scheduler instances。每 instance own subset。</p>
+<h4>3. Distributed scheduler (leader-based)</h4>
+<p>Multiple scheduler instances 通过 Zookeeper / etcd leader 选举。Leader own job assignment。Non-leader hot standby。</p>
+<p>Or: partitioned ownership —— 每 instance own 一段 hash range（类似 Kafka consumer group）。</p>
+<h4>4. Job queue → workers</h4>
+<p>Worker pull job from queue → execute → ack。</p>
+<ul><li>Retry on fail (exponential backoff, max 3-5 retries)</li><li>Move to dead letter after max retry</li><li>Alert owner</li></ul>
+<h4>5. Job 执行模型</h4>
+<ul><li><strong>Direct call</strong>: simple HTTP / RPC call</li><li><strong>Container</strong>: spawn ephemeral container with code</li><li><strong>Lambda function</strong>: invoke serverless</li><li><strong>Workflow</strong>: trigger DAG of sub-jobs (Airflow-style)</li></ul>
+<h4>6. Idempotency</h4>
+<p>Job 可能被 fire 多次（network retry, scheduler failover）。每 firing 有 unique execution_id。Worker check：if execution_id already processed (look DB), skip。Side effects 用 idempotency key。</p>
+<h4>7. Dependencies (DAG)</h4>
+<p>Job B depends on A success → trigger only after A done。</p>
+<p>Implementation: store dependency edges。On job complete, check downstream jobs whose deps all done → enqueue。</p>
+<p>Airflow uses this model。</p>
+<h4>8. Resource limits</h4>
+<p>Per-tenant / per-job:</p>
+<ul><li>Max parallel concurrent runs</li><li>Max execution time (timeout)</li><li>CPU / memory quota</li></ul>
+<h4>9. Manual trigger / pause</h4>
+<p>Admin pause job (skip scheduling) / trigger now / re-run failed。</p>
+<h4>10. Audit + history</h4>
+<p>每 execution record: started_at, finished_at, status, output, error. Last N days searchable。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Schedule store | Heap / wheel | DB scan：慢 | | Distribution | Leader / shard ownership | Single instance：bottleneck | | Execution | Container / serverless | In-process：noisy neighbor | | Idempotency | execution_id + dedup | None：double execute |</p>
+<h3>容量估算</h3>
+<ul><li>1M jobs × avg 1 fire/hour = 277 firings/sec</li><li>Worker pool: avg job 30s → ~8000 workers</li><li>Storage: 1M × 10 history × 5KB = 50 GB</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 单 scheduler → single point of failure； ❌ Naïve heap polling per second × 1M jobs → CPU 爆； ❌ 不 idempotent → side effects 重复； ❌ Retry forever → 死循环； ❌ 不限 concurrent runs → 同 job 100 个并行 race。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Heap / time wheel + sharded ownership</strong>；(2) <strong>Queue + worker pool + idempotency</strong>；(3) <strong>DAG dependencies + retry policy</strong>。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 trigger by event (file uploaded → run job)？" → event-driven scheduler subscribe Kafka；"如何 graceful shutdown worker？" → SIGTERM → finish current job → die；"Cross-region job？" → 中心 scheduler 但执行在最近 region worker。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (102 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Robinhood</strong> · Senior</div>
+  <div>On the 2nd part of a coding interview. It was more of a discussion rather than a concrete design.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Airbnb</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Lyft</strong> · Manager</div>
+  <div>How to get job status · How to get instance status · Assume internal api’s are built to support job execution</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Snowflake</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Robinhood</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Palo Alto Networks</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Robinhood</strong> · Mid-level</div>
+  <div>Expectation seemed to be consistent with mid-level expectations outlined here.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>DoorDash</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Snowflake</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>DoorDash</strong> · Manager</div>
+  <div>Design a Job scheduler. Goal was to try avoid off the shelf tech like SQS and DDB.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Okta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Robinhood</strong> · Manager</div>
+  <div>DoorDash System Design</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>LinkedIn</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Robinhood</strong> · Senior</div>
+  <div>Asked in system design round for the company NextDoor</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Airbnb</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Robinhood</strong> · Manager</div>
+  <div>Design Job Scheduler with 10k jobs per hour for Amazon.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>LinkedIn</strong> · Staff</div>
+  <div>Scale is 100m transactions per day</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>NVIDIA</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Robinhood</strong> · Staff</div>
+  <div>screening</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Robinhood</strong> · Mid-level</div>
+  <div>Was asked this question but with the ability to edit tasks, the tasks themselves could be extremely long running as well like from few seconds to multiple weeks (which honestly stumped me because I have 0 idea how to approach this), and the tasks themselves weren't pre-defined - so it was hard to do idempotency checks on tasks. I don't think there is any good way to solve this variation in a 1 hour interview. I honestly think the interviewer was trying not to hire me.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>LinkedIn</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>DoorDash</strong> · Senior</div>
+  <div>Only focus on the scheduling logic and handling the load</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>DoorDash</strong> · Manager</div>
+  <div>I was asked to design a job scheduler with the exact same requirements as specified in the Hello Interview solution, for a phone screen.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  <div>From NextDoor</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>LinkedIn</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Lyft</strong> · Senior</div>
+  <div>Typical requirements and scale, added feature of timeouts and callbacks</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Lyft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>DoorDash</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>DoorDash</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>DoorDash</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Databricks</strong> · Senior</div>
+  <div>Design a distributed Job Scheduler</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>LinkedIn</strong> · Staff</div>
+  <div>LinkedIn</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Airbnb</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Snowflake</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Microsoft</strong> · Senior Manager</div>
+  <div>Design distributed jobs scheduler, same as what we have in HelloInterview site, only level up was, where job can be multi stage and you dont want to loose the progress if one job fails after completing few stages.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>LinkedIn</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>LinkedIn</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Netflix</strong> · Mid-level</div>
+  <div>Similar scheduling question in a different context</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Google</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Airbnb</strong> · Senior</div>
+  <div>- no DAG, just single job · - after HLD, we discussed how we would add functionlity for scheduled jobs (e.g. cron)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>DoorDash</strong> · Staff</div>
+  <div>Design a job scheduler that can handle 10,000 jobs per second. User should also be able to submit adhoc job runs</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Robinhood</strong> · Senior</div>
+  <div>Asked distributed job scheduler with a deep dive on how SQS allows worker nodes to de-duplicate jobs which allows the job scheduler to be totally stateless and can be run in active/active for high availability. I’m not totally convinced this is right but I moved to onsite anyway.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>DoorDash</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Robinhood</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>Was also given the following requirements: · Accept background jobs (e.g. video processing, email sending) · Jobs can come at very high throughput (millions/day or hour) · Process jobs asynchronously · Support retries on failure · Jobs are unordered (no strict ordering requirement)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Focus was more on API design</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Wise</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  <div>Lyft</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>LinkedIn</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  <div>Ask to design distributed job scheduler.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>LinkedIn</strong> · Staff</div>
+  <div>Stepped into the details of the workers state management. If using a coordinator to manage workers pull vs push to manage life cycle of workers. · Overall status management</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  <div>10k Job per second. · Execution History for upto 1 year.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Robinhood</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>LinkedIn</strong> · Staff</div>
+  <div>At Pinterest</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Robinhood</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Netflix</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  <div>As is</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>LinkedIn</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Robinhood</strong> · Senior</div>
+  <div>Design a distributed job scheduler for running jobs on a schedule.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Robinhood</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2024 · <strong>DoorDash</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2020 · <strong>Robinhood</strong> · Manager</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm69gjz7n020be7bzjsf6a663.html">← Design Google Docs</a>
+    <a href="cm5oehnrb0002436gh9b3uzx3.html">Design Yelp →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -10,6 +10,11 @@
         "level": "Mid-level-Staff, Manager-Senior Manager",
         "reportedUsers": 58,
         "lastAsked": "Mid May, 2026"
+      },
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid November, 2025"
       }
     }
   },
@@ -136,6 +141,11 @@
         "level": "Senior-Staff",
         "reportedUsers": 4,
         "lastAsked": "Late April, 2026"
+      },
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid February, 2026"
       }
     }
   },
@@ -388,6 +398,11 @@
         "level": "Senior",
         "reportedUsers": 2,
         "lastAsked": "Late December, 2025"
+      },
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2025"
       }
     }
   },
@@ -1653,6 +1668,1028 @@
         "level": "Mid-level",
         "reportedUsers": 1,
         "lastAsked": "Late December, 2024"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/large-model-distribution/cmkxbumw501pk08ad4wrda4pv",
+    "title": "Design a large model file distribution system",
+    "type": "System Design",
+    "description": "Design a system that efficiently distributes 500GB machine learning model files from an external repository to 1000 datacenter servers over a 10Gbps link, optimizing for minimal transfer time while ensuring each server receives a complete copy.",
+    "url": "https://www.hellointerview.com/community/questions/large-model-distribution/cmkxbumw501pk08ad4wrda4pv",
+    "companies": {
+      "Google": {
+        "level": "Senior, Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/work-conflict-perspectives/cmbhko677005iad09y02ykfyv",
+    "title": "Tell me about a conflict you had at work.",
+    "type": "Googlyness",
+    "description": "The interviewer focused on a conflict that comes from different perspectives or ideas on how to execute a certain task.",
+    "url": "https://www.hellointerview.com/community/questions/work-conflict-perspectives/cmbhko677005iad09y02ykfyv",
+    "companies": {
+      "Google": {
+        "level": "Junior-Senior",
+        "reportedUsers": 6,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/global-ip-blocking/cm9auesuf00ioad072gonjah8",
+    "title": "Design a Distributed Blocking/Denylist System",
+    "type": "System Design",
+    "description": "Design a distributed denylist system that blocks requests from specified entities (users, IP addresses, emails, etc.). The system should integrate with external APIs to fetch blocked entity lists, handle both IPv4 and IPv6 addresses where applicable, support region-specific blocking rules, and efficiently propagate updates across a global infrastructure. Requirements include high availability, low latency lookups, real-time updates across multiple nodes, and the ability to handle government-mandated blocking scenarios.",
+    "url": "https://www.hellointerview.com/community/questions/global-ip-blocking/cm9auesuf00ioad072gonjah8",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior Manager",
+        "reportedUsers": 45,
+        "lastAsked": "Mid April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/image-uploader-dedup/cm4t1rgrn005988ilm7ct8ma1",
+    "title": "Design an Image Uploader",
+    "type": "System Design",
+    "description": "Design a system for collecting Street View images from taxi-mounted cameras that can handle high-volume uploads, deduplication, and prepare images for privacy/quality processing.",
+    "url": "https://www.hellointerview.com/community/questions/image-uploader-dedup/cm4t1rgrn005988ilm7ct8ma1",
+    "companies": {
+      "Google": {
+        "level": "Senior, Manager",
+        "reportedUsers": 4,
+        "lastAsked": "Mid May, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/distributed-cache-system/cm6d9gnep03c46hpqrwc062ir",
+    "title": "Design a Distributed Cache System",
+    "type": "System Design",
+    "description": "Design a distributed caching system that can serve data with low latency across multiple geographic locations, handling cache misses, replication, and scaling to support billions of records.",
+    "url": "https://www.hellointerview.com/community/questions/distributed-cache-system/cm6d9gnep03c46hpqrwc062ir",
+    "companies": {
+      "Google": {
+        "level": "Mid-level, Staff, Manager-Senior Manager",
+        "reportedUsers": 12,
+        "lastAsked": "Mid April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/above-beyond-help/cm6jx0jmc0141ui4b2wfelwo3",
+    "title": "Describe going above and beyond to help someone",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/above-beyond-help/cm6jx0jmc0141ui4b2wfelwo3",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 6,
+        "lastAsked": "Early April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/manager-demands-situation/cm6jwzt5y00x3ui4bion7uzka",
+    "title": "Tell me about a time when your manager set reasonable demands. Follow up asked for a situation with unreasonable demands.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/manager-demands-situation/cm6jwzt5y00x3ui4bion7uzka",
+    "companies": {
+      "Google": {
+        "level": "Junior-Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/changing-requirements-project/cm5ehcf6e059h838op4fgiik2",
+    "title": "Tell me about a project where the requirements were not clear or kept changing. How did you adapt and maintain productivity?",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/changing-requirements-project/cm5ehcf6e059h838op4fgiik2",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Early April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/problem-analysis/cm5ya88my0029rfqrn93midsi",
+    "title": "Tell me about a problem you had to solve that required in-depth thought and analysis.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/problem-analysis/cm5ya88my0029rfqrn93midsi",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/google-slowest-query/cmdj4mw0801blad0810r3tfos",
+    "title": "Design a distributed system for getting the slowest query from Google search",
+    "type": "System Design",
+    "description": "Design a distributed system that can identify and retrieve the slowest performing query from Google's search infrastructure, with capabilities for both historical analysis (previous day) and real-time monitoring.",
+    "url": "https://www.hellointerview.com/community/questions/google-slowest-query/cmdj4mw0801blad0810r3tfos",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff, Manager",
+        "reportedUsers": 3,
+        "lastAsked": "Late April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/ticket-booking-system/cm4szwvht003pnqlrkhad2xjd",
+    "title": "Design a Ticket Booking System",
+    "type": "System Design",
+    "description": "Design a ticket booking system like Ticketmaster that handles high-traffic events, supports both seated and general admission tickets, and manages scenarios like flash sales with limited inventory and concurrent users.",
+    "url": "https://www.hellointerview.com/community/questions/ticket-booking-system/cm4szwvht003pnqlrkhad2xjd",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Staff",
+        "reportedUsers": 9,
+        "lastAsked": "Mid April, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/navigation-routing-traffic/cm6i9u0oh00rmjx73lr1pjtlu",
+    "title": "Design a Navigation/Mapping System",
+    "type": "System Design",
+    "description": "Design a navigation and mapping system that allows users to search for locations, get directions between two points, view real-time traffic information, and navigate with turn-by-turn guidance. The system should support multiple transportation modes (driving, walking, public transit) and provide route optimization based on current traffic conditions.",
+    "url": "https://www.hellointerview.com/community/questions/navigation-routing-traffic/cm6i9u0oh00rmjx73lr1pjtlu",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff, Manager",
+        "reportedUsers": 7,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/teammates-conflict-resolution/cm6jwyl1100p7ui4bkmhhy3rt",
+    "title": "Discuss a time when you had conflicting perspectives with teammates and how you handled it",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/teammates-conflict-resolution/cm6jwyl1100p7ui4bkmhhy3rt",
+    "companies": {
+      "Google": {
+        "level": "Junior, Staff",
+        "reportedUsers": 3,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/initiative-opportunity/cm5ya8dsz004rrfqrigawxzak",
+    "title": "Tell me about time when you were working on an initiative or goal and saw an opportunity to do something much bigger or better than the initial focus.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/initiative-opportunity/cm5ya8dsz004rrfqrigawxzak",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/problem-solving-approach/cm6zhccg1000h3b6q12uwmzhr",
+    "title": "Describe your approach to solving new and unfamiliar problems, including any strategies or methodologies you use.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/problem-solving-approach/cm6zhccg1000h3b6q12uwmzhr",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/rideshare-architecture/cm6u9yzg000y87oi9k1oi7qx8",
+    "title": "Design Uber",
+    "type": "System Design",
+    "description": "Design a ride-sharing service like Uber that allows users to request rides, matches them with nearby drivers, handles real-time tracking, and processes payments.",
+    "url": "https://www.hellointerview.com/community/questions/rideshare-architecture/cm6u9yzg000y87oi9k1oi7qx8",
+    "companies": {
+      "Google": {
+        "level": "Junior, Senior Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/team-skill-improvement/cm73nlsio0009426mlm9qyl1a",
+    "title": "Tell me how you helped someone in your team to get better at some task",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/team-skill-improvement/cm73nlsio0009426mlm9qyl1a",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/impactful-project/cm6jwzhtl00vlui4bkj7k4lcd",
+    "title": "Describe your most impactful project",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/impactful-project/cm6jwzhtl00vlui4bkj7k4lcd",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/server-health-monitor/cm6jwhimp0093dar9n0eo4lvt",
+    "title": "Design a Server Health Monitoring System",
+    "type": "System Design",
+    "description": "Design a distributed health monitoring system that can track the status and performance metrics of millions of services, detecting potential issues before they cause failures and providing real-time alerts to operators.",
+    "url": "https://www.hellointerview.com/community/questions/server-health-monitor/cm6jwhimp0093dar9n0eo4lvt",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff, Manager-Senior Manager",
+        "reportedUsers": 7,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/coworker-conflict-resolution/cm5ehcf6e0599838oop9wivfq",
+    "title": "Tell me about a time you had a conflict with a coworker. How did you resolve it?",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/coworker-conflict-resolution/cm5ehcf6e0599838oop9wivfq",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/overcome-setback-example/cm5ehcf6e059d838o2l2fhwy4",
+    "title": "Give an example of a situation where you had to overcome a significant setback or obstacle to achieve a goal",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/overcome-setback-example/cm5ehcf6e059d838o2l2fhwy4",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/perspectives-problem-solution/cm5ya8516000irfqrdurp0qmj",
+    "title": "Describe a time when you brought different perspectives together to solve a problem.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/perspectives-problem-solution/cm5ya8516000irfqrdurp0qmj",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/beyond-resume/cm6zh0pli00063b6qv9jqq5hv",
+    "title": "Tell me something about yourself I won't find on your resume",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/beyond-resume/cm6zh0pli00063b6qv9jqq5hv",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/management-experience/cmjezaddj02iv08ad5rm88mc7",
+    "title": "Tell me about your management experience",
+    "type": "People Management",
+    "description": "Describe your experience managing people and teams. Share specific examples of how you've led, motivated, or developed team members.",
+    "url": "https://www.hellointerview.com/community/questions/management-experience/cmjezaddj02iv08ad5rm88mc7",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/team-leadership-adaptation/cm5ehcf6e059k838owxamieq8",
+    "title": "Tell me about a time when you had to adapt your leadership style to suit a specific team or situation. How did you do it and what was the outcome?",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/team-leadership-adaptation/cm5ehcf6e059k838owxamieq8",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 3,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/llm-inference-system/cmmclzsc301v507adlk1botm4",
+    "title": "Building a Large-Scale LLM Serving System",
+    "type": "Technical Project Retrospective",
+    "description": "Discuss the architecture and implementation of a scalable LLM inference system. Cover key technical challenges including load balancing, model optimization, and horizontal scaling strategies.",
+    "url": "https://www.hellointerview.com/community/questions/llm-inference-system/cmmclzsc301v507adlk1botm4",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/ticket-booking-service/cm5g8rogj000013omsh2wi26a",
+    "title": "Design a Ticket Booking System",
+    "type": "Product Architecture",
+    "description": "Design a ticket booking system like Ticketmaster that allows users to search for events, book tickets (both reserved seating and general admission), and handle high-demand scenarios with virtual queues and ticket locking mechanisms.",
+    "url": "https://www.hellointerview.com/community/questions/ticket-booking-service/cm5g8rogj000013omsh2wi26a",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/smart-alarm-system/cmmbkgqcp1qnt09ad9i70hfdw",
+    "title": "Design a smart alarm system",
+    "type": "System Design",
+    "description": "Design a smart alarm system that can be installed across home devices, mobile phones, and smart watches, where alarms can be set or deleted from any device but will only ring on the designated effective device.",
+    "url": "https://www.hellointerview.com/community/questions/smart-alarm-system/cmmbkgqcp1qnt09ad9i70hfdw",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/gcp-data-migration/cmgjodbag04hl08ad8h12hlh1",
+    "title": "Design a data migration service for GCP",
+    "type": "System Design",
+    "description": "Design a service that can migrate large datasets from existing data sources to Google Cloud Platform, including task scheduling capabilities and efficient handling of very large file transfers.",
+    "url": "https://www.hellointerview.com/community/questions/gcp-data-migration/cmgjodbag04hl08ad8h12hlh1",
+    "companies": {
+      "Google": {
+        "level": "Manager-Senior Manager",
+        "reportedUsers": 3,
+        "lastAsked": "Early March, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/mapreduce-shuffle-service/cmm2b6v6001lw0eadzd6fim9u",
+    "title": "Design a MapReduce Shuffler",
+    "type": "System Design",
+    "description": "Design a shuffler component for MapReduce that enables efficient communication and data transfer between Mapper and Reducer nodes. The system should handle data partitioning, sorting, and distribution across the cluster.",
+    "url": "https://www.hellointerview.com/community/questions/mapreduce-shuffle-service/cmm2b6v6001lw0eadzd6fim9u",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/realtime-game-leaderboard/cm4t0qbr9004988ilmum8jm06",
+    "title": "Design an Online Game Leaderboard",
+    "type": "System Design",
+    "description": "Design a real-time gaming leaderboard system that displays global top rankings, user's current rank with surrounding players, and rankings within their friends list, handling millions of score updates daily.",
+    "url": "https://www.hellointerview.com/community/questions/realtime-game-leaderboard/cm4t0qbr9004988ilmum8jm06",
+    "companies": {
+      "Google": {
+        "level": "Staff-Manager",
+        "reportedUsers": 4,
+        "lastAsked": "Late January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/block-storage-system/cmg9ff4bs00c708adp5725dyw",
+    "title": "Design a block storage system",
+    "type": "System Design",
+    "description": "Design a distributed block storage system that can serve thousands of virtual machines, providing reliable and scalable storage with features like data replication, fault tolerance, and high availability.",
+    "url": "https://www.hellointerview.com/community/questions/block-storage-system/cmg9ff4bs00c708adp5725dyw",
+    "companies": {
+      "Google": {
+        "level": "Staff, Manager",
+        "reportedUsers": 4,
+        "lastAsked": "Late January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/logger-system/cm6jx0wxh016bui4b2oqtwudo",
+    "title": "Design a Logger System",
+    "type": "System Design",
+    "description": "Design a logger system that receives messages with timestamps and only prints each message if it hasn't been printed in the last 10 seconds, with support for multiple applications and search capabilities.",
+    "url": "https://www.hellointerview.com/community/questions/logger-system/cm6jx0wxh016bui4b2oqtwudo",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior, Manager",
+        "reportedUsers": 4,
+        "lastAsked": "Mid February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/log-storage-service/cmlmtgqnf0khb08adauyyd1rf",
+    "title": "Design a log storage service",
+    "type": "Product Architecture",
+    "description": "Design a log storage service that allows applications to store, query, and analyze large volumes of log data for analytics purposes.",
+    "url": "https://www.hellointerview.com/community/questions/log-storage-service/cmlmtgqnf0khb08adauyyd1rf",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid February, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/location-menus-pricing/cmi3quwzg02mg07ad9blftp07",
+    "title": "Design a fast food restaurant chain management system",
+    "type": "System Design",
+    "description": "Design a system for a global fast food restaurant chain that manages location-based menus with different items and pricing, and displays visually appealing menus on in-store panels.",
+    "url": "https://www.hellointerview.com/community/questions/location-menus-pricing/cmi3quwzg02mg07ad9blftp07",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff",
+        "reportedUsers": 4,
+        "lastAsked": "Mid January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/trending-hashtags-system/cm7honmgk0278imqn03o95rtg",
+    "title": "Design a Trending Hashtags System",
+    "type": "System Design",
+    "description": "Design a highly scalable system that tracks and computes the top K trending hashtags (e.g., top 30-50) across different time windows (last 5/15/30/60 minutes or custom intervals) for billions of users, with support for filtering by geography (local/global) and categories (food, sports, politics).",
+    "url": "https://www.hellointerview.com/community/questions/trending-hashtags-system/cm7honmgk0278imqn03o95rtg",
+    "companies": {
+      "Google": {
+        "level": "Senior-Staff, Manager",
+        "reportedUsers": 10,
+        "lastAsked": "Mid January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/photo-storage-sharing/cmkbgr2qp08d108adu0khqo6o",
+    "title": "Design Google Photos",
+    "type": "System Design",
+    "description": "Design a photo storage and sharing system that allows users to upload pictures, view them in an infinite scroll interface, and navigate through photos with swipe gestures in an enlarged view.",
+    "url": "https://www.hellointerview.com/community/questions/photo-storage-sharing/cmkbgr2qp08d108adu0khqo6o",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Mid January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/project-pivot/cmawim6qz0148ad082zlrf4kq",
+    "title": "Tell me about a time you had to pivot mid-project.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/project-pivot/cmawim6qz0148ad082zlrf4kq",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Late December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/manager-conflict-resolution/cmhi44aii00e508adf41y22w9",
+    "title": "Tell me about a time when you had a conflict with your manager and you were wrong",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/manager-conflict-resolution/cmhi44aii00e508adf41y22w9",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Early January, 2026"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/project-team-success/cmjezb2om02j008ad6ux8xkgz",
+    "title": "Project you are most proud of",
+    "type": "People Management",
+    "description": "Describe a project you led or managed that you're most proud of. Explain the challenges you faced and how you guided your team to success.",
+    "url": "https://www.hellointerview.com/community/questions/project-team-success/cmjezb2om02j008ad6ux8xkgz",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Late December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/proactive-change-example/cm5ehcf6e059j838onfd97xqc",
+    "title": "Tell me about a time where you proactively proposed a change.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/proactive-change-example/cm5ehcf6e059j838onfd97xqc",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Mid December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/team-problem-discovery/cm5ya89ta002urfqro8i1cby5",
+    "title": "Tell me about a time when you uncovered a significant problem in your team.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/team-problem-discovery/cm5ya89ta002urfqro8i1cby5",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/project-pride/cm5ehcf6e059c838okykjrwwq",
+    "title": "What project are you most proud of?",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/project-pride/cm5ehcf6e059c838okykjrwwq",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Early December, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/news-aggregator-feed/cm96lh25n0039ad08067audlg",
+    "title": "Design a News Aggregator System",
+    "type": "System Design",
+    "description": "Design a news aggregation system like Google News that allows users to subscribe to different news sources, categories, and topics, then view a personalized real-time news feed based on their interests.",
+    "url": "https://www.hellointerview.com/community/questions/news-aggregator-feed/cm96lh25n0039ad08067audlg",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/photo-search-backend/cmikmkva406q908adb5780xku",
+    "title": "Design a photo search application",
+    "type": "System Design",
+    "description": "Design a mobile photo application that allows users to search for photos using keywords and retrieve all images containing those elements (e.g., searching for 'mountains' returns all photos with mountains). Focus on designing the backend system to support this functionality.",
+    "url": "https://www.hellointerview.com/community/questions/photo-search-backend/cmikmkva406q908adb5780xku",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/top-k-counts/cm4t0twp0004pvszmvb2qeg0u",
+    "title": "Design a Top-K System",
+    "type": "System Design",
+    "description": "Design a system that efficiently retrieves top-k items (songs, videos, hashtags, etc.) based on user activity or engagement metrics within specified time windows. The system should handle real-time data aggregation and support queries like \"top 10 songs in the last 7 days\" or \"trending hashtags in the past 24 hours.\"",
+    "url": "https://www.hellointerview.com/community/questions/top-k-counts/cm4t0twp0004pvszmvb2qeg0u",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/offer-subscription-system/cmi7qoka2009008ad6tm1csdb",
+    "title": "Design an e-commerce offer subscription system",
+    "type": "System Design",
+    "description": "Design a system that allows users to subscribe to upcoming offers on an e-commerce platform and receive real-time notifications (email, SMS, push, or in-app) when offers go live. The system should handle 1M to 5M users.",
+    "url": "https://www.hellointerview.com/community/questions/offer-subscription-system/cmi7qoka2009008ad6tm1csdb",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/live-comments-system/cm4szvt6800333g2efltcmq4r",
+    "title": "Design Facebook Live Comments",
+    "type": "System Design",
+    "description": "Design a real-time commenting system that allows users to view and post comments instantly while watching live videos or browsing posts across Meta platforms. The system should handle Facebook-scale traffic (~2B DAU) and support features like reactions, live notifications, and seamless user transitions between different content.",
+    "url": "https://www.hellointerview.com/community/questions/live-comments-system/cm4szvt6800333g2efltcmq4r",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/web-crawler-design/cm80gligm049vtvyjklc6gxdw",
+    "title": "Design a Web Crawler",
+    "type": "System Design",
+    "description": "Design a web crawler that takes seed URLs as input, discovers and crawls linked pages, extracts image URLs from web pages, and handles duplicate URL filtering while scaling to enterprise-level requirements.",
+    "url": "https://www.hellointerview.com/community/questions/web-crawler-design/cm80gligm049vtvyjklc6gxdw",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/wikipedia-crawler/cm4szyih6003fvszm9k340332",
+    "title": "Design Wikipedia Crawler",
+    "type": "System Design",
+    "description": "Design a distributed web crawler system that can crawl and store Wikipedia pages at scale using multiple machines or edge devices, with focus on coordination, deduplication, and efficient resource utilization.",
+    "url": "https://www.hellointerview.com/community/questions/wikipedia-crawler/cm4szyih6003fvszm9k340332",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Late November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/mentorship-colleague/cm5hhhbeh00092a6ews5zh18w",
+    "title": "Tell me about a time where you mentored a colleague",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/mentorship-colleague/cm5hhhbeh00092a6ews5zh18w",
+    "companies": {
+      "Google": {
+        "level": "Mid-level-Senior",
+        "reportedUsers": 2,
+        "lastAsked": "Mid November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/robot-event-aggregation/cme1oqha801r3ad07uce0z4s1",
+    "title": "Design a system to display aggregation of events where multiple robots are continuously generating events in realtime",
+    "type": "System Design",
+    "description": "Design a real-time event aggregation system that ingests continuous data streams from multiple robots and provides a dashboard for monitoring and querying with 1-minute granularity.",
+    "url": "https://www.hellointerview.com/community/questions/robot-event-aggregation/cme1oqha801r3ad07uce0z4s1",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Early November, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/elevator-scheduling-system/cmgsdjdqq00r707adsq128i76",
+    "title": "Design an Elevator Control System",
+    "type": "System Design",
+    "description": "Design an elevator control system for a multi-story building that efficiently manages multiple elevators, processes floor requests from both elevator cars and floor panels, and optimizes passenger wait and travel times through intelligent scheduling.",
+    "url": "https://www.hellointerview.com/community/questions/elevator-scheduling-system/cmgsdjdqq00r707adsq128i76",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/global-vm-monitor/cmgs26zx800vx08ad6f8ncnxh",
+    "title": "Design a global VM monitoring system",
+    "type": "System Design",
+    "description": "Design a system that allows users to view and monitor their virtual machines across multiple global regions, displaying key information such as node name, region, and health status.",
+    "url": "https://www.hellointerview.com/community/questions/global-vm-monitor/cmgs26zx800vx08ad6f8ncnxh",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/ai-agent-iam/cmgsd52f200gi07ad5f7knnsk",
+    "title": "Design an Identity and Access Management system for AI agents",
+    "type": "System Design",
+    "description": "Design an IAM system for a cloud provider that allows customers and enterprises to create and manage multiple AI agents with proper access controls and permissions.",
+    "url": "https://www.hellointerview.com/community/questions/ai-agent-iam/cmgsd52f200gi07ad5f7knnsk",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Mid October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/vector-search-index/cmgiasw5h00ab08adl0dwdgqg",
+    "title": "Design an ANN index system",
+    "type": "System Design",
+    "description": "Design a system that can efficiently retrieve the IDs of the most similar ~50 vectors to a given query vector from a dataset of ~10 billion vectors, supporting high-throughput read and write operations with approximate nearest neighbor search capabilities.",
+    "url": "https://www.hellointerview.com/community/questions/vector-search-index/cmgiasw5h00ab08adl0dwdgqg",
+    "companies": {
+      "Google": {
+        "level": "Senior Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/twitter-clone-feed/cmgfco6rf05in08adz2rut2nw",
+    "title": "Design Twitter",
+    "type": "Low Level Design",
+    "description": "Design a social media platform similar to Twitter that allows users to follow/unfollow other users, post tweets, and view a personalized news feed of tweets from people they follow.",
+    "url": "https://www.hellointerview.com/community/questions/twitter-clone-feed/cmgfco6rf05in08adz2rut2nw",
+    "companies": {
+      "Google": {
+        "level": "Senior",
+        "reportedUsers": 1,
+        "lastAsked": "Early October, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/write-once-filesystem/cmfzmh6lw027907ad6cztadic",
+    "title": "Design a file system for write-once media",
+    "type": "System Design",
+    "description": "Design a file system that can efficiently store and manage files on write-once media, where data can only be written once and cannot be modified after creation.",
+    "url": "https://www.hellointerview.com/community/questions/write-once-filesystem/cmfzmh6lw027907ad6cztadic",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Late September, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/quality-cost-tradeoffs/cm5ya8aho0036rfqrlt1bib5t",
+    "title": "Tell me about a time when you had to make tradeoffs between quality and cost.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/quality-cost-tradeoffs/cm5ya8aho0036rfqrlt1bib5t",
+    "companies": {
+      "Google": {
+        "level": "Mid-level, Senior Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Early September, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/video-streaming-platform/cm4szxbhv0033w579rjh2r8j8",
+    "title": "Design Netflix/Video Streaming Platform",
+    "type": "System Design",
+    "description": "Design a video streaming platform like Netflix that supports video playback across multiple devices (mobile, web, smart TVs) with seamless resume functionality, subscription management, personalized recommendations, and content upload capabilities.",
+    "url": "https://www.hellointerview.com/community/questions/video-streaming-platform/cm4szxbhv0033w579rjh2r8j8",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early September, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/music-shuffle-algorithm/cm6jwys3b00qfui4bb6l8gm5j",
+    "title": "Design a Music Player Shuffle Algorithm",
+    "type": "Low Level Design",
+    "description": "Design a music player shuffle algorithm to avoid grouping songs by the same artist.",
+    "url": "https://www.hellointerview.com/community/questions/music-shuffle-algorithm/cm6jwys3b00qfui4bb6l8gm5j",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 3,
+        "lastAsked": "Mid August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/realtime-collaborative-docs/cm69gjz7n020be7bzjsf6a663",
+    "title": "Design Google Docs",
+    "type": "System Design",
+    "description": "Design a collaborative document editing service similar to Google Docs where multiple users can create, edit, and share documents in real-time with concurrent editing capabilities.",
+    "url": "https://www.hellointerview.com/community/questions/realtime-collaborative-docs/cm69gjz7n020be7bzjsf6a663",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Mid August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/job-scheduler-cron-history/cm7w828yv00sejmejlmofwtvp",
+    "title": "Design a Job Scheduler",
+    "type": "System Design",
+    "description": "Design a distributed job scheduler that can handle high-throughput job processing (10,000+ jobs per second), support both scheduled (cron-based) and ad-hoc job execution, include retry mechanisms for failed jobs, and maintain execution history for up to one year.",
+    "url": "https://www.hellointerview.com/community/questions/job-scheduler-cron-history/cm7w828yv00sejmejlmofwtvp",
+    "companies": {
+      "Google": {
+        "level": "Senior Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Mid August, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/mobile-os-rollout/cmddj4pl0016mad08991msz51",
+    "title": "Design a system to rollout new versions of a mobile OS to devices worldwide",
+    "type": "System Design",
+    "description": "Design a system that can securely distribute mobile OS updates to millions of devices worldwide, handling different device types, network conditions, and rollout strategies like staged deployments.",
+    "url": "https://www.hellointerview.com/community/questions/mobile-os-rollout/cmddj4pl0016mad08991msz51",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 2,
+        "lastAsked": "Early July, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/manage-multiple-priorities/cm6jwztb900x9ui4bcf62frtb",
+    "title": "How do you manage multiple priorities, do you like to be in a place where priorities keep changing or prefer doing the same thing repeatedly.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/manage-multiple-priorities/cm6jwztb900x9ui4bcf62frtb",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 2,
+        "lastAsked": "Late June, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/restaurant-waitlist-api/cm6jwywuf00rtui4blucf5rko",
+    "title": "Implement Restaurant Waitlist API",
+    "type": "Low Level Design",
+    "description": "Implement restaurant waitlist API and data structure with the following requirements: 1) A party of customers can join the waitlist (with a reasonable limit of n people). 2) A party which has joined the waitlist can leave at any time. 3) When a table becomes free, serve the first party on the waitlist that fits the available size (e.g., a party of 4 can join a table of 6 if they are first in waitlist, but a party of 8 doesn't fit at a table of size 6).",
+    "url": "https://www.hellointerview.com/community/questions/restaurant-waitlist-api/cm6jwywuf00rtui4blucf5rko",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 2,
+        "lastAsked": "Mid June, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/anti-phishing-system/cmboz6nwc01ye08adekfzuwol",
+    "title": "Design an Anti-Phishing System",
+    "type": "System Design",
+    "description": "Design an anti-phishing backend system for Chrome that intercepts navigation to malicious websites and shows users a warning page, while still allowing them to proceed if they choose. The system should handle daily updates of the complete malicious URL list from internal security analysts.",
+    "url": "https://www.hellointerview.com/community/questions/anti-phishing-system/cmboz6nwc01ye08adekfzuwol",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Early June, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/tough-feedback-example/cm5ya8957002irfqrdd7b2gt8",
+    "title": "Give me an example of a tough or critical piece of feedback you received.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/tough-feedback-example/cm5ya8957002irfqrdd7b2gt8",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Mid May, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/tag-proximity-alert/cmac800xr00dpad07wwtw617j",
+    "title": "Design a Proximity Alert System for Apple Tags",
+    "type": "System Design",
+    "description": "Design a proximity alert system that monitors Apple Tags and notifies users when a tag moves outside a predefined range from the user's location.",
+    "url": "https://www.hellointerview.com/community/questions/tag-proximity-alert/cmac800xr00dpad07wwtw617j",
+    "companies": {
+      "Google": {
+        "level": "Staff",
+        "reportedUsers": 1,
+        "lastAsked": "Early May, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/ad-server-architecture/cm9qt47gt0001ad08mtyw3df6",
+    "title": "Design an Ad Server",
+    "type": "System Design",
+    "description": "Design an ad server system that delivers targeted advertisements to users based on their preferences and behavior, while optimizing for performance and revenue.",
+    "url": "https://www.hellointerview.com/community/questions/ad-server-architecture/cm9qt47gt0001ad08mtyw3df6",
+    "companies": {
+      "Google": {
+        "level": "Manager",
+        "reportedUsers": 1,
+        "lastAsked": "Late April, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/team-department-conflict/cm5ehcf6e059b838ok8og7kvc",
+    "title": "Can you share an example where you resolved a significant conflict between different teams or departments in your organization?",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/team-department-conflict/cm5ehcf6e059b838ok8og7kvc",
+    "companies": {
+      "Google": {
+        "level": "Junior",
+        "reportedUsers": 1,
+        "lastAsked": "Early February, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/decision-information-example/cm5ya85wc000xrfqro87tnw3k",
+    "title": "Give me an example of when you had to make an important decision and had to decide between moving forward or gathering more information.",
+    "type": "Googlyness",
+    "description": "",
+    "url": "https://www.hellointerview.com/community/questions/decision-information-example/cm5ya85wc000xrfqro87tnw3k",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
+      }
+    }
+  },
+  {
+    "slug": "/community/questions/kmeans-clustering/cm6jw34sy001bdar9vwil5a2f",
+    "title": "Implement K-Means Clustering Algorithm",
+    "type": "ML System Design",
+    "description": "Implement K-means clustering algorithm to group data from a dataframe or database",
+    "url": "https://www.hellointerview.com/community/questions/kmeans-clustering/cm6jw34sy001bdar9vwil5a2f",
+    "companies": {
+      "Google": {
+        "level": "Mid-level",
+        "reportedUsers": 1,
+        "lastAsked": "Late January, 2025"
       }
     }
   }

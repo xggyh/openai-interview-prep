@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a large model file distribution system · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a large model file distribution system</div>
+  <h1>Design a large model file distribution system</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior, Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/large-model-distribution/cmkxbumw501pk08ad4wrda4pv" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior, Manager · 📋 2 · 🕒 Mid May, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that efficiently distributes 500GB machine learning model files from an external repository to 1000 datacenter servers over a 10Gbps link, optimizing for minimal transfer time while ensuring each server receives a complete copy.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Large Model File Distribution System</strong>：把 100GB+ 的 LLM model file 高效分发到全球 1000+ 训练/推理节点。</p>
+<p>OpenAI / Google AI / Meta 都需要。考点：<strong>P2P / chunked download + CDN + 一致性 hash + 大文件 reliability</strong>。</p>
+<h3>需求</h3>
+<ul><li>Model file 100GB-1TB</li><li>分发到 1000+ GPU nodes</li><li>分发 &lt; 1 hour</li><li>Resume on failure</li><li>Multiple model versions（10-50 active）</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Model Producer (training cluster)
+        │ produces model.bin (100GB)
+        ▼
+   ┌────────────────┐
+   │ Storage (S3 /  │  S3 multipart upload
+   │  GCS)          │  chunk = 64MB
+   └──────┬─────────┘
+          │
+          ▼
+   ┌────────────────┐
+   │  Distribution  │  metadata: version, chunks, hashes
+   │  Service       │
+   └──────┬─────────┘
+          │ notify
+          ▼
+   ┌─────────────────────────────┐
+   │ Pull-mode workers (1000)    │  ← BitTorrent-style peer to peer
+   │ - request manifest          │
+   │ - parallel download chunks  │
+   │ - share with peers          │
+   └─────────────────────────────┘</div>
+<h3>核心机制</h3>
+<h4>1. Chunked + content-addressable</h4>
+<p>Model 切成 64MB chunks，每 chunk SHA256 hash 当 ID。Manifest 列出 chunk hashes + 顺序。</p>
+<pre class="language-json"><code class="language-json">{
+  "model": "llama-3-70b",
+  "version": "v1.2.3",
+  "total_size": 140000000000,
+  "chunks": [
+    {"id": "sha256:abc...", "size": 67108864, "offset": 0},
+    ...
+  ]
+}</code></pre>
+<h4>2. Hybrid pull：S3 + Peer-to-peer</h4>
+<p>第一个 download 的 N nodes 从 S3 拉。之后 nodes 可以从 <strong>同 region peers</strong> 拉（BitTorrent-style）。</p>
+<p>P2P 大幅降低 S3 egress 成本 + 加速分发：</p>
+<ul><li>1000 nodes 全从 S3 拉 = 1000 × 100GB = 100TB egress</li><li>用 P2P: 第一批 10 nodes 从 S3，其他 990 从 peers → S3 egress 1TB</li></ul>
+<h4>3. Content deduplication</h4>
+<p>同一 model 不同 version 共享相同 chunks（layer weights 部分相同）。Content-addressable 自动去重 → 增量 download。</p>
+<h4>4. Parallel download</h4>
+<p>每 node 同时下载 8-16 chunks（不同 source —— mix of S3 + peers）。完成一个就 verify SHA256 + add 到 local pool 供其他 peer 下载。</p>
+<h4>5. Failure handling</h4>
+<ul><li>Chunk download fail → retry 不同 source</li><li>Hash mismatch → discard + re-fetch</li><li>Resume：保留 local chunk 进度，restart 时跳过已 ok 的 chunk</li></ul>
+<h4>6. Tracker / Coordinator</h4>
+<p>类似 BitTorrent tracker：</p>
+<ul><li>维护"哪个 node 有哪些 chunks"</li><li>Node 请求"我要 chunk X" → tracker 返回有该 chunk 的 peers list</li><li>用 DHT (Distributed Hash Table) 或中心 coordinator</li></ul>
+<h4>7. CDN as accelerator</h4>
+<p>对于 high-popularity model (10+ datacenter 都要)，pre-warm 各 region S3 / 类 S3 cache。</p>
+<h4>8. Bandwidth scheduling</h4>
+<p>不要让分发饱和 cluster bandwidth（影响 training）。Rate-limit per-node 上行 bandwidth (e.g., 2 GB/s)。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Chunk size | 64MB | 8MB：太多 metadata；1GB：恢复慢 | | P2P | BitTorrent-like | All S3：egress 贵 | | Content addressing | SHA256 hash | UUID：不能 dedup | | Tracker | Central coord | DHT：复杂 | | Coordination | Pull model | Push：拥塞 |</p>
+<h3>容量估算</h3>
+<ul><li>100GB / 1Gbps = 800s = 13min per node from S3</li><li>With P2P + 8 parallel chunks: ~5min per node</li><li>1000 nodes simultaneous: ~30 min total（vs 几天 if serial）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 单 S3 拉所有 nodes → egress 费 + 限速； ❌ 不 chunk → 一处 fail 全重； ❌ 不 verify hash → 数据 corrupt model 跑乱； ❌ 不限速上行 → P2P 抢 training 带宽； ❌ 不版本化 → 升级 model 时新旧混乱。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Chunked content-addressable</strong> 支持 dedup + resume；(2) <strong>P2P 分发</strong> 降 egress + 加速；(3) <strong>Tracker + parallel chunks</strong> 协调。本质是 BitTorrent 的工业版。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Differential model update（增量 vs full）？" → 只传 changed chunks（content addressing 自然支持）；"如何 verify model 没被 tampered？" → manifest 签名 + chunk hash chain；"Multi-cloud？" → 各 cloud region 自己 P2P swarm，跨 cloud 用 transfer service；"GPU 训练同时分发？" → 不行，分发完才训练 (or 用 prefetching)。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (9 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Anthropic</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Anthropic</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Anthropic</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Anthropic</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>NVIDIA</strong> · Staff</div>
+  <div>Millions of build events will be published from various sources, efficient way of scheduling them</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Anthropic</strong> · Senior</div>
+  <div>Distribute large machine learning model files to servers in a datacenter. The model files are 500GB each. The models are stored in an external model repository and must be downloaded over a since 10Gbps link. The system needs to efficiently deliver files to 1000 servers that need them asap while optimizing for transfer time. Each server needs a complete copy of the model. Each server in the datacenter has a NIC allowing up to 10Gbps bandwidth combined upload and download.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Anthropic</strong> · Staff</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">The Community Solutions is irrelevant.</div><div class="comment">Reply E EnvironmentalSapphireDingo600 Premium • 19天前</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaf03fw838ov742qh4i.html">← Leetcode 1854. Maximum Population Year</a>
+    <a href="cm4t1rgrn005988ilm7ct8ma1.html">Design an Image Uploader →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

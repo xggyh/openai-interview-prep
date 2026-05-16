@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design an e-commerce offer subscription system · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design an e-commerce offer subscription system</div>
+  <h1>Design an e-commerce offer subscription system</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/offer-subscription-system/cmi7qoka2009008ad6tm1csdb" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that allows users to subscribe to upcoming offers on an e-commerce platform and receive real-time notifications (email, SMS, push, or in-app) when offers go live. The system should handle 1M to 5M users.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>E-commerce Offer Subscription System</strong>：商家发优惠，用户订阅感兴趣 categories / merchants，新优惠时 notify 用户。Groupon / 京东预约 / Amazon Daily Deals。</p>
+<h3>需求</h3>
+<ul><li>100M users</li><li>1M offers/day</li><li>Real-time delivery (&lt; 1 min)</li><li>Personalized matching</li><li>Multi-channel notify (email / push / app feed)</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Merchant
+       │ create offer
+       ▼
+  ┌──────────────┐
+  │ Offer Service│  CRUD + validation
+  └──────┬───────┘
+         │ publish
+         ▼
+  ┌──────────────┐
+  │ Offer Stream │  Kafka topic: offers.new
+  │ (Kafka)      │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Matching Service │  match offer to subscribers
+  │  (per subscript) │
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Notification     │  Push / Email / In-app feed
+  │ Fan-out          │
+  └──────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Subscription model</h4>
+<p>User 订阅维度：</p>
+<ul><li>Merchant ("我关注 Nike")</li><li>Category ("running shoes")</li><li>Price range</li><li>Location (店在 5km 内)</li><li>Keyword ("vegan")</li></ul>
+<p>存 Postgres + ES。</p>
+<h4>2. Matching algorithm</h4>
+<p>每新 offer 来到：对所有 subscription 做 match。N subscriptions × M offers/day = 巨大。</p>
+<p><strong>Inverted index 优化</strong>：</p>
+<ul><li><code>category -&gt; subscriber_ids</code></li><li><code>merchant -&gt; subscriber_ids</code></li><li>Offer 来：lookup matching subscribers 是 set union</li></ul>
+<p>不要每 offer × 每 user 全 scan。</p>
+<h4>3. Personalization</h4>
+<p>匹配后还要 rank：</p>
+<ul><li>User past behavior (click rate on similar offers)</li><li>Recency weighting</li><li>User active hour (push 时机)</li></ul>
+<h4>4. Notification channels</h4>
+<ul><li>Push (FCM / APN)：immediate</li><li>Email：digest，每 user 每天最多 1 封</li><li>In-app feed：push 到 user feed, 用户 open app 时看</li></ul>
+<p>每 user 自选 channel + frequency。</p>
+<h4>5. De-dup + rate limit</h4>
+<p>同 user 30 分钟内 max 3 push。同 merchant 24 小时内只通知 user 一次。</p>
+<h4>6. Geo</h4>
+<p>Offer 含 GPS / 地址。User 当前 location 或 home location。Geo-radius filter。</p>
+<h4>7. Real-time vs batched</h4>
+<p>Real-time offers (flash sale): 5 min 内 push Daily digest: 凌晨 aggregate yesterday's offers + 早 8 点发邮件</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Match | Inverted index | Full scan：N×M 慢 | | Channel | User config | Default all：spam | | Rate limit | Per-user cap | 无：unsubscribe | | Personalization | ML ranking | Random：低 CTR |</p>
+<h3>容量估算</h3>
+<ul><li>1M offers/day × 1k matched subscribers avg = 1B notifications/day = 12k QPS</li><li>Push fan-out: 12k QPS → FCM / APN handle 这 scale</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ N×M scan match → 慢；用 inverted index； ❌ 不 rate limit → spam unsubscribe； ❌ Single channel → 用户 missed； ❌ 不 personalize → 低 CTR； ❌ Geo 用 lat/lng range query → 慢；用 H3 / S2 cell。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Inverted index matching</strong> 处理 1M×100M 配对；(2) <strong>多 channel + rate limit + frequency cap</strong>；(3) <strong>ML personalization ranking</strong>。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Flash sale rate limit 不 dropping 重要 user？" → user importance 加权；"实时 inventory check (offer 已售完不再 push)？" → inventory service 联动；"如何 measure success？" → CTR / conversion / unsubscribe rate；"GDPR opt-out？" → unsubscribe link + 即时生效。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (2 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Design an email subscription service which lets users subscribe to a specific keyword; send nightly emails to the subscribers.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Twilio</strong> · Mid-level</div>
+  <div>Design an offer subscription and notification system for an e-commerce platform. The platform frequently launches offers. Users are able to subscribe to upcoming offers. When an offer goes live then the users are notified real time (via Email, SMS, PUSH or In App Notifications) · Users scale would be around (~ 1M to 5M) · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm4t0twp0004pvszmvb2qeg0u.html">← Design a Top-K System</a>
+    <a href="cm4szvt6800333g2efltcmq4r.html">Design Facebook Live Comments →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

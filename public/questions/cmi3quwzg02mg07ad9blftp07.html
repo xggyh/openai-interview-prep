@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a fast food restaurant chain management system · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a fast food restaurant chain management system</div>
+  <h1>Design a fast food restaurant chain management system</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/location-menus-pricing/cmi3quwzg02mg07ad9blftp07" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior-Staff · 📋 4 · 🕒 Mid January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system for a global fast food restaurant chain that manages location-based menus with different items and pricing, and displays visually appealing menus on in-store panels.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Fast Food Restaurant Chain Management System</strong>：McDonalds / Subway 类全球连锁的 IT 系统：POS、库存、订单、会员、餐厅运营。</p>
+<h3>需求</h3>
+<ul><li>30k+ 餐厅全球</li><li>高峰每秒 100k 订单</li><li>实时库存</li><li>会员 + 积分</li><li>餐厅 offline 时仍可下单</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Customer (mobile / kiosk / POS)
+       │
+       ▼
+  ┌──────────────┐
+  │  Order API   │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐    ┌──────────────┐
+  │ Order Svc    │ ── │ Inventory    │
+  │              │    │ Service      │
+  └──┬───────────┘    └──────────────┘
+     │
+     ▼
+  ┌──────────────┐    ┌──────────────┐
+  │ Kitchen      │    │ Payment      │
+  │ Display      │    │ Service      │
+  └──────────────┘    └──────────────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Per-Restaurant│  local DB sync periodically
+  │ Edge Server   │
+  └──────────────┘
+         │
+         ▼
+  Cloud Backend ← analytics, supply chain, member</div>
+<h3>核心组件</h3>
+<h4>1. Hybrid edge + cloud</h4>
+<p>每餐厅有 local edge server (NUC / mini-PC)：</p>
+<ul><li>本地 cache menu / prices / inventory</li><li>Local POS 可 offline 操作</li><li>每分钟 sync 到 cloud（订单上报、inventory pull）</li></ul>
+<p><strong>Why edge</strong>：30k 餐厅同时连 cloud → 网络抖动时不能停业。</p>
+<h4>2. Inventory tracking</h4>
+<p>每 restaurant 每 item current count：</p>
+<ul><li>POS 减库存（订单 confirm 后）</li><li>收货增库存</li><li>Inventory event 写本地 + 异步 sync cloud</li></ul>
+<p>低库存 alert：local alert + cloud aggregated forecast。</p>
+<h4>3. 订单 lifecycle</h4>
+<pre class="language-plaintext"><code class="language-plaintext">placed → kitchen prep → ready → delivered → completed
+                                      ↓ refund
+                                  cancelled</code></pre>
+<p>每 status change emit event。</p>
+<h4>4. Kitchen Display System (KDS)</h4>
+<p>订单 push 到厨房屏幕。按 priority + ETA 显示 ticket。完成时员工 tap → ready。</p>
+<h4>5. 会员 + 积分</h4>
+<p>中心 member service（不在 edge）。Loyalty point = order total × multiplier。Async crediting (5 分钟内显示在 app)。</p>
+<h4>6. Payment</h4>
+<ul><li>Credit card：external gateway (Square / Stripe)</li><li>移动支付：Apple Pay / Google Pay / Alipay</li><li>Cash：POS 自己 reconcile</li></ul>
+<h4>7. 实时 analytics</h4>
+<p>每订单 emit event → Kafka → Flink → 实时 metric：</p>
+<ul><li>Per-store hourly revenue</li><li>Hot items</li><li>Order wait time</li></ul>
+<p>Manager dashboard 看实时 + 日报告。</p>
+<h4>8. Supply chain</h4>
+<p>每 store inventory level → forecast model → 供应商 PO。自动 reordering when below threshold。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Edge | Per-store mini server | Cloud only：offline 停业 | | Inventory | Eventual consistency | Strong：跨 store 慢 | | Order ID | Snowflake | UUID：sort 难 | | KDS sync | Local + push | Pull：延迟 | | Member | Central | Per-store：积分错乱 |</p>
+<h3>容量估算</h3>
+<ul><li>30k store × 100 orders/hour peak = 3M orders/hour = 833 orders/sec</li><li>边缘 server CPU 4 core + 16 GB 足够</li><li>Cloud 主要 analytics + member + supply chain</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Cloud-only architecture → 网络抖动停业； ❌ Inventory 强一致 → 跨 store 写延迟； ❌ KDS 全 cloud → 厨房显示卡； ❌ Member 数据 per-store → 跨店积分丢； ❌ 订单 ID 用 auto-increment → 不能离线生成。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Edge + Cloud hybrid</strong> 处理 offline；(2) <strong>Inventory eventual consistency + 本地权威</strong>；(3) <strong>Member / supply chain central + analytics 实时</strong>。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Mobile order ahead (skip-the-line)？" → app order + ETA → KDS 提前 prep；"Drive-thru 优化？" → CV count cars + wait time predict；"国际化 menu / 价格？" → per-region config service；"实时 menu 更新（item out of stock）？" → push from KDS 到 customer-facing apps。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (5 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Salesforce</strong> · Senior</div>
+  <div>Design a system that can take in orders online and route them to a specific store. · Ensure that employees are also handled in this and route to a specific store.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Staff</div>
+  <div>creat displays for physical stores of a global fast food chain. each screen can have different ads, menu items. · prices and menu items vary by location · use intelligfence to push for smart choises like if it is a hot day push for cold beverages or if store is too full push for fast items like fries.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Design a system for Large fast food restaurent chain. Stores are locxated globally. Store can have diffrent menu based on location. Menu can have diffrent items. Items can have different price in different location. The menu will be shown on Panel in the restaurent. THe menu should be visually appealing.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Google</strong> · Senior</div>
+  <div>Prompt; · A large multinational fast food company wants to design a system to display in store digital menus for each of their locations. · Content should be managed centrally potentially per country. · Not all locations have identical menu offerings. · The same item may have different prices at different locations. · Stores can have different numbers or arrangements of displays depending on the real estate footprint of the location. · The company needs to be able to schedule promotional pricing/sales that may be limited by time and/or region. · Displayed menus should be visually appealing and interesting. · The menus should include support for first-party advertising/promotional content in addition to the basic menu offerings. · This system should automatically feature breakfast, lunch, and dinner offerings at the appropriate time. · Menus should be able to highlight different items depending on dynamic conditions. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Real-time fanout to many clients, connection lifecycle management, and backpressure concerns mirror the need to push control updates and promotions to thousands of panels quickly and reliably.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmg9ff4bs00c708adp5725dyw.html">← Design a block storage system</a>
+    <a href="cm7honmgk0278imqn03o95rtg.html">Design a Trending Hashtags System →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

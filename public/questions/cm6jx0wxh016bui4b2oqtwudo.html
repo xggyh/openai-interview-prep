@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Logger System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Logger System</div>
+  <h1>Design a Logger System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level-Senior, Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/logger-system/cm6jx0wxh016bui4b2oqtwudo" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior, Manager · 📋 4 · 🕒 Mid February, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a logger system that receives messages with timestamps and only prints each message if it hasn't been printed in the last 10 seconds, with support for multiple applications and search capabilities.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Logger System</strong>：分布式应用产生 logs → ingest → store → query / alert / archive。100k+ services, 1PB+ logs/day。</p>
+<h3>需求</h3>
+<ul><li>1M events/sec ingest</li><li>10s lag from emit to queryable</li><li>30 days hot search, 1 year cold archive</li><li>Full-text search + filter by service / level / timestamp</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Apps
+     │ stdout / structured log
+     ▼
+   ┌──────────────┐
+   │ Log Agent    │  fluent-bit / Vector
+   │ (on each box)│
+   └──────┬───────┘
+          │ batched, compressed
+          ▼
+   ┌──────────────┐
+   │ Kafka        │  topic: logs.raw
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Indexer      │  → Elasticsearch / OpenSearch
+   │ (write-heavy)│
+   └──────┬───────┘
+          │
+          ▼
+   ┌──────────────┐
+   │ Hot tier     │  → ES cluster (last 30 days)
+   └──────┬───────┘
+          │ scheduled archive
+          ▼
+   ┌──────────────┐
+   │ Cold storage │  S3 + Parquet
+   └──────────────┘
+
+   ┌──────────────┐
+   │ Query API    │  → Kibana / custom UI
+   └──────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Agent</h4>
+<p>每 host run agent：</p>
+<ul><li>Tail log files / capture stdout</li><li>Parse 结构化（JSON）+ unstructured（regex / grok）</li><li>Batch + compress + send to Kafka</li></ul>
+<p>Async + buffered，不阻塞 app。</p>
+<h4>2. Kafka 缓冲</h4>
+<p>Decouple agent / indexer。Indexer 慢时 Kafka 缓冲，不丢日志。</p>
+<p>按 service 分 partition，保证同 service 日志顺序。</p>
+<h4>3. Indexer + ES</h4>
+<p>每条 log entry → ES document，按时间 daily index。每 service 一个 index alias。</p>
+<p>ES 提供 full-text search + filter + aggregation。</p>
+<p>但 ES 贵且不适合 PB 级长期存储 → <strong>hot/cold tier 分离</strong>。</p>
+<h4>4. Hot/Cold tier</h4>
+<ul><li>Hot (last 30 days): ES → instant search，秒级返回</li><li>Cold (30 days - 1 year): S3 Parquet → batch query via Athena / Presto，分钟级</li></ul>
+<p>每天定时 job 把 31 天前数据从 ES export 到 S3 + drop ES index。</p>
+<h4>5. Query API</h4>
+<pre class="language-plaintext"><code class="language-plaintext">GET /logs?service=foo&amp;level=error&amp;from=...&amp;to=...&amp;query="connection refused"</code></pre>
+<p>按时间范围决定 hot vs cold：</p>
+<ul><li>&lt; 30 days: 查 ES</li><li>&gt; 30 days: trigger Athena query S3</li></ul>
+<h4>6. Sampling for 高频</h4>
+<p>某些 service 1M log/sec，全存浪费。<strong>Adaptive sampling</strong>:</p>
+<ul><li>DEBUG / INFO: 1% sample</li><li>WARN: 10%</li><li>ERROR / FATAL: 100%</li></ul>
+<p>但 always emit "sampling header" let downstream知道 sample rate。</p>
+<h4>7. PII Scrubbing</h4>
+<p>Agent / indexer 上做 PII regex（email / phone / credit card）→ redact 或 hash。Compliance 必备。</p>
+<h4>8. Alert integration</h4>
+<p>Log pattern 触发 alert：</p>
+<ul><li>1 分钟内 error &gt; 100 → page on-call</li><li>特定 error signature → 立即 alert</li></ul>
+<p>通过 ES Watcher 或独立 Stream processor。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Transport | Kafka | direct HTTP：丢日志 | | Hot store | ES | DB：search 慢 | | Cold store | S3 Parquet | Glacier：太慢；ES 全 hot：贵 | | Sampling | level-based adaptive | All log：成本爆 | | Indexing | Per-day index | Per-week：query 跨多 index 慢 |</p>
+<h3>容量估算</h3>
+<ul><li>1M events/sec × 500B avg = 500 MB/s = ~45 TB/day raw</li><li>30 days hot：1.4 PB in ES → expensive；用 sampling 后 140 TB OK</li><li>1 year cold: 16 PB Parquet on S3 (compressed 4-5x → 3-4 PB stored)</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Sync log emit → app 卡； ❌ ES 全部 30 天 + 1 年 → 成本爆 1000 万美金/年； ❌ 不 sample → noise drowns signal； ❌ 不做 PII scrub → compliance disaster； ❌ Per-event index → ES write bottleneck；要 bulk insert。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Agent + Kafka 解耦 ingest</strong>；(2) <strong>Hot ES + Cold S3 分层</strong>；(3) <strong>Adaptive sampling</strong> 控成本。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Real-time aggregation (count errors by service)？" → Flink subscribe Kafka 实时算；"Cross-service trace correlation？" → 加 trace_id field 在所有 log，OpenTelemetry；"如何 detect anomalous log patterns？" → ML model + log similarity clustering (Drain algorithm)；"GDPR delete user data？" → mark for deletion + rebuild affected indices。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (14 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Apple</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Apple</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Apple</strong> · Senior</div>
+  <div>Logging System: Design a Logging System with the following functionality · 1. Multiple Components log messages · 2. Support log levels, rotation, persistence to file / DB etc · The interviewer was open to see either LLD or HLD (or combination as I deemed fit) with both local file logging as well as centralized logging (like ELK stack)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Apple</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Google</strong> · Manager</div>
+  <div>Design a logging system which gets logs from Data Centers from 10 different geographic locations. Do not use any vendor created systems.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Microsoft</strong> · Senior</div>
+  <div>Design a logging framework. · Start with the classes your library will have and then move to how the 'real time' logging system HLD would look like.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Design a logging system for multiple applications with search capabilities</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2024 · <strong>Google</strong> · Senior</div>
+  <div>Asked in a DSA round for Google</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2024 · <strong>Google</strong> · Mid-level</div>
+  <div>Design a logger system that receives a stream of messages with timestamps. Each message should be printed if and only if it has not been printed in the last 10 seconds. Given a message and a timestamp (in seconds granularity), return true if the message should be printed, otherwise return false. Handle messages arriving roughly at the same time. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (3 条)</h2>
+  <div class="comment">Both systems handle high-throughput, near real-time streams, where ordering, fan-out, and live-tail/display with low latency are essential under heavy contention.</div><div class="comment">Read Practice Ad Click Aggregator</div><div class="comment">Click pipelines require deduplication, windowed processing, and cost-effective storage with search/analytics—very similar ingestion and indexing challenges as log systems.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmlod4ttu0pa608ad89vm8qkj.html">← Authentication Manager</a>
+    <a href="cmlmtgqnf0khb08adauyyd1rf.html">Design a log storage service →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -258,9 +258,14 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
     types_meta = [
         ("Coding", "Coding 题（算法 / LLD 编码）"),
         ("System Design", "System Design 题（架构设计）"),
+        ("Googlyness", "Googlyness（Google 行为面试）"),
         ("People Management", "People Management（管理向）"),
         ("Behavioral", "Behavioral（行为面试）"),
+        ("Low Level Design", "Low Level Design（OOP / 类设计）"),
+        ("Product Architecture", "Product Architecture（产品架构）"),
         ("Mobile System Design", "Mobile System Design（移动端设计）"),
+        ("ML System Design", "ML System Design（机器学习系统）"),
+        ("Technical Project Retrospective", "Tech Project Retrospective（项目复盘）"),
     ]
     cards = []
     for q in recency_sorted:

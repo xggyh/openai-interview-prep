@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design an Online Game Leaderboard · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design an Online Game Leaderboard</div>
+  <h1>Design an Online Game Leaderboard</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff-Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/realtime-game-leaderboard/cm4t0qbr9004988ilmum8jm06" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff-Manager · 📋 4 · 🕒 Late January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a real-time gaming leaderboard system that displays global top rankings, user's current rank with surrounding players, and rankings within their friends list, handling millions of score updates daily.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Online Game Leaderboard</strong>：百万玩家实时 ranking，按 score 排序。支持：top-N global、around-me、按 friends / country 过滤。</p>
+<h3>解法核心</h3>
+<p><strong>Redis Sorted Set (ZSET)</strong> 是 leaderboard 标准方案：</p>
+<ul><li><code>ZADD lb score user_id</code> —— 写</li><li><code>ZREVRANGE lb 0 99 WITHSCORES</code> —— top 100</li><li><code>ZREVRANK lb user_id</code> —— 我的排名</li><li><code>ZREVRANGEBYSCORE lb +inf -inf</code> —— 范围查询</li></ul>
+<p>O(log N) per op，1M users 不到 1ms。</p>
+<h3>整体架构</h3>
+<div class="ascii-diagram">  Game Server
+       │ score update
+       ▼
+  ┌──────────────┐
+  │ Score Service│
+  └──────┬───────┘
+         │
+   ┌─────┼──────────────┐
+   ▼     ▼              ▼
+  Redis  Redis      Redis 
+  ZSET   ZSET       ZSET
+  Global Country    Friends
+  Lead.  Lead.      (per user)
+         │              │
+         ▼              ▼
+   ┌───────────┐
+   │ Postgres  │  source of truth, audit
+   └───────────┘</div>
+<h3>关键技术</h3>
+<h4>1. Multi-dimensional leaderboards</h4>
+<ul><li>Global: <code>lb:global</code></li><li>Per country: <code>lb:country:US</code>, <code>lb:country:JP</code></li><li>Per friend group: <code>lb:friends:{user_id}</code> —— pre-compute or compute on-the-fly with <code>ZINTERSTORE</code></li></ul>
+<h4>2. Time windows</h4>
+<ul><li>All-time: 永久 ZSET</li><li>Weekly: <code>lb:weekly:2026W19</code>, expire after 2 weeks</li><li>Daily: 同理</li></ul>
+<h4>3. 大数据量分片</h4>
+<p>1B 用户 → 单 Redis 装不下。<strong>Sharding by score range</strong>：</p>
+<ul><li>Shard 0: score [0, 100]</li><li>Shard 1: score [101, 1000]</li><li>...</li></ul>
+<p>Query top-N from highest shard down。但 <code>ZREVRANK</code> 跨 shard 需算 cumulative offset。</p>
+<p><strong>简化</strong>：top-100 global 只查最高 shard 就够。其他 query 退到 DB。</p>
+<h4>4. Write amplification</h4>
+<p>每 user 同时写 global + country + weekly + daily ZSET = 4 writes per update。OK，Redis pipeline 一次发出。</p>
+<h4>5. Around-me</h4>
+<p><code>ZREVRANGEBYRANK lb (my_rank - 10) (my_rank + 10)</code>。需先 ZREVRANK 取 rank。</p>
+<h4>6. Anti-cheat</h4>
+<p>新 score 写入前过 fraud check：</p>
+<ul><li>Rate limit per user (每秒不能 +1000 score)</li><li>ML model on suspicious patterns</li><li>Server-side validation of game events</li></ul>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Storage | Redis ZSET | DB ORDER BY：每查 O(N) | | Sharding | Score range | Hash by user_id：rank query 难 | | Friends LB | ZINTERSTORE | 全 DB join：慢 | | Time window | 多 ZSET key + TTL | Single + filter：慢 | | Persistence | Redis AOF + Postgres backup | Pure Redis：crash 丢数据 |</p>
+<h3>容量估算</h3>
+<ul><li>1M concurrent player × 1 update/min = 17k QPS write</li><li>Redis ZADD ~50k QPS per node → 1 node 撑得住</li><li>Top-100 query: O(log N) = ~20μs → CDN cache 5s 99% hit</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ DB ORDER BY 实时计算 —— TLE； ❌ 不分 time window —— 老玩家 dominate weekly； ❌ Friend leaderboard 实时 compute —— 慢；预算或周期 refresh； ❌ 没 anti-cheat —— 第一周 hack score 上去； ❌ Tie 处理（同 score）：用 secondary key (timestamp) 保稳定。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Redis ZSET 是 leaderboard 经典且最优解。同 score tie-break 用 (-score, timestamp) tuple。多维度分多 ZSET 不要 over-engineer。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 percentile rank（"你超过 X% 玩家"）？" → <code>ZREVRANK / ZCARD</code>；"如何 historical "我去年这天排名"？" → daily snapshot to S3；"实时排行榜推送（rank 变化通知）？" → pub/sub on score update。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (133 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid May, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  <div>Design leaderboard for an online game that shows rank globally and among friends</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>The question was slight variation of this. Question was something like this: "Design a scoreboard for a video game played by millions of users, displaying each user their performance globally and among their friends and also display for each user 5 above their ranks and below their ranks among their friends and globally.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Asked to design a competition for programing problems</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>This was combined with Leetcode Question. · Build leet code system and based on submission we have to rand and show leader board to all contest participants submitting their code.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Players will see a leader board as soon as they finish playing the game. The leader board must show global top 10 players with highest scores and 5 players above and below your score. The dashboard should show-up within 1-2 seconds after the game is complete. 100MM players overall with 10MM players during peak time.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>PayPal</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Game scoreboard · - your rank based your score · - global top 10 scores and names · - nearest 10 scores above and below your score, global view and friend view</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>A Gaming Leaderboard is a ranked list of players, typically sorted by a specific metric such as score, points or level. · In a real-time leaderboard, updates happen almost instantly: · A player’s score changes (e.g., after scoring a point or defeating an opponent). · The system updates that player’s rank immediately. · Other players can see the updated position without waiting or refreshing. · This real-time aspect makes the user experience more dynamic and engaging. · However, it also introduces significant technical challenges, such as: · Efficiently retrieving Top-N players (e.g., Top 10 or Top 100). · Allowing players to quickly find their own rank without scanning the entire leaderboard. · In this article, we will explore how to design a scalable, low-latency, and real-time leaderboard that can support above queries and enhance the user experience.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>My solution was Redis sorted set based inspired from Alex Gu book. The interviewer followed up with - calculating top 10 amongst friend and 5 above and 5 below in friends might be expensive, can we do something different here.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design a gaming leaderboard to show top 10 , user rank , +4 above and +4 below the user and top 10 users friends</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Staff</div>
+  <div>Smaller scale, actually looking for less complex solution than the "usual"</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>A Real time leaderboard question showing Top 10 (global), Top 10 Friends, Top 20 with above and below list.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Design a scoreboard system for video games played by millions of users, displaying for each user their performance globally and among their friends.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Design a Top-k leaderboard with real time updates of a gaming application. · System submits Users' scores of the game along with the points they recieve.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>There is no product or infrastructure you might get asked any so prepare for all!</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Senior</div>
+  <div>added extra requirements to display position relative to their friends :(</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Google</strong> · Principal</div>
+  <div>Design minimal game leaderboard</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2024 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2024 · <strong>Meta</strong> · Mid-level</div>
+  <div>got this question at Amazon L5 interview</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2024 · <strong>Meta</strong> · Staff</div>
+  <div>Airline booking</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2024 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2024 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Meta</strong> · Manager</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (28 条)</h2>
+  <div class="comment">In general, how we tackle the conflict in case of distributed REDIS cluster ?</div><div class="comment">Shard by UserId OR Shard by Scores OR Shard by game (this is unlikely bcz interviewer will ask us to scale...nd push to discuss on (1) and (2))</div><div class="comment">(1) helps in achieving user (view user scores, ranking etc) specific queries in minimal delay but slows down group queries i.e friends , view k scores above-below user + top k global list of users (2) helps in achieving top k global list of users lightning fast but getting a specific user's information becomes very difficult because you don't know which shard the user is currently living on.</div><div class="comment">How we should determine which to use ? Shall we use both together and create a hybrid approach ?</div><div class="comment">Reply D DiplomaticJadePeacock784 • 5个月前</div><div class="comment">Scores won't be realistic to maintain, basically you may need to reshard on every score update. Also, I don't think we need it. I think you can maintain 2 redis instances, 1 sharded by userId and 1 by gameId. Then you use userId for anything global:</div><div class="comment">global rank &amp; score getting friends and friends scores (not sure whether this was for game or not, if it is then just the friends themselves). k scores above and below in global leaderboard</div><div class="comment">gameId for top N leaderboards per time window (only holds aggregated data / tumbling window)</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02z8838ohwfcbu9z.html">← Leetcode 1254. Number of Closed Islands</a>
+    <a href="cmg9ff4bs00c708adp5725dyw.html">Design a block storage system →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

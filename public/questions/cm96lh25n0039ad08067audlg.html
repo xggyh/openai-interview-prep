@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a News Aggregator System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a News Aggregator System</div>
+  <h1>Design a News Aggregator System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/news-aggregator-feed/cm96lh25n0039ad08067audlg" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Late November, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a news aggregation system like Google News that allows users to subscribe to different news sources, categories, and topics, then view a personalized real-time news feed based on their interests.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>News Aggregator System</strong> (Google News / Apple News / Flipboard)：从全球新闻源抓取 → 去重 → 聚类同事件 → 个性化推荐 → 实时分发。</p>
+<h3>需求</h3>
+<ul><li>100k+ 新闻源</li><li>1M+ articles/day</li><li>1B users</li><li>5-15 min freshness</li><li>个性化首页</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   News sources (RSS / Sitemap / API)
+       │
+       ▼
+  ┌──────────────┐
+  │ Crawler/     │  poll sources every 5 min
+  │ RSS Reader   │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Article          │  extract title / body / image / authoring
+  │ Extractor        │  newspaper3k / readability
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Dedup + Cluster  │  same-event articles grouped
+  │ (embedding)      │
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ ML Tagging       │  topic / sentiment / quality score
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Personalization  │  per-user feed ranking
+  │ + Feed Service   │
+  └──────────────────┘
+         │
+         ▼
+   User app</div>
+<h3>核心组件</h3>
+<h4>1. Crawler</h4>
+<p>每 source 一个 RSS feed 或 sitemap.xml。Polling 5-15 分钟（敏感时间 push subscription —— PubSubHubbub / WebSub）。</p>
+<p>Crawl politeness：per-host rate limit (参考 [[cm80gligm049vtvyjklc6gxdw]])。</p>
+<h4>2. Article extraction</h4>
+<p>Raw HTML → 主文本：</p>
+<ul><li>Readability algorithm（Mozilla 开源）</li><li>提取 title / body / publish_date / author / images</li><li>失败 fallback 到 OG tags</li></ul>
+<h4>3. 去重 + 事件聚类</h4>
+<p>同事件不同 source 大量报道（"OpenAI launches GPT-5" 1000 个 article）。<strong>聚类</strong>：</p>
+<ul><li>计算 article embedding (sentence-BERT 384-dim)</li><li>实时聚类：新 article 找 cosine sim &gt; 0.8 的已有 cluster</li><li>没命中 → new cluster (= new event)</li></ul>
+<p>每 cluster 是一"event"，UI 显示 representative article + "200 sources reporting"。</p>
+<h4>4. ML tagging</h4>
+<p>每 article 过 pipeline：</p>
+<ul><li>Category classifier (tech / sports / politics / ...)</li><li>Sentiment (positive / negative / neutral)</li><li>Quality score (clickbait detect, factual signal)</li><li>Entity extraction (people / orgs / locations)</li></ul>
+<p>存到 ES + 向量 store。</p>
+<h4>5. Personalization</h4>
+<p>User profile：</p>
+<ul><li>Explicit interests (user picked)</li><li>Implicit (click / read time / dwell)</li><li>Embedding average of past clicks</li></ul>
+<p>Feed = candidate generation + ranking：</p>
+<ol><li><strong>Candidates</strong>：recent (&lt; 24h) articles + user's followed sources + topic match</li><li><strong>Ranking</strong>：DNN takes (article features, user features) → click probability</li><li><strong>Diversity reranking</strong>：不重复同 cluster</li></ol>
+<h4>6. Real-time</h4>
+<p>新 article 进系统 5-15 min 后在 feed 出现。Push notification for breaking news:</p>
+<ul><li>Editor's pick (高 quality + trending event)</li><li>或用户配置 alert keyword</li></ul>
+<h4>7. Source quality</h4>
+<p>每 source 有 reputation score。Low-quality / fake news source → 降权 / blacklist。Editorial review for grey area。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Source ingestion | RSS / Sitemap / API | Generic crawl：noisy | | Cluster | Embedding | TF-IDF：semantic 弱 | | Personalization | DNN + collab filtering | Rule-based：static | | Push | Selective alert | Every article：spam | | Quality | Editorial + ML | None：fake news |</p>
+<h3>容量估算</h3>
+<ul><li>1M articles/day × 50KB = 50 GB/day text + 0.5 GB embeddings</li><li>Search QPS: 1B users × 5 feed queries/day = 60k QPS → ES + CDN cache hot feeds</li><li>ML pipeline: 1M articles/day = 12 articles/sec → trivial</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 抓不 dedup → user 看 100 篇同 event； ❌ 不 cluster events → ranking 把同事件多篇都推； ❌ 不做 quality control → fake news boost； ❌ Hot story 全 user 都看到 → echo chamber，加 diversity reranking； ❌ Push notification too aggressive → uninstall。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Embedding-based event clustering</strong> 处理同事件多 source；(2) <strong>Multi-stage candidate + ranking + diversity</strong>；(3) <strong>Source quality + editorial layer</strong> 防 fake news。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何处理 paywall articles？" → metadata + snippet only；"多语言？" → per-language pipeline + cross-language event linking；"Local news？" → geo-tag + user location；"如何 detect propaganda / state media？" → source labeling + ML credibility model。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (52 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Rippling</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2026 · <strong>Rippling</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Rippling</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Rippling</strong> · Mid-level</div>
+  <div>Rippling</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Rippling</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  <div>Main part was how the system will behave when the user is Offline or facing poor Connectivity Issues</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Rippling</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Rippling</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Amazon</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2026 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Rippling</strong> · Senior</div>
+  <div>Discussed fetching articles from 50k+ publishers, delivering news feed in &lt; 250ms and several options for that: real time, batch jobs etc.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>R</strong> · ripping</div>
+  <div>Staff</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Rippling</strong> · Mid-level</div>
+  <div>User feeds should be generated based on categories they give to us (can assume that categories are already determined prior to generating feed) · Interviewer asked me deep dives on how to handle a lot of writes to database when many articles are being published at once. Interviewer asked me how I would handle database write scaling when one category in particular is hot. Interviewer asked me how to handle fault tolerance with article retrieval service (if write to DB fails, how do we ensure that we're not still uploading thumbnails to blob storage for unstored article).</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Rippling</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Reddit</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Rippling</strong> · Staff</div>
+  <div>Salesforce</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Oracle</strong> · Mid-level</div>
+  <div>Design a news aggregator platform that fetches the latest news from multiple external publishers, displays the most recent articles first with infinite scrolling, and redirects users to the original publisher’s website when an article is clicked.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Reddit</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Rippling</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Atlassian</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Rippling</strong> · Staff</div>
+  <div>Design Google News</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Staff</div>
+  <div>The requirements are similar to the one listed on HelloInterview</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Rippling</strong> · Senior Manager</div>
+  <div>Aggregate news from news providers and show them in a category wise feed. Users can subscribe to categories of choice. All users will see the same category feed. Heavy personalization not required · Scale: 1 million MAU(100k peak concurrent), 50k publishers ( 100 articles from each per day on average)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Rippling</strong> · Staff</div>
+  <div>Was asked to build a News Feed System with custom feed.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Rippling</strong> · Senior</div>
+  <div>There are multiple news sources (ex: bloomberg). Design a system where user can see a news feed based on their interest.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Rippling</strong> · Staff</div>
+  <div>Got a bad interviewer (an EM) who was digging into the black-boxed ML ranking algorithm again and again, despite the role not being AI/ML related and us agreeing to put the ML ranking algorithm out of scope during requirements gathering.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>O</strong> · Other</div>
+  <div>Senior · Design a Google news like system with 5000 news sources. The sources expose an RSS-like feed for topics and content. We want to build a system that powers a simple user interface to show Top news as well as Top news for particular topics.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Rippling</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Rippling</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Reddit</strong> · Manager</div>
+  <div>Design a news aggregator system like google news where a user can subscribe to different criteria like channel, categories or artists etc. Make sure user is able to see the feed of news in near to real time. Eventual consistency is fine. (question asked in rippling)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Rippling</strong> · Staff</div>
+  <div>Asked @ Rippling</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Rippling</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Rippling</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2024 · <strong>Rippling</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2005 · <strong>Rippling</strong> · Staff</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">One requirement says: feed that updates in near real time with new and relevant stories. Does this mean updating within 5-10 seconds of news being published? The hello interview answer key has articles appear in feeds within 30 minutes of publication</div><div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhad02xn838o2q3dvi00.html">← Leetcode 1197. Minimum Knight Moves</a>
+    <a href="cmikmkva406q908adb5780xku.html">Design a photo search application →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

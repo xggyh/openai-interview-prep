@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tell me about a time you had to pivot mid-project. · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Tell me about a time you had to pivot mid-project.</div>
+  <h1>Tell me about a time you had to pivot mid-project.</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Mid-level-Senior</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/project-pivot/cmawim6qz0148ad082zlrf4kq" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level-Senior · 📋 2 · 🕒 Late December, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Tell me about a time you had to pivot mid-project"</strong> —— Googlyness。考察：<strong>判断力 + 沉没成本管理 + change management</strong>。</p>
+<h3>STAR 框架</h3>
+<h3>故事：从规则引擎到 ML</h3>
+<p><strong>S</strong>：6 个月项目目标是把 content moderation 从人工 review 改成 rule-based 自动化。3 个月后 build 完 v1，发现：规则只能 cover 30% case，剩 70% 需要 understand context（讽刺、隐喻），规则系统 architecture-wise 解决不了。</p>
+<p><strong>T</strong>：作为 tech lead，要做艰难决定：继续推 v1（已 sunk 3 个月），还是 pivot 到 ML（要从 0 重来）。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>不情绪决策</strong>：花 1 周做 data analysis —— 用历史数据模拟 v1，得出 precision/recall。结果：v1 precision 65%，远低于 production threshold 95%。</li><li><strong>写一份 "honest assessment" doc</strong>：列 (a) v1 当前进度 (b) v1 完成后能达到的 ceiling (c) ML 方案需多久达到同 ceiling (d) ML 长期 ceiling。</li><li><strong>跟 stakeholders 提 pivot</strong>：先 1:1 跟 manager + PM 同步。他们也认 v1 ceiling 不够。</li><li><strong>重启 + 复用</strong>：pivot 不是完全 throw away。v1 的 labeled data + rule infrastructure 在 ML 方案里复用 (作为 weak supervision + heuristic feature)。</li><li><strong>诚实 communicate</strong> team：team meeting 公开 "v1 won't ship as planned"。承认这是 tough call。给团队 emotional space。</li></ol>
+<p><strong>R</strong>：Pivot 后 2 个月 ML v2 ship 到 staging。Precision 92%，recall 75%。比 v1 在每个指标都好。半年后 production cover 80% case（比 v1 计划的 30% 多）。Team 没有人离职 —— 反而 senior 工程师后来跟我说"那次诚实 pivot 让我相信这 team 是 truth-seeking 的"。</p>
+<h3>关键展示点</h3>
+<h4>1. Data-driven 而非情绪决策</h4>
+<p>不是"觉得 v1 不 work"，是用数据证明。</p>
+<h4>2. Sunk cost 不阻挡决策</h4>
+<p>3 个月 sunk cost 不该影响 forward decision。Senior 标志。</p>
+<h4>3. Pivot 不是 0-1</h4>
+<p>v1 的 part（data、infrastructure）在 v2 复用。<strong>没浪费</strong>。</p>
+<h4>4. 诚实 communicate</h4>
+<p>不掩盖问题，公开"v1 ship 不了"。短期不舒服，长期建立信任。</p>
+<h4>5. Team well-being</h4>
+<p>承认对 team 是 setback。给情绪空间。</p>
+<h3>加分项</h3>
+<ul><li>提到<strong>自己曾 reluctant to admit v1 limitation</strong>（自我反思）</li><li>提到 <strong>manager support</strong> 在 pivot decision 中的关键</li><li>提到 <strong>如何 prevent 类似情况</strong>（v3 计划在前 4 周就 prototype 关键 risk）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "我立即知道要 pivot" —— too perfect，不真实； ❌ Pivot 完全 throw away v1 —— 浪费 + 显得没规划； ❌ 没数据支撑 pivot decision —— 显得 emotional； ❌ 没 manage team emotion —— 缺人维度； ❌ Pivot 后没 ship —— 失败的 pivot 故事除非有 strong lesson。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Pivot 不丢人，<strong>用 data 证明 + 复用过去 + 诚实沟通</strong> 才是好的 pivot。Sunk cost fallacy 是 Senior 工程师常见 trap。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"Why didn't you see this in month 1?"</li><li>"What if your manager had said no to pivot?"</li><li>"How did you maintain credibility after the pivot?"</li><li>"When do you pivot vs persist?"</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (24 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2026 · <strong>LinkedIn</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Salesforce</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Capital One</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2026 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Tell me about a time you had to pivot mid-project.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">I have a story to answer the question, but I was laid off when working on this project and I am unclear what is the final outcome of the implementation. So is it suitable for me to demonstrate this story to interviewers?</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm78h7tyk02kgl7b16admv2nz.html">← Design a Metrics Aggregator</a>
+    <a href="cmjezb2om02j008ad6ux8xkgz.html">Project you are most proud of →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

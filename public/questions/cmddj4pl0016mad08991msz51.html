@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a system to rollout new versions of a mobile OS to devices worldwide · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a system to rollout new versions of a mobile OS to devices worldwide</div>
+  <h1>Design a system to rollout new versions of a mobile OS to devices worldwide</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/mobile-os-rollout/cmddj4pl0016mad08991msz51" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Manager · 📋 2 · 🕒 Early July, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a system that can securely distribute mobile OS updates to millions of devices worldwide, handling different device types, network conditions, and rollout strategies like staged deployments.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>system to rollout new versions of a mobile OS to devices worldwide</strong>：iOS / Android 这种 OTA (over-the-air) 系统级更新。10 亿+ devices，需 <strong>rollout 阶梯 + 回滚 + bandwidth 控</strong> + <strong>device-specific</strong>。</p>
+<h3>需求</h3>
+<ul><li>10 亿 devices</li><li>多 device types (各 iPhone / Pixel 型号)</li><li>阶梯 rollout（先 1% → 10% → 100%）</li><li>异常自动 halt</li><li>Resume on network interruption</li><li>Battery / Wi-Fi 时机</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   OS Build (publisher)
+       │
+       ▼
+  ┌──────────────┐
+  │ Update       │  meta: version, model compatibility,
+  │ Manifest     │     size, delta-from previous
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ Rollout      │  rollout state per device segment
+  │ Controller   │  decide who can get update now
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │ CDN          │  global edge cache of update files
+  │ (regional)   │
+  └──────┬───────┘
+         │
+         ▼
+   Devices download
+         │
+         ▼
+  ┌──────────────┐
+  │ Telemetry    │  install success / fail rate
+  └──────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Rollout 阶梯 (canary)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Phase 0: Apple/Google internal (1k devices)
+Phase 1: 1% public 24 hours
+Phase 2: 10% 48 hours
+Phase 3: 50% 1 week
+Phase 4: 100%</code></pre>
+<p>每 phase 监控 metric:</p>
+<ul><li>Crash rate</li><li>Boot success rate</li><li>Battery / temperature anomalies</li><li>User-reported bugs</li></ul>
+<p>异常 → automated halt + alert + 决策 rollback。</p>
+<h4>2. Device segmentation</h4>
+<p>Rollout 不只是 random %。维度：</p>
+<ul><li>Device type (iPhone 14 Pro vs 11)</li><li>Region (US first，India 后)</li><li>Network condition (Wi-Fi only initial; cellular later)</li><li>Build / firmware compatibility</li></ul>
+<p>每 device 看 server："Am I eligible for update X?" Server replies based on segmentation rules。</p>
+<h4>3. Manifest &amp; delta</h4>
+<p>Update 不是全 OS 重下。Delta = diff from previous version → 100 MB instead of 5 GB。Per device 之前版本的 delta 单独算。</p>
+<p>设备发 "current version" → 服务器 reply 对应 delta URL。</p>
+<h4>4. CDN 分发</h4>
+<p>Update file 几 GB × 10 亿 devices = 数 EB total bandwidth。CDN edge cache hit critical。Per-region CDN 预热。</p>
+<h4>5. 下载 + install</h4>
+<p>Device pull manifest → check eligibility → download chunked from CDN → verify signature → install。</p>
+<ul><li>Background download (Wi-Fi + 充电 + 屏幕关)</li><li>Pause / resume</li><li>Verify SHA256</li></ul>
+<h4>6. Install timing</h4>
+<p>不要 user 用着手机时强制 reboot。等：</p>
+<ul><li>电量 &gt; 50%</li><li>Charging</li><li>凌晨 2-4AM 用户睡觉</li></ul>
+<p>User 可选 "install now" override。</p>
+<h4>7. Telemetry + halt</h4>
+<p>Device 安装完成后 phone home metrics:</p>
+<ul><li>Pre-install / post-install boot time</li><li>Crash logs first 24 h</li><li>Battery drain</li><li>Temperature</li></ul>
+<p>Aggregate → ML detect anomaly per device type → auto halt rollout。</p>
+<h4>8. Rollback</h4>
+<p>如果 phase 1 检测到 critical issue：</p>
+<ul><li>Stop further rollout</li><li>Push "roll-back firmware" to affected devices (rare, dangerous)</li><li>Or push hotfix forward</li></ul>
+<p>True rollback rare（hard to revert installed OS）→ 优先 forward fix。</p>
+<h4>9. Multi-tenant variant</h4>
+<p>Carrier-specific builds（Verizon vs AT&amp;T iPhone）。Per-carrier manifest + same infrastructure。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Rollout | Staged % | All at once：risk | | File | Delta | Full：bandwidth waste | | Halt | Auto + manual | Manual only：lag | | Install timing | Idle + charging | Force：UX disaster |</p>
+<h3>容量估算</h3>
+<ul><li>1B devices × 100 MB delta = 100 PB total</li><li>CDN 99% hit → 1 PB origin egress</li><li>Telemetry: 1B × 10KB = 10 TB/day inbound</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 全部一次推 → bandwidth + brick devices； ❌ 不 verify signature → malicious update； ❌ Force install → user 愤怒； ❌ Halt criteria not automatic → ride disaster； ❌ 不区分 carrier variant → wrong build。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Staged rollout + automated halt</strong> by telemetry；(2) <strong>Delta + per-device manifest</strong> 节 bandwidth；(3) <strong>Smart install timing</strong> 不打扰 user。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Security patch 紧急 (CVE)？" → expedited rollout 跳过 long canary，但仍 monitor；"Beta program 怎么 onboard？" → opt-in segment + early access channel；"如何 detect device brick？" → no telemetry phone-home → emergency recovery image。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Amazon</strong> · Mid-level</div>
+  <div>Design a distributed system that manages the global rollout of new mobile OS versions to devices worldwide. The system must support staged rollouts, regional targeting, version control, failure handling, rollback mechanisms, telemetry collection, and safe delivery of large update packages at scale.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Google</strong> · Manager</div>
+  <div>The question was asked as named above.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2023 · <strong>Google</strong> · Manager</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cm5eguhaj04lg838o47btdwpe.html">← Leetcode 3350. Adjacent Increasing Subarrays Detection II</a>
+    <a href="cm5eguhad02zh838oa4lbcq1w.html">Leetcode 1263. Minimum Moves to Move a Box to Their Target Location →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

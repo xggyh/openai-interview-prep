@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tell me about a project where the requirements were not clear or kept changing. How did you adapt and maintain productivity? · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Tell me about a project where the requirements were not clear or kept changing. How did you adapt and maintain productivity?</div>
+  <h1>Tell me about a project where the requirements were not clear or kept changing. How did you adapt and maintain productivity?</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Mid-level</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/changing-requirements-project/cm5ehcf6e059h838op4fgiik2" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level · 📋 3 · 🕒 Early April, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Tell me about a project where requirements were unclear or kept changing. How did you adapt?"</strong> —— Googlyness，报告 3 次。考察：<strong>应对 ambiguity 的能力 + 主动管理需求 + 适应性</strong>。</p>
+<p>工业实际中需求清晰 &lt; 50% 时间。面试官想看你是怎么在"无地图"时仍能交付。</p>
+<h3>STAR 框架</h3>
+<h3>故事模板：LLM 产品的需求探索</h3>
+<p><strong>S</strong>：去年我接手一个 LLM-powered customer support automation 项目。客户给的需求是 "用 GPT-4 来自动处理 customer ticket"。但具体哪些 ticket / 怎么处理 / 准确率要求 / 失败 fallback —— 全没明确。CEO 想要"几周内 demo"，product manager 想要"年内 GA"，客服总监想要"先解决 top 10 重复 ticket"。</p>
+<p><strong>T</strong>：作为 tech lead，我需要在 unclear / conflicting requirements 下推进项目。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>第一周：探索 + 拼图</strong></li></ol>
+<ul><li>跟 5 个利益相关方各 1:1 30 分钟 —— 把每方"想要的 outcome" 和"deadline / 资源限制" 列成 doc</li><li>把交集找出来：top 5 high-frequency ticket type</li><li>把冲突列出来：CEO 要的 "demo" 与 PM 要的 "GA" 时间冲突</li></ul>
+<ol><li><strong>第二周：写一个 Minimum Viable Spec 文档</strong></li></ol>
+<ul><li>三段：(1) Q1 demo 范围 = top 5 ticket type, 70% precision; (2) Q2 expand 范围；(3) GA Q3</li><li>邀请所有方 sign-off。CEO 不满意 "demo only top 5"，我用数据说服："top 5 占了 60% volume"</li></ul>
+<ol><li><strong>每两周一次 stakeholder sync</strong>：变化的需求在这里 surface + 取舍。不在这里提的不算 binding requirement</li><li><strong>建立"决策日志"</strong>：每次需求/范围变化记一条 (date, who requested, decision, rationale)，避免 amnesia</li></ol>
+<p><strong>R</strong>：6 周 demo 成功。Q3 GA。期间需求改了 11 次，但因为有 sync + decision log，每次变更影响清楚。我后来把这套流程写成 team manual。</p>
+<h3>关键展示点</h3>
+<h4>1. 主动 framework 而非被动等清晰</h4>
+<p>不等 PM "给清楚需求"，自己主动建 spec 让对方 sign-off。</p>
+<h4>2. 数据驱动取舍</h4>
+<p>不是说"全做" 也不说 "没法做"，而是用数据（top 5 = 60% volume）说服 stakeholder 接受范围限制。</p>
+<h4>3. 记录决策日志</h4>
+<p>需求变了不可怕，可怕的是"我以为是 A，你以为是 B"。Decision log 是低成本防 amnesia 工具。</p>
+<h4>4. 规律性 sync</h4>
+<p>把 ad-hoc requirement change 收敛到 bi-weekly sync —— 避免每天被打断，又能及时响应。</p>
+<h3>加分项</h3>
+<ul><li><strong>主动 prototype 帮 stakeholder 形成需求</strong>（很多时候他们不知道自己要什么，看到 demo 才知道）</li><li><strong>用 leading question 帮 PM 把需求说清楚</strong>（"如果只能做一件事，是哪件？"）</li><li><strong>保留 buffer 应对未来变化</strong>（不要把 100% capacity 都 commit 给当前 spec）</li><li><strong>跟 manager 同步早期</strong> —— 当需求 ambiguity 大时让 manager 知道你需要 air cover</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "我就一直加班 catch up 需求变化" —— 缺方法论； ❌ 抱怨 PM / stakeholder —— 显得不成熟； ❌ 故事里你 "总是 yes" —— 没体现 push back 能力； ❌ 没数字 / 没结果 —— 缺 outcome 信号； ❌ 流程过度（4 个 stakeholder 每周 meeting 全 mandatory）—— 显得不会 trade-off。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Ambiguity 中的核心能力 = <strong>"自己建框架，让 stakeholder 在框架内沟通"</strong>。Senior+ 工程师区分点：能在没人告诉你"该做什么"时，自己定义"该做什么 + 用数据让别人同意"。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"What if a stakeholder kept changing their mind?"</li><li>"How did you decide which requirements to prioritize?"</li><li>"Did you ever push back on a change request?"</li><li>"What if the CEO disagreed with your prioritization?"</li></ul></div>
+<ul><li>"Have you ever made the wrong call on prioritization?"</li></ul>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (91 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Oracle</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Toast</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early July, 2025 · <strong>Expedia</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Roblox</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Amazon</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Apple</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>DoorDash</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Amazon</strong> · Director</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early March, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Uber</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Amazon</strong> · Junior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Bloomberg</strong> · Junior</div>
+  <div>Tell me about a situation where you were unsure of how to go forward and how you tackled this</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Bloomberg</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2024 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2024 · <strong>Meta</strong> · Staff</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (10 条)</h2>
+  <div class="comment">The Project: Migrating a Legacy System to a Cloud-Based API</div><div class="comment">The goal was to help a team transition their legacy on-prem system to a modern cloud-based API. Initially, the scope was clear: replicate existing functionality, improve performance, and ensure secure access. But as we got deeper, things changed—frequently.</div><div class="comment">The Challenges Evolving Requirements: Stakeholders kept discovering new use cases mid-project, which meant reworking endpoints and data models.</div><div class="comment">Unclear Ownership: Different departments had conflicting priorities, and no single product owner was assigned.</div><div class="comment">Integration Surprises: External systems we needed to connect with weren’t documented, and their behavior changed unexpectedly.</div><div class="comment">How I Adapted Built Flexibility into the Architecture: I encouraged the team to use modular design and versioned APIs so we could iterate without breaking things.</div><div class="comment">Created a Living Requirements Doc: We maintained a shared document that tracked every change, rationale, and decision—this became our single source of truth.</div><div class="comment">Weekly Syncs with Stakeholders: We added short, focused check-ins to clarify priorities and catch scope creep early.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6jx0jmc0141ui4b2wfelwo3.html">← Describe going above and beyond to help someone</a>
+    <a href="cm6ffodsw00003b6paxwmrf57.html">Design Slack →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

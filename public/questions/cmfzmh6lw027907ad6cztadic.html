@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a file system for write-once media · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a file system for write-once media</div>
+  <h1>Design a file system for write-once media</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Staff</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/write-once-filesystem/cmfzmh6lw027907ad6cztadic" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Staff · 📋 1 · 🕒 Late September, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a file system that can efficiently store and manage files on write-once media, where data can only be written once and cannot be modified after creation.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>file system for write-once media</strong>（CD-R / DVD-R / tape）：数据写后<strong>不可修改</strong>。例 archival storage、blockchain log、compliance "WORM" media。</p>
+<h3>特殊约束</h3>
+<ul><li><strong>Append-only</strong>：不能 in-place 修改</li><li><strong>Delete = mark</strong>: 物理删除不可能，只能 logical</li><li><strong>Block-level</strong>：写一旦完成 immutable</li></ul>
+<h3>解决思路</h3>
+<h4>1. Log-structured file system</h4>
+<p>整个 FS 是 append-only log。所有操作（create file, write block, rename）都 append events 到 log。</p>
+<pre class="language-plaintext"><code class="language-plaintext">[time 0] Create file "a.txt" inode=42
+[time 1] Write block 0 of inode 42: &lt;data&gt;
+[time 2] Write block 1 of inode 42: &lt;data&gt;
+[time 3] Rename inode 42 → "b.txt"
+[time 4] Delete inode 42  ← logical</code></pre>
+<p>读：replay events from beginning to compute current state。Or use checkpoint (snapshot of state at time T)。</p>
+<h4>2. In-memory index</h4>
+<p>构建时扫 log → 在内存维护 (path → block pointers)。Query 时 O(1) lookup。</p>
+<p>启动慢（扫 log），但 query 快。Checkpoint 减少 replay cost。</p>
+<h4>3. Block addressing</h4>
+<ul><li>物理 block address = sequential offset on media</li><li>Logical block = via inode table → points to physical</li><li>Allocation pointer：next free block。Monotonic increment。</li></ul>
+<h4>4. Versioning</h4>
+<p>天然 versioned —— 同 file 多次 write 不覆盖，只 append 新 version。每 version 一个 timestamp。</p>
+<p>读历史 version：scan log to that timestamp。</p>
+<h4>5. Space efficiency</h4>
+<p>Append-only 浪费空间（删除不 reclaim）。<strong>Compaction</strong>: 定期把 active state 写到新 media，老 media archive。</p>
+<p>或者<strong>generational</strong>: 每 N 天滚动新 media，老 media 只读。</p>
+<h4>6. Crash consistency</h4>
+<p>每写完一个 block sync flush。Replay log 重建状态。Atomicity 用 checksum + sequence number。</p>
+<h4>7. Compliance use cases</h4>
+<ul><li>Audit log</li><li>金融交易 record</li><li>Healthcare records</li><li>Legal hold</li></ul>
+<p>WORM 满足"不可篡改"合规要求（SEC Rule 17a-4 等）。</p>
+<h3>数据结构</h3>
+<pre class="language-python"><code class="language-python">class WORMFileSystem:
+    def __init__(self, media):
+        self.media = media          # append-only block device
+        self.write_pointer = 0
+        self.inode_table: dict[int, list[int]] = {}    # inode -&gt; block list
+        self.path_to_inode: dict[str, int] = {}
+        self.next_inode = 1
+
+    def create(self, path):
+        inode = self.next_inode
+        self.next_inode += 1
+        self._append_event({"op": "create", "path": path, "inode": inode})
+        self.path_to_inode[path] = inode
+        self.inode_table[inode] = []
+
+    def write(self, path, data):
+        inode = self.path_to_inode[path]
+        block_addr = self.write_pointer
+        self.media.write(block_addr, data)
+        self.write_pointer += len(data)
+        self.inode_table[inode].append(block_addr)
+        self._append_event({"op": "write", "inode": inode, "block": block_addr})
+
+    def read(self, path):
+        inode = self.path_to_inode[path]
+        return b''.join(self.media.read(addr) for addr in self.inode_table[inode])</code></pre>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把 LSM Tree 直接搬过来 —— LSM 假设可 mutate；WORM 不行； ❌ Delete 真删 —— media 不支持； ❌ 不 checkpoint → replay 长 log 启动慢； ❌ 不版本化 → 覆盖时丢历史； ❌ 不 atomic write → crash 时部分 block fail。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>WORM FS = <strong>append-only log + in-memory state + checkpoint</strong>。整体接近 event sourcing 或 git。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 search by content？" → 同时 build search index (也 WORM)；"如何 compress？" → compress 写入前；"读 archived media？" → multi-volume support，需 mount old media；"如何 verify integrity？" → SHA256 per block + Merkle tree on logs。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (1 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Create a LLD on file will be stored in memory/media which is write once. · How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+  
+
+  <div class="nav-footer">
+    <a href="cmbskxz3y004n07adimbogre1.html">← Unix Cd Command with Symbolic Link Resolution</a>
+    <a href="cm5ya8aho0036rfqrlt1bib5t.html">Tell me about a time when you had to make tradeoffs between quality and cost. →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

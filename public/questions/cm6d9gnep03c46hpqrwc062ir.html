@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Distributed Cache System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Distributed Cache System</div>
+  <h1>Design a Distributed Cache System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Mid-level, Staff, Manager-Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/distributed-cache-system/cm6d9gnep03c46hpqrwc062ir" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level, Staff, Manager-Senior Manager · 📋 12 · 🕒 Mid April, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a distributed caching system that can serve data with low latency across multiple geographic locations, handling cache misses, replication, and scaling to support billions of records.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Distributed Cache System</strong>（类 Redis Cluster / Memcached）：分布式 KV cache，支持 GET/PUT/DELETE，10M+ QPS，sub-millisecond 延迟，多 region。</p>
+<p>Google 报告 12 次。考点：<strong>consistent hashing + replication + eviction + multi-region propagation</strong>。</p>
+<h3>需求拆解</h3>
+<ul><li>KV API：get(k) / set(k, v, ttl) / del(k)</li><li>1B+ keys，5 TB 数据，500B avg value</li><li>10M+ QPS，P99 &lt; 1ms</li><li>99.99% availability</li><li>Multi-region read/write</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">                   Client SDK
+                       │ consistent hash routing
+                       ▼
+                ┌──────────────┐
+                │ Coord svc    │  cluster topology (Zookeeper/etcd)
+                │ (rebalance)  │
+                └──────┬───────┘
+                       │ (topology pull)
+                       ▼
+       ┌──────────┬──────────┬──────────┐
+       │  Node 1  │  Node 2  │  Node N  │  per node: in-memory hash table
+       │ (shard 0)│ (shard 1)│ (shard k)│  + replicas
+       └──────────┘──────────┴──────────┘
+                       │
+                       │ async replication / CDC
+                       ▼
+                  multi-region async sync</div>
+<h3>核心组件</h3>
+<h4>1. Consistent Hashing + Virtual Nodes</h4>
+<p>每物理节点对应 100-500 个 virtual node 散在 hash ring，避免 hot spot 当节点加入/离开时 minimize 数据 movement。</p>
+<pre class="language-python"><code class="language-python">def route(key: str) -&gt; Node:
+    h = hash(key)
+    return ring.successor(h)  # binary search in sorted vnode list</code></pre>
+<h4>2. Replication (N=3)</h4>
+<p>每 shard 3 副本：1 primary + 2 followers。Primary 接 write，async replicate to followers。</p>
+<p>Quorum 选项：</p>
+<ul><li><strong>eventual</strong>: write 到 primary 即 ack（最快）</li><li><strong>read-your-write</strong>: 用 R+W &gt; N</li><li><strong>strong</strong>: write 等多数副本确认（牺牲延迟）</li></ul>
+<p>Cache 通常用 <strong>eventual</strong> —— 短暂 stale 可接受。</p>
+<h4>3. In-memory data structure</h4>
+<p>每 node：</p>
+<ul><li>Hash table：key → (value, expire_at, last_access)</li><li>LRU list（doubly-linked list）for eviction</li><li>Per-shard mutex 或 sharded lock 减锁竞争</li></ul>
+<h4>4. Eviction</h4>
+<ul><li>LRU：access 时 move to head, evict from tail when memory &gt; 80%</li><li>TTL：lazy expire on read + background sweep（每秒扫一小 batch）</li><li>LFU: 可选 for 频率敏感 cache（参考 LFU Cache 题）</li></ul>
+<h4>5. Failover</h4>
+<ul><li>心跳：每 node 每秒向 coord 报 health</li><li>30 秒无心跳 → mark dead，promote 一个 follower 为 primary</li><li>Coordinator 推送新 topology to clients</li><li>旧 primary 恢复 → 重 join 作 follower</li></ul>
+<h4>6. Rebalance</h4>
+<p>加 / 删 node 时，consistent hash ring 重排。只<strong>少量 key</strong> 迁移（virtual node 设计的好处）。</p>
+<ul><li>Migration 后台 stream，不阻塞 read</li><li>Client SDK 在 migrate window 内 retry on miss</li></ul>
+<h4>7. Multi-region</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Region A primary → CDC → Region B follower
+读：always local region
+写：可选 region-primary（单主）或 multi-master（CRDT for cache）</code></pre>
+<p>对 cache，<strong>single-master per key</strong> + per-region read replica 最简。</p>
+<h4>8. Client SDK</h4>
+<pre class="language-python"><code class="language-python">class Client:
+    def __init__(self, coord_url):
+        self.topology = fetch_topology(coord_url)
+        self.refresh_periodic()
+
+    def get(self, key):
+        node = self.topology.route(key)
+        for attempt in range(3):
+            try:
+                return self._call(node, "GET", key)
+            except (Timeout, NodeDown):
+                self.topology.refresh()
+                node = self.topology.route(key)</code></pre>
+<p>Retry + topology refresh 处理 node failure 透明。</p>
+<h3>关键技术决策</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Sharding | Consistent hash + vnodes | Hash mod N：rebalance 全部移动 | | Replication | Async, eventual | Sync, quorum：延迟高 | | Eviction | LRU + TTL | LFU：复杂；FIFO：HIT rate 低 | | Topology | 中心 coord + client pull | Gossip：复杂 | | Multi-region | 单主 + async replica | Multi-master：write conflict |</p>
+<h3>容量估算</h3>
+<ul><li>1B keys × 500B = 500 GB → 50 nodes × 10 GB RAM each</li><li>10M QPS / 50 nodes = 200k QPS per node → 单 node 64 GB RAM，64 core，能撑</li><li>Network：10M × 500B = 5 GB/s ingress（分散到 50 node 每个 100 MB/s）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Hash mod N 分片 —— 加节点全部 rehash； ❌ 同步 replication —— P99 延迟爆； ❌ Cache 强一致 —— 牺牲延迟无必要； ❌ 不做 client-side topology refresh —— node 挂掉客户端不知； ❌ Eviction 用 random —— hit rate 低于 LRU 30%。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Consistent hash + virtual nodes</strong> 解决 sharding + rebalance；(2) <strong>Async replication + eventual</strong> 保证延迟；(3) <strong>Client SDK 处理 topology + retry</strong> 让 node failure 透明。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 cache stampede？" → request coalescing 或 probabilistic early expiration；"Hot key 怎么办？" → client-side caching + read replica + key splitting；"Cache invalidation？" → publish-subscribe propagate invalidation events；"Persistence？" → optional AOF / RDB snapshots（Redis 风格）。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (34 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Mid April, 2026 · <strong>Google</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Microsoft</strong> · Senior Manager</div>
+  <div>You have a global DB in 1 region. There is an internal service which is about to launch which will have service deployed per region and it wants to call an API to read data from your global DB. Data in your DB is key value. Design a system so that the internal service can call you from regional endpoints. You don't have the budget to create replicas of your DB per region and the data is inherently global, cannot be sharded across regions.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2026 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2026 · <strong>Microsoft</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Microsoft</strong> · Senior</div>
+  <div>It was asked in the straight forward manner, that design distributed cache. Functional and non-functional requirements were not fully given and needed calirifications.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2026 · <strong>Microsoft</strong> · Principal</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Microsoft</strong> · Senior</div>
+  <div>Amazon, screening round, asked both HLD and LLD of LRU cache</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early January, 2026 · <strong>Microsoft</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Microsoft</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2025 · <strong>Google</strong> · Manager</div>
+  <div>Imagine there is a database which has all the data and we need to cache that to a caching system to serve data to 10 different geographic locations with very low latency. · How would you setup the cache system, explain why this cache system will be fast.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Google</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Mock Interview</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Asked to create a design with write through cache system. · Fetch from db with a latency of 100 ms in case of cache miss.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Google</strong> · Staff</div>
+  <div>Same description as the original</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Oracle</strong> · Senior</div>
+  <div>Design a distributed LFU Cache</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2024 · <strong>Microsoft</strong> · Senior</div>
+  <div>Design a distributed cache service</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late August, 2024 · <strong>Microsoft</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2024 · <strong>Google</strong> · Staff</div>
+  <div>Just a one word question. Design a cache. We had to clarify all requirements surrounding this . It’s a global cache for a distributed database with 100 billion records and each cache holds key value records so based on that do the sizing , distribution , latencies , read heavy, etc. Discuss all issues like replication, crashing of cache servers, cache warm up , TTL etc proactively.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2024 · <strong>Microsoft</strong> · Principal</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (2 条)</h2>
+  <div class="comment">Is this question same as key value store or memcached?</div><div class="comment">Hello Interview Problem Breakdown</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm9auesuf00ioad072gonjah8.html">← Design a Distributed Blocking/Denylist System</a>
+    <a href="cm4szwvht003pnqlrkhad2xjd.html">Design a Ticket Booking System →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tell me about a time when you had to make tradeoffs between quality and cost. · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / Googlyness / Tell me about a time when you had to make tradeoffs between quality and cost.</div>
+  <h1>Tell me about a time when you had to make tradeoffs between quality and cost.</h1>
+  <div class="header-meta">
+    <span class="tag tag-googlyness">Googlyness</span>
+    <span class="tag tag-level">Mid-level, Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/quality-cost-tradeoffs/cm5ya8aho0036rfqrlt1bib5t" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Mid-level, Senior Manager · 📋 2 · 🕒 Early September, 2025</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement"></p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p><strong>"Tell me about a time when you had to make tradeoffs between quality and cost"</strong> —— Googlyness，报告 2 次。考察：<strong>工程 judgment + business sense + 沟通取舍</strong>。</p>
+<h3>STAR 框架</h3>
+<h3>故事：launch deadline 下的 test coverage 权衡</h3>
+<p><strong>S</strong>：我 lead 一个 feature 要在 marketing event 前 4 周 ship。完整 test coverage（unit + integration + e2e）需要 3 周写，留 1 周 buffer 不够安全。</p>
+<p><strong>T</strong>：要在 quality（完整 test）vs cost（赶 deadline）权衡。</p>
+<p><strong>A</strong>：</p>
+<ol><li><strong>不 binary 选择</strong>：先把 test 分级 —— P0 (核心 user flow / 数据完整性) / P1 (常见 edge case) / P2 (rare case)。</li><li><strong>数据估计</strong>：每级 test 写多久 + bug 类型 / 风险 estimation。P0 2 天写完，P1 5 天，P2 7 天。</li><li><strong>跟 PM + manager 讨论 trade-off</strong>：proposal = P0 + P1 + 上线后 2 周内补 P2。给数字：launch 后 bug 概率 estimate（P0 完整 5%，加 P1 1%，加 P2 0.3%）。</li><li><strong>明确 commitment</strong>：launch 后 2 周必须补 P2，写进 Q+1 roadmap，manager sign-off。</li><li><strong>加 safety net</strong>：launch 前 1 天 manual smoke test 关键 flow + 1% canary 监控 5 天再 ramp。</li></ol>
+<p><strong>R</strong>：按 deadline launch。Launch 后 14 天发现 2 个 minor bug（P1 catch）+ 0 个 critical。Launch 后第 3 周完成 P2 test。这之后 team 把"test priority framework" 写成 doc 给其他 project 用。</p>
+<h3>关键展示点</h3>
+<h4>1. 不 binary</h4>
+<p>Quality vs cost 不是 0-1。<strong>Tier 化</strong>让 quality 部分让步而非全无。</p>
+<h4>2. 数据 inform decision</h4>
+<p>不是凭感觉。Bug 概率 estimate 让 trade-off visible。</p>
+<h4>3. Stakeholder buy-in</h4>
+<p>不是你单方面决定。PM + manager sign-off。</p>
+<h4>4. Commitment to repair</h4>
+<p>不是"先 ship 再说"，明确"2 周内补完"。Written commitment。</p>
+<h4>5. Safety net</h4>
+<p>承认 P2 缺失风险，加 canary + manual smoke 兜底。</p>
+<h3>加分项</h3>
+<ul><li>提到 <strong>以前类似 trade-off 出过事的教训</strong>（你不是第一次想这事）</li><li>提到 <strong>你 manager 的 reaction</strong>（他认可你的 trade-off framework）</li><li>提到 <strong>如何 prevent future deadline crunch</strong>（不只是这次，是 process change）</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ "我熬夜把 test 都写了" —— 没真 trade-off； ❌ "我们 cut 了 test 然后 ship 了 bug 但没人发现" —— 不专业； ❌ 没 stakeholder communicate —— 你单方面决定； ❌ 没 commitment to repair —— 显得不负责； ❌ "我们 lower 了 quality"—— 缺 nuance。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>Quality vs Cost trade-off 不是"两选一"，是"<strong>分级 + tier 化 + stakeholder align + commitment to repair</strong>"。Senior+ 必备的 engineering judgment。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><ul><li>"What if you'd shipped with critical bug?"</li><li>"How do you decide priority levels?"</li><li>"Have you ever pushed back on a deadline?"</li><li>"What's the most expensive trade-off you've made?"</li></ul></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (4 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Google</strong> · Senior Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid April, 2025 · <strong>Anthropic</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2025 · <strong>Google</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2024 · <strong>Amazon</strong> · Mid-level</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">I would take a stand of value vs cost as a better discussion not quality vs cost.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmfzmh6lw027907ad6cztadic.html">← Design a file system for write-once media</a>
+    <a href="cm4szxbhv0033w579rjh2r8j8.html">Design Netflix/Video Streaming Platform →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

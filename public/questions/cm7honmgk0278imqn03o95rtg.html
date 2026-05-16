@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Trending Hashtags System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Trending Hashtags System</div>
+  <h1>Design a Trending Hashtags System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff, Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/trending-hashtags-system/cm7honmgk0278imqn03o95rtg" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior-Staff, Manager · 📋 10 · 🕒 Mid January, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a highly scalable system that tracks and computes the top K trending hashtags (e.g., top 30-50) across different time windows (last 5/15/30/60 minutes or custom intervals) for billions of users, with support for filtering by geography (local/global) and categories (food, sports, politics).</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Trending Hashtags System</strong>（Twitter Trends / Instagram trending）：从 social media 实时流中识别"热门 hashtag"，按 region / global 展示 top-N，每分钟更新。</p>
+<p>Google 报告 10 次。考点：<strong>实时流处理 + sliding window count + top-K</strong>。</p>
+<h3>需求拆解</h3>
+<ul><li>1B posts/day, 10k posts/sec average, 100k peak</li><li>每分钟更新 trending list (top 50 per region)</li><li>多 region：global + 各国</li><li>"热度" 不只是 count，要 detect "<strong>rate of change</strong>"（突然爆涨的）</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">   Post stream (Kafka)
+         │
+         ▼
+  ┌──────────────────┐
+  │ Hashtag Extractor│  parse #tags, region, ts
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Stream Aggregator│  Flink/Spark Streaming
+  │ (per-region      │  - sliding window count
+  │  windows)        │  - count-min sketch for top-K
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Trending Store   │  Redis ZSET per region
+  │ (top-50 + scores)│  TTL 5 min
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ API + CDN cache  │  GET /trending?region=X
+  └──────────────────┘</div>
+<h3>核心组件</h3>
+<h4>1. Stream pipeline</h4>
+<pre class="language-plaintext"><code class="language-plaintext">post → extract hashtags → emit (hashtag, region, ts)
+   ↓
+keyBy (hashtag, region)
+   ↓
+sliding window (5 min, slide 1 min)
+   ↓
+count → top-K reducer</code></pre>
+<h4>2. Counting algorithm</h4>
+<p><strong>Naïve</strong>：每 hashtag-region 一个 counter。问题：1B unique hashtag → 内存爆。</p>
+<p><strong>Count-Min Sketch</strong>：固定大小的 probabilistic counter，O(1) per update，准确率高（top-K hashtag 是"high count"，误差小）。</p>
+<pre class="language-python"><code class="language-python">class CountMinSketch:
+    def __init__(self, width=10000, depth=5):
+        self.width, self.depth = width, depth
+        self.table = [[0]*width for _ in range(depth)]
+        self.hashes = [random_hash() for _ in range(depth)]
+    def add(self, key, count=1):
+        for i, h in enumerate(self.hashes):
+            self.table[i][h(key) % self.width] += count
+    def estimate(self, key):
+        return min(self.table[i][h(key) % self.width]
+                   for i, h in enumerate(self.hashes))</code></pre>
+<p>加上 <strong>heavy hitters</strong> 维护（min-heap of top-K with estimated counts）—— 每次 add 后 check 是否进 top-K。</p>
+<h4>3. Sliding window</h4>
+<p>5 分钟窗口、1 分钟 slide：</p>
+<ul><li>维护 5 个 1-minute "sub-window" counter</li><li>每分钟 expire 最早的 sub-window</li><li>查询 trending = sum 5 个 sub-window 的 top-K</li></ul>
+<p>Flink 原生支持 sliding window，不必自己实现。</p>
+<h4>4. Rate of change</h4>
+<p>不只看 absolute count。计算 <strong>"current 5-min count vs prior 5-min count" 的 ratio</strong>：</p>
+<pre class="language-plaintext"><code class="language-plaintext">trending_score(tag) = current_count × log(1 + current_count / prior_count)</code></pre>
+<p>突然爆涨的 ratio 大，score 高。这比纯 count 更能 surface emerging trends。</p>
+<h4>5. Multi-region</h4>
+<p>每个 region 独立 stream pipeline：</p>
+<ul><li>US, EU, APAC 各自 Flink job</li><li>Global trending = re-aggregate all regions（轻量）</li></ul>
+<p>按地理坐标 / 时区 / language hint 把 post 分到 region。</p>
+<h4>6. Anti-spam</h4>
+<p>热门 hashtag 容易被 bot 刷。Filter：</p>
+<ul><li>Per-user 每分钟同 hashtag 限制 10 次</li><li>ML model 识别 coordinated inauthentic behavior</li><li>Bot signal 加权降低 trending score</li></ul>
+<h4>7. API + caching</h4>
+<pre class="language-plaintext"><code class="language-plaintext">GET /trending?region=US&amp;top=50
+→ 直接读 Redis ZSCORE per region
+→ CDN cache 30 秒（用户不需要秒级实时）</code></pre>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Counting | Count-Min Sketch + heavy hitters | exact counter：内存爆 | | Window | 5min sliding, 1min slide | 1min tumbling：bursty 不平滑 | | Score | count × rate-of-change | pure count：missing emerging | | Storage | Redis ZSET | DB：read 慢 | | Pipeline | Flink | Custom：reinvent wheel |</p>
+<h3>容量估算</h3>
+<ul><li>100k posts/sec × 2 hashtags avg = 200k events/sec</li><li>CMS table 100k × 5 depth × 4 bytes = 2 MB per region per minute → trivial</li><li>Redis ZSET per region: top 1k × 50 bytes = 50 KB → 50 region × 50 KB = 2.5 MB</li><li>API QPS: 100k peak → CDN 99%, origin 1k QPS</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Exact counter per hashtag —— 内存爆； ❌ Pure count 不考虑 rate-of-change —— "the" "and" 永远 top； ❌ 不 anti-spam —— bot 操纵 trending； ❌ 每查询都重算 —— 应预聚合到 Redis； ❌ Window 太大 / 太小 —— 5 min 是 Twitter 实战调好的 sweet spot。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Count-Min Sketch + heavy hitters</strong> 处理高基数；(2) <strong>Sliding window + rate-of-change score</strong> surface emerging trends；(3) <strong>Anti-spam ML model</strong> 防止 manipulation。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Personalized trending（每用户不同）？" → 加入 user interest embedding 重排 top-K；"Hashtag co-occurrence？" → 建 graph + cluster；"Real-time &lt; 1 min？" → 降 slide window；"Historical trending data？" → 每分钟 snapshot 存 cold storage (S3 Parquet)。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (38 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Late February, 2026 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Atlassian</strong> · Mid-level</div>
+  <div>Design popular K feeds in confluence. Follow-ups included popularity score calculation strategies, support for querying in windows and updating dashboards of users in real-time.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Manager</div>
+  <div>This was asked during initial screen round on 12/12/2025</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid November, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late October, 2025 · <strong>Google</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid October, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early October, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2025 · <strong>LinkedIn</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early September, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid August, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early August, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late July, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid July, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>The hashtags come in log file batches of 10GB each. · The read part doesn't need to be handled</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late June, 2025 · <strong>Meta</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid June, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early June, 2025 · <strong>Meta</strong> · Manager</div>
+  <div>Top 50 trending hash tags in each country.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Design a system that reports the top 50 hashtags used in user posts over the past hour, the past 1 minute, and the past 15 minutes. Assume billions of users.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Mid May, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Principal</div>
+  <div>The task was to design a tagging system which will be used by other services or products of Atlassian like confluence, jira, bitbucket. · system should be highly scalable and fault tolerant.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Early May, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early April, 2025 · <strong>Meta</strong> · Mid-level</div>
+  <div>Accuracy in tracking · K = 30 hashtags · Window = 12 hours · Scale: 2B DAU posting 100 M posts per day</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Senior</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early February, 2025 · <strong>Meta</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late September, 2024 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late May, 2024 · <strong>Google</strong> · Senior</div>
+  <div>Design a Tweeter scale application to find out the trending hashtags in following intervals. · Last 5 minutes · Last 15 minutes · Last 30 minutes · Last 60 minutes · or user-specified time. Trending Hashtags can be filtered based on local/global trending, can be related to categories Food, sport, politics</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2024 · <strong>Meta</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Real-time updates, high fan-in writes, and the need for low-latency read paths are shared concerns; techniques for hot key mitigation and push updates carry over.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cmi3quwzg02mg07ad9blftp07.html">← Design a fast food restaurant chain management system</a>
+    <a href="cmkbgr2qp08d108adu0khqo6o.html">Design Google Photos →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

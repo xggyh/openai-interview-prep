@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design a Server Health Monitoring System · 面试题准备</title>
+<link rel="stylesheet" href="../assets/style.css?v=37ca4bbd">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <h1><a href="../index.html">🧠 面试题准备</a></h1>
+    <div class="meta"><a href="../index.html">← 返回列表</a></div>
+  </div>
+</header>
+<main class="container detail">
+  <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Server Health Monitoring System</div>
+  <h1>Design a Server Health Monitoring System</h1>
+  <div class="header-meta">
+    <span class="tag tag-system-design">System Design</span>
+    <span class="tag tag-level">Senior-Staff, Manager-Senior Manager</span>
+    <span class="external"><a href="https://www.hellointerview.com/community/questions/server-health-monitor/cm6jwhimp0093dar9n0eo4lvt" target="_blank" rel="noopener">原题 ↗</a></span>
+  </div>
+  <div class="company-chips"><span class="company-chip" style="--c:#4285f4"><strong>Google</strong> · Senior-Staff, Manager-Senior Manager · 📋 7 · 🕒 Early March, 2026</span></div>
+
+  <section class="section">
+    <h2>Problem Statement</h2>
+    <p class="problem-statement">Design a distributed health monitoring system that can track the status and performance metrics of millions of services, detecting potential issues before they cause failures and providing real-time alerts to operators.</p>
+  </section>
+
+  <section class="section">
+    <h2>我的思路与解法</h2>
+    <h3>题目本质</h3>
+<p>设计 <strong>Server Health Monitoring System</strong>：监控数千 / 数万服务器的健康状况（CPU/mem/disk/network/process）+ alert + dashboard + historical trend.</p>
+<p>Google 报告 7 次。考点：<strong>time-series ingestion + storage + alerting + visualization</strong>。</p>
+<h3>需求拆解</h3>
+<ul><li>50k servers，每 10 秒报 metrics</li><li>Metric 种类：~50 per server</li><li>Alert latency &lt; 1 minute</li><li>历史保留：1 个月精细 + 1 年聚合</li><li>99.99% available</li></ul>
+<h3>整体架构</h3>
+<div class="ascii-diagram">    Servers (50k)
+       │  agent on each: push or pull
+       ▼
+  ┌──────────────┐
+  │ Collector    │  Prometheus pull / OTel push
+  │ (regional)   │
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Kafka            │  topic: metrics.raw
+  └──────┬───────────┘
+         │
+         ▼
+  ┌──────────────────┐
+  │ Stream Processor │  Flink: aggregate to 10s/1m/1h/1d
+  └──┬───────────┬───┘
+     │           │
+     ▼           ▼
+  ┌──────┐  ┌─────────────┐
+  │ TSDB │  │ Alert       │
+  │ (Prom│  │ Engine      │
+  │  /   │  │ (rules eval)│
+  │ Vict.│  └──────┬──────┘
+  │ Met.)│         │
+  └──┬───┘         ▼
+     │       ┌─────────────┐
+     │       │ PagerDuty / │
+     │       │ Slack alert │
+     │       └─────────────┘
+     ▼
+  Grafana dashboard</div>
+<h3>核心组件</h3>
+<h4>1. Collection 模式：Pull vs Push</h4>
+<p><strong>Prometheus pull</strong>：collector 定期 scrape <code>/metrics</code> endpoint</p>
+<ul><li>优点：发现 stale / dead server 容易（scrape failed）</li><li>缺点：firewall / NAT 后的 server 麻烦</li></ul>
+<p><strong>Push</strong> (OpenTelemetry / StatsD)：agent 主动 push</p>
+<ul><li>优点：穿透 firewall</li><li>缺点：dead server 不知道是 dead 还是 silent</li></ul>
+<p>实战：<strong>hybrid</strong> —— 内部 server pull，edge / mobile push。</p>
+<h4>2. TSDB</h4>
+<p>需求：write-heavy, time-ordered query。专用 time-series DB：</p>
+<ul><li><strong>Prometheus</strong>：单机 limit，需 federation</li><li><strong>VictoriaMetrics</strong>：高写入 throughput</li><li><strong>Thanos</strong>：长期存储 + Prometheus 协调</li><li><strong>InfluxDB</strong>：商业 + 复杂查询</li><li><strong>TimescaleDB</strong>：Postgres extension，SQL friendly</li></ul>
+<p>每 metric 是 series = (metric_name + labels)，时间序列。</p>
+<h4>3. Multi-resolution</h4>
+<pre class="language-plaintext"><code class="language-plaintext">10 秒精度 → 保留 1 天 (downsample 后丢)
+1 分钟精度 → 7 天
+5 分钟精度 → 1 月
+1 小时精度 → 1 年</code></pre>
+<p>Flink job 每分钟从 raw 计算 aggregations 写入对应 retention level。Query 时按时间范围选 resolution。</p>
+<h4>4. Alert engine</h4>
+<p>Rule format（PromQL 风格）:</p>
+<pre class="language-plaintext"><code class="language-plaintext">alert: HighCPU
+expr: avg_over_time(cpu_usage{job="prod"}[5m]) &gt; 0.9
+for: 5m
+labels:
+  severity: page
+annotations:
+  summary: "CPU &gt; 90% for 5 min on {{ $labels.instance }}"</code></pre>
+<p>每 30 秒 evaluate rules → 触发 alert send to PagerDuty / Slack。</p>
+<p><strong>Anti-flapping</strong>：<code>for: 5m</code> 要求条件持续 5 分钟才 alert，避免抖动。</p>
+<h4>5. Visualization</h4>
+<p>Grafana：dashboard 由 panels 组成，每 panel = PromQL query + viz config。</p>
+<ul><li>Live update via WebSocket</li><li>Drill-down：点击 server → 详细 panel</li></ul>
+<h4>6. Anomaly detection (ML)</h4>
+<p>Static threshold (CPU &gt; 90%) 太粗。加 ML model:</p>
+<ul><li>Per-metric 历史 baseline (mean ± stddev by hour-of-day)</li><li>当前 vs baseline &gt; 3σ → anomaly</li><li>ML detect "异常 patterns" without explicit threshold</li></ul>
+<h4>7. SLO + Error Budget</h4>
+<p>定义 SLO：99.9% successful requests in 30-day rolling。</p>
+<ul><li>Error budget = 0.1% = 43.8 minutes / month</li><li>Burn rate alert：当前燃烧速度预测 24h 内耗尽 budget → 立即 alert</li></ul>
+<h4>8. Multi-region</h4>
+<p>每 region 独立 collector + TSDB。Global query 通过 Thanos / federation。</p>
+<h3>取舍</h3>
+<p>| 决策 | 选择 | 替代 | |---|---|---| | Collection | Hybrid pull/push | 单一 pull：NAT 不友好 | | TSDB | VictoriaMetrics / Prometheus | Generic DB：write 慢 | | Alert | Rule + ML anomaly | Threshold only：粗糙 | | Storage | Multi-resolution | Single：成本爆 | | Multi-region | Per-region + federation | Single global：跨洋慢 |</p>
+<h3>容量估算</h3>
+<ul><li>50k servers × 50 metrics × 1/10s = 250k metrics/sec</li><li>250k × 30s evaluation interval = 7.5M evaluations / 30s for alerts</li><li>Storage：250k × 16 bytes × 86400 = 350 GB/day raw → downsample 后 50 GB/day</li></ul>
+<h3>易错点</h3>
+<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 静态 threshold —— 不同 workload 不同 baseline； ❌ 不 dedupe alert —— 1 个 incident 收 100 条 page； ❌ Alert 不 escalate —— 1 个 page 没人接 → 漏； ❌ Cardinality 爆炸（每 request 都 unique label）—— TSDB 死； ❌ 不做 alert silence during deploy —— deploy 期间 noisy alert。</p></div>
+<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Multi-resolution TSDB + downsample</strong> 控成本；(2) <strong>Rule + anomaly hybrid alerting</strong> 避免 false positive；(3) <strong>SLO + error budget</strong> 把 alert 与 business value 对齐。</p></div>
+<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 reduce alert fatigue？" → grouping, silencing, smart on-call rotation；"Distributed tracing 集成？" → metric / trace / log 三位一体 (OpenTelemetry)；"Auto-remediation？" → alert 触发 playbook script 自动 restart / scale；"Cost optimization？" → drop low-cardinality labels + sample 数据流。</p></div>
+  </section>
+
+  
+<section class="section">
+  <h2>Variants & Timeline (9 条真实报告)</h2>
+  <p>下面是其他候选人在不同公司被问到这题的变种描述（含本题的 OpenAI 报告以及其他公司的同题）：</p>
+  <div class="variants">
+<div class="variant">
+  <div class="vmeta">Early March, 2026 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late January, 2026 · <strong>Google</strong> · Senior Manager</div>
+  <div>The dashboard has some hot data (every day people load common metrics at the same time), the data are key-value pairs, the I was asked to design the storage and query layers</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late December, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Manager</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Early December, 2025 · <strong>Google</strong> · Staff</div>
+  <div>This was a Senior-Staff level tech screen before a full loop at Google.  The interviewer was very chill and basically just wanted to make sure I hit all the main points.  Read System Design Interview - Volume 2 - Chapter 5 for everything you need to know.</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late November, 2025 · <strong>Google</strong> · Staff</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Late April, 2025 · <strong>Amazon</strong> · Mid-level</div>
+  
+</div>
+<div class="variant">
+  <div class="vmeta">Mid January, 2025 · <strong>Amazon</strong> · Senior</div>
+  <div>Design a health monitoring system for million services (HLD)</div>
+</div>
+<div class="variant">
+  <div class="vmeta">Late March, 2024 · <strong>Google</strong> · Senior</div>
+  <div>How would you rate the quality of this article? · 0.5 Stars · 1 Star · 1.5 Stars · 2 Stars · 2.5 Stars · 3 Stars · 3.5 Stars · 4 Stars · 4.5 Stars · 5 Stars · Empty</div>
+</div></div>
+</section>
+  
+<section class="section">
+  <h2>讨论摘要 (1 条)</h2>
+  <div class="comment">Delivering low-latency updates to many subscribers mirrors sending alerts and updating dashboards in real time. Techniques for fanout, deduplication, and resilience under spikes carry over.</div>
+</section>
+  
+
+  <div class="nav-footer">
+    <a href="cm6jwy3cq00lbui4bm2uxmm9p.html">← Knapsack Problem Variations</a>
+    <a href="cmjezaddj02iv08ad5rm88mc7.html">Tell me about your management experience →</a>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>
