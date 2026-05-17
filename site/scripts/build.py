@@ -367,8 +367,12 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
 
         data_companies = "|".join(company_list)
         data_deep = "1" if is_deep else "0"
+        # Encode recency as a single comparable integer: year*1000 + month*10 + phase.
+        # `most_recent` is the max-across-companies, already chosen above.
+        rec_key = _recency_key(most_recent or "")
+        data_recency = rec_key[0] * 1000 + rec_key[1] * 10 + rec_key[2]
         card = f"""
-<div class="q-card{' is-deep' if is_deep else ''}" data-type="{esc(qtype)}" data-companies="{esc(data_companies)}" data-deep="{data_deep}">
+<div class="q-card{' is-deep' if is_deep else ''}" data-type="{esc(qtype)}" data-companies="{esc(data_companies)}" data-deep="{data_deep}" data-reports="{total_reports}" data-recency="{data_recency}" data-title="{esc(q['title']).lower()}">
   <a class="q-title" href="{href}">{esc(q['title'])}</a>
   <div class="q-tags">
     <span class="{tag_class(qtype)}">{esc(qtype)}</span>
@@ -401,6 +405,13 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
     deep_tabs = [
         '<button class="active" data-dfilter="all">全部</button>',
         f'<button data-dfilter="deep">📚 教学版深度讲解 ({deep_count})</button>',
+    ]
+
+    # Sort buttons
+    sort_tabs = [
+        '<button class="active" data-sort="recency">🕒 最近问询</button>',
+        '<button data-sort="reports">📋 报告频次</button>',
+        '<button data-sort="title">🔤 字母</button>',
     ]
 
     counts = ' '.join(
@@ -443,12 +454,16 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
     <span class="filter-label">深度：</span>
     {''.join(deep_tabs)}
   </div>
+  <div class="filter-bar">
+    <span class="filter-label">排序：</span>
+    {''.join(sort_tabs)}
+  </div>
 
   <div class="q-grid" id="q-grid">{''.join(cards)}</div>
 </main>
 
 <script>
-const state = {{ cfilter: 'all', tfilter: 'all', dfilter: 'all' }};
+const state = {{ cfilter: 'all', tfilter: 'all', dfilter: 'all', sort: 'recency' }};
 function applyFilters() {{
   document.querySelectorAll('.q-card').forEach(card => {{
     const companies = (card.dataset.companies || '').split('|');
@@ -457,6 +472,26 @@ function applyFilters() {{
     const matchD = state.dfilter === 'all' || (state.dfilter === 'deep' && card.dataset.deep === '1');
     card.style.display = (matchC && matchT && matchD) ? '' : 'none';
   }});
+}}
+function applySort() {{
+  const grid = document.getElementById('q-grid');
+  const cards = Array.from(grid.children);
+  cards.sort((a, b) => {{
+    if (state.sort === 'reports') {{
+      const da = Number(a.dataset.reports || 0), db = Number(b.dataset.reports || 0);
+      if (db !== da) return db - da;
+      // tie-break: most recent first
+      return Number(b.dataset.recency || 0) - Number(a.dataset.recency || 0);
+    }}
+    if (state.sort === 'title') {{
+      return (a.dataset.title || '').localeCompare(b.dataset.title || '');
+    }}
+    // default 'recency'
+    const ra = Number(a.dataset.recency || 0), rb = Number(b.dataset.recency || 0);
+    if (rb !== ra) return rb - ra;
+    return Number(b.dataset.reports || 0) - Number(a.dataset.reports || 0);
+  }});
+  cards.forEach(c => grid.appendChild(c));
 }}
 document.querySelectorAll('button[data-cfilter]').forEach(btn => {{
   btn.addEventListener('click', () => {{
@@ -480,6 +515,14 @@ document.querySelectorAll('button[data-dfilter]').forEach(btn => {{
     btn.classList.add('active');
     state.dfilter = btn.dataset.dfilter;
     applyFilters();
+  }});
+}});
+document.querySelectorAll('button[data-sort]').forEach(btn => {{
+  btn.addEventListener('click', () => {{
+    document.querySelectorAll('button[data-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.sort = btn.dataset.sort;
+    applySort();
   }});
 }});
 </script>
