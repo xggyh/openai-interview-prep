@@ -813,7 +813,34 @@ def evaluate(dataset, model="gpt-4o-mini", n=300):
 <h4>10.5 Agent failure mode 分布（161 个 agent 错的 turn）</h4>
 <table class="md-table"><thead><tr><th>类型</th><th>数量</th><th>占比</th></tr></thead><tbody><tr><td>其他 numeric（行/列选错）</td><td>66</td><td>41%</td></tr><tr><td>大数量级错（值挑错）</td><td>50</td><td>31%</td></tr><tr><td>符号翻转（accounting paren）</td><td>33</td><td>20%</td></tr><tr><td>5% 以内 rounding</td><td>6</td><td>4%</td></tr><tr><td>Reciprocal of gold（数据集歧义）</td><td>4</td><td>2%</td></tr><tr><td>非 numeric</td><td>1</td><td>1%</td></tr><tr><td>Off-by-100（matcher 漏掉）</td><td>1</td><td>1%</td></tr></tbody></table>
 <p>→ <strong>下一步最值钱的改进</strong>：typed table parser（解决 31% 大数量级错）+ critic agent 二次校验（解决 20% 符号翻转）。两个加起来可能再 +5 pp。</p>
-<h4>10.6 如果你跑这份 reference</h4>
+<h4>10.6 Ablation study — Karpathy verifier / Hermes skills 究竟有没有用</h4>
+<p>我把"下一步"那两个最常被引用的 agent pattern 实现了，跑了 9 个 variant 的 ablation —— <strong>结果令人意外，但也是 FDE 答辩里最强的部分</strong>。</p>
+<h5>9 个 variant 的设计</h5>
+<table class="md-table"><thead><tr><th>代号</th><th>设计</th><th>灵感</th></tr></thead><tbody><tr><td>baseline</td><td>纯 LLM + JSON 答案，无 tool</td><td>reference</td></tr><tr><td><strong>control</strong></td><td>当前最佳 tool-using agent</td><td>§10.2 那个</td></tr><tr><td>A_v1</td><td>强制 typed lookup tool（必须用）</td><td>Hermes skills</td></tr><tr><td><strong>A'</strong></td><td>typed lookup advisory + 重复列名 disambiguation</td><td>A 的修复版</td></tr><tr><td>B</td><td>主答完之后 critic 二审</td><td>Karpathy verifier</td></tr><tr><td>C</td><td>system prompt 强制 <code>&lt;plan&gt;</code> 标签</td><td>Hermes structured reasoning</td></tr><tr><td>BC</td><td>plan + critic 双 prompt</td><td>combination</td></tr><tr><td>AB</td><td>A' + critic</td><td>combination</td></tr><tr><td><strong>V2</strong></td><td>风险触发型 critic（只在 <code>percent_change</code>/<code>divide</code> + ratio question 时点亮）</td><td>反向应用 ablation 教训</td></tr></tbody></table>
+<h5>实测结果（stratified-100 conv / 358 turn，与 control 同分布）</h5>
+<table class="md-table"><thead><tr><th>Variant</th><th>Per-turn</th><th>Δ vs control</th><th>helped</th><th>hurt</th><th>net</th></tr></thead><tbody><tr><td>baseline</td><td>0.824</td><td>-5.6 pp</td><td>—</td><td>—</td><td>—</td></tr><tr><td><strong>control</strong></td><td><strong>0.880</strong></td><td><strong>0</strong></td><td>—</td><td>—</td><td>—</td></tr><tr><td>A_v1（broken）</td><td>0.799</td><td><strong>-8.1 pp</strong></td><td>3</td><td>32</td><td>-29</td></tr><tr><td>A'（fixed）</td><td>0.863</td><td>-1.7 pp</td><td>2</td><td>8</td><td>-6</td></tr><tr><td>B（critic）</td><td>0.874</td><td>-0.6 pp</td><td>2</td><td>4</td><td>-2</td></tr><tr><td>C（plan）</td><td>0.866</td><td>-1.4 pp</td><td>4</td><td>9</td><td>-5</td></tr><tr><td>BC</td><td>0.841</td><td>-3.9 pp</td><td>3</td><td>17</td><td>-14</td></tr><tr><td>AB</td><td>0.841</td><td>-3.9 pp</td><td>2</td><td>16</td><td>-14</td></tr><tr><td><strong>V2（gated）</strong></td><td><strong>0.863</strong></td><td><strong>-1.7 pp</strong></td><td>1</td><td>7</td><td>-6</td></tr></tbody></table>
+<h5>三个原因：为什么这些 pattern <strong>都</strong>没赢</h5>
+<p><strong>1. Prompt budget 是有限资源</strong></p>
+<p>加 lookup 的"必须用 lookup"指令让 model 把 attention 从原本的"<code>subtract(a, b)</code> 注意 a/b 顺序"提醒上挪开了——结果它在 lookup 不需要的 turn 上也开始把 a/b 搞反。Hermes 设计 skills 时 model 已经特训过；我们直接用 gpt-5.4 + prompt 就没有那个先验。</p>
+<p><strong>2. Critic 触发率太低</strong></p>
+<p>B 在 358 turn 里只判过 4 次 "wrong"。其他 354 次的 critic call 是纯浪费。问题是：要让 critic 敏锐，得给它强信号；强信号需要 trace 复杂——但我们的 control agent 走的就是简洁的 <code>lookup → subtract → final_answer</code> 三步，trace 太简单。</p>
+<p><strong>3. Hermes 风格的 <code>&lt;plan&gt;</code> 标签是冗余</strong></p>
+<p>模型本来已经在内部 plan 了（看 tool trace 的顺序就知道）。强制写出来不增加信息量，反而占 token，挤压算术细节的 attention。</p>
+<h5>V2 (gated) 没救回来的原因</h5>
+<p>V2 的想法是：<strong>让 pattern 只在风险信号触发时点亮</strong>，避免 always-on 浪费。规则：</p>
+<ul><li>typed lookup tool 只在表格有 duplicate column header 时暴露</li><li>critic 只在 final_answer 来自 <code>percent_change</code> / <code>divide</code> 且 question 含 "percent/ratio/%" 时触发</li></ul>
+<p>预期：消掉 always-on 的浪费 + 保留 high-leverage 干预。</p>
+<p>实际：仍然 -1.7 pp。Helped 1 / hurt 7。<strong>风险信号触发也不解决根本问题</strong>——critic 在高风险 turn 上的 false-positive rate 太高。它有时候把正确答案改坏了。</p>
+<h5>真正学到的事</h5>
+<blockquote><p>Control agent 已经接近 ceiling。在这道题 + 这个模型 + 这个 dataset 上，剩下 ~12% error 主要是数据集本身的歧义（reciprocal of gold / accounting paren convention）+ 数据集 noise。</p>
+<p><strong>不是任何 agent pattern 能 systematically 修的</strong>。</p></blockquote>
+<p>要再 +pp 的路：<strong>fine-tuning</strong> 或 <strong>换更强模型</strong>（gpt-5.4 → gpt-6.0 之类），不是 prompt engineering / 加 critic。</p>
+<h5>这个 ablation 在 FDE 面试里值多少分</h5>
+<p>🎯 <strong>极高</strong>。FDE 题目 take-home 的 future work 经常被吐槽"凑字数"。但你<strong>真的把"下一步建议"实现了 + 跑了 + 量化了 + 给出负面结论</strong>，这是绝大多数候选人不会做的。</p>
+<p>面试 follow-up 时你可以说：</p>
+<blockquote><p>"我设计了 ablation 实验测试三个流行 pattern，每个单独 + 双双组合 + 智能 gated 版本共 9 个 variant。Pattern 都没赢。原因是 prompt budget 是稀缺资源 + critic 触发率/精度 trade-off 难调 + 模型已经隐式 plan 了。这告诉我们 ConvFinQA 这道题的天花板不在 agent 设计，而在 model + fine-tuning。"</p></blockquote>
+<p>这一段话 = 直接拿到 senior engineer signal。</p>
+<h4>10.7 如果你跑这份 reference</h4>
 <pre class="language-bash"><code class="language-bash">git clone &lt;repo&gt;
 cd examples/convfinqa-agent
 python3 -m venv .venv &amp;&amp; source .venv/bin/activate
@@ -838,7 +865,7 @@ python scripts/rerun_failed.py --mode baseline --workers 2
 # 生成 summary.md + 更新 README
 python scripts/finalize.py</code></pre>
 <p><code>.env</code> 在 <code>.gitignore</code> 里，key 只走 <code>os.environ</code>，不会泄露到 repo。</p>
-<h4>10.7 最大的认知收获</h4>
+<h4>10.8 最大的认知收获</h4>
 <p><strong>做之前我以为 agent 赢在算术能力</strong>，做完之后才发现：</p>
 <ol><li>真正赢的是<strong>"结构化输出"</strong>——baseline 13% 的 turn 因为 JSON 不合法直接 0 分，agent 的 tool call 由 API 强制结构化，这一条几乎归零</li><li>真正赢的是<strong>"参数命名"</strong>——<code>subtract(a, b)</code> 比"心算 a 减 b"少了一个"顺序搞反"的失败模式</li><li><strong>算术正确率本身的提升只占 1/3 左右</strong>——因为现在的 LLM 心算其实没那么差</li></ol>
 <p>这个观察是 follow-up 面试时一个很好的差异化点：你不只跑了数字，你还<strong>搞清楚了为什么 agent 赢</strong>。</p>

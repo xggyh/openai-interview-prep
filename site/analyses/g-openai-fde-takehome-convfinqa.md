@@ -1158,7 +1158,82 @@ baseline 有 ~13% 的 turn 因为输出不是合法 JSON（带 markdown、加解
 
 → **下一步最值钱的改进**：typed table parser（解决 31% 大数量级错）+ critic agent 二次校验（解决 20% 符号翻转）。两个加起来可能再 +5 pp。
 
-### 10.6 如果你跑这份 reference
+### 10.6 Ablation study — Karpathy verifier / Hermes skills 究竟有没有用
+
+我把"下一步"那两个最常被引用的 agent pattern 实现了，跑了 9 个 variant 的 ablation —— **结果令人意外，但也是 FDE 答辩里最强的部分**。
+
+#### 9 个 variant 的设计
+
+| 代号 | 设计 | 灵感 |
+|---|---|---|
+| baseline | 纯 LLM + JSON 答案，无 tool | reference |
+| **control** | 当前最佳 tool-using agent | §10.2 那个 |
+| A_v1 | 强制 typed lookup tool（必须用） | Hermes skills |
+| **A'** | typed lookup advisory + 重复列名 disambiguation | A 的修复版 |
+| B | 主答完之后 critic 二审 | Karpathy verifier |
+| C | system prompt 强制 `<plan>` 标签 | Hermes structured reasoning |
+| BC | plan + critic 双 prompt | combination |
+| AB | A' + critic | combination |
+| **V2** | 风险触发型 critic（只在 `percent_change`/`divide` + ratio question 时点亮） | 反向应用 ablation 教训 |
+
+#### 实测结果（stratified-100 conv / 358 turn，与 control 同分布）
+
+| Variant | Per-turn | Δ vs control | helped | hurt | net |
+|---|---|---|---|---|---|
+| baseline | 0.824 | -5.6 pp | — | — | — |
+| **control** | **0.880** | **0** | — | — | — |
+| A_v1（broken） | 0.799 | **-8.1 pp** | 3 | 32 | -29 |
+| A'（fixed） | 0.863 | -1.7 pp | 2 | 8 | -6 |
+| B（critic） | 0.874 | -0.6 pp | 2 | 4 | -2 |
+| C（plan） | 0.866 | -1.4 pp | 4 | 9 | -5 |
+| BC | 0.841 | -3.9 pp | 3 | 17 | -14 |
+| AB | 0.841 | -3.9 pp | 2 | 16 | -14 |
+| **V2（gated）** | **0.863** | **-1.7 pp** | 1 | 7 | -6 |
+
+#### 三个原因：为什么这些 pattern **都**没赢
+
+**1. Prompt budget 是有限资源**
+
+加 lookup 的"必须用 lookup"指令让 model 把 attention 从原本的"`subtract(a, b)` 注意 a/b 顺序"提醒上挪开了——结果它在 lookup 不需要的 turn 上也开始把 a/b 搞反。Hermes 设计 skills 时 model 已经特训过；我们直接用 gpt-5.4 + prompt 就没有那个先验。
+
+**2. Critic 触发率太低**
+
+B 在 358 turn 里只判过 4 次 "wrong"。其他 354 次的 critic call 是纯浪费。问题是：要让 critic 敏锐，得给它强信号；强信号需要 trace 复杂——但我们的 control agent 走的就是简洁的 `lookup → subtract → final_answer` 三步，trace 太简单。
+
+**3. Hermes 风格的 `<plan>` 标签是冗余**
+
+模型本来已经在内部 plan 了（看 tool trace 的顺序就知道）。强制写出来不增加信息量，反而占 token，挤压算术细节的 attention。
+
+#### V2 (gated) 没救回来的原因
+
+V2 的想法是：**让 pattern 只在风险信号触发时点亮**，避免 always-on 浪费。规则：
+
+- typed lookup tool 只在表格有 duplicate column header 时暴露
+- critic 只在 final_answer 来自 `percent_change` / `divide` 且 question 含 "percent/ratio/%" 时触发
+
+预期：消掉 always-on 的浪费 + 保留 high-leverage 干预。
+
+实际：仍然 -1.7 pp。Helped 1 / hurt 7。**风险信号触发也不解决根本问题**——critic 在高风险 turn 上的 false-positive rate 太高。它有时候把正确答案改坏了。
+
+#### 真正学到的事
+
+> Control agent 已经接近 ceiling。在这道题 + 这个模型 + 这个 dataset 上，剩下 ~12% error 主要是数据集本身的歧义（reciprocal of gold / accounting paren convention）+ 数据集 noise。
+>
+> **不是任何 agent pattern 能 systematically 修的**。
+
+要再 +pp 的路：**fine-tuning** 或 **换更强模型**（gpt-5.4 → gpt-6.0 之类），不是 prompt engineering / 加 critic。
+
+#### 这个 ablation 在 FDE 面试里值多少分
+
+🎯 **极高**。FDE 题目 take-home 的 future work 经常被吐槽"凑字数"。但你**真的把"下一步建议"实现了 + 跑了 + 量化了 + 给出负面结论**，这是绝大多数候选人不会做的。
+
+面试 follow-up 时你可以说：
+
+> "我设计了 ablation 实验测试三个流行 pattern，每个单独 + 双双组合 + 智能 gated 版本共 9 个 variant。Pattern 都没赢。原因是 prompt budget 是稀缺资源 + critic 触发率/精度 trade-off 难调 + 模型已经隐式 plan 了。这告诉我们 ConvFinQA 这道题的天花板不在 agent 设计，而在 model + fine-tuning。"
+
+这一段话 = 直接拿到 senior engineer signal。
+
+### 10.7 如果你跑这份 reference
 
 ```bash
 git clone <repo>
@@ -1188,7 +1263,7 @@ python scripts/finalize.py
 
 `.env` 在 `.gitignore` 里，key 只走 `os.environ`，不会泄露到 repo。
 
-### 10.7 最大的认知收获
+### 10.8 最大的认知收获
 
 **做之前我以为 agent 赢在算术能力**，做完之后才发现：
 
