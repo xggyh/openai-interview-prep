@@ -35,83 +35,221 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计一个 Chess.com 级别的实时在线棋类对战平台。考点不在"国际象棋规则"本身（面试官不会指望你 30 分钟写完棋规则引擎），而在<strong>实时双玩家状态同步 + 走子合法性的权威服务端校验 + 高并发匹配 + 排行榜</strong>。</p>
-<h3>需求拆解</h3>
-<p><strong>功能性：</strong></p>
-<ul><li>用户注册/登录，可发起对局或加入快速匹配</li><li>双人实时对战（同步走子、聊天、观战）</li><li>走子合法性校验（服务端为权威，客户端不可信）</li><li>悔棋 / 认输 / 和棋</li><li>走子历史 + 棋谱回放</li><li>ELO 排行榜</li></ul>
-<p><strong>非功能性：</strong></p>
-<ul><li>实时（走子端到端 &lt; 100 ms）</li><li>1M DAU 量级，峰值同时进行 50k 局对战</li><li>99.9% 可用，断线重连不丢局</li></ul>
-<p><strong>容量估算：</strong></p>
-<ul><li>平均一局走 80 步，5 分钟 → 50k 并发 → 走子写入 QPS ≈ 50k × 80 / (5 × 60) ≈ 13k QPS</li><li>每个走子事件 ≤ 200 B → 写带宽 ≈ 2.6 MB/s</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">                         ┌──────────────┐
-   Client A ─── WSS ───▶ │   API GW     │ ◀─── WSS ─── Client B
-                         │  (sticky)    │
-                         └──────┬───────┘
-                                │
-                  ┌─────────────┼────────────┐
-                  ▼             ▼            ▼
-            ┌──────────┐  ┌──────────┐  ┌──────────┐
-            │ Game     │  │Matchmkr  │  │ Auth /   │
-            │ Server   │  │ Service  │  │ Profile  │
-            │ (sharded)│  │          │  │ Service  │
-            └────┬─────┘  └────┬─────┘  └────┬─────┘
-                 │             │             │
-                 ▼             ▼             ▼
-            ┌─────────┐   ┌─────────┐   ┌─────────┐
-            │ Redis   │   │ Queue   │   │ Postgres│
-            │ (live   │   │ (Kafka) │   │ (users) │
-            │  game   │   │         │   │         │
-            │ state)  │   │         │   │         │
-            └────┬────┘   └─────────┘   └─────────┘
-                 │
-                 ▼ (game end)
-            ┌─────────┐
-            │ MongoDB │  ◀──  move history, replay
-            │ (games) │
-            └─────────┘
-                 │
-                 ▼ (rating event)
-            ┌──────────┐
-            │ Ranking  │  ELO 计算 + Redis SortedSet
-            │ Worker   │
-            └──────────┘</div>
-<h3>核心组件设计</h3>
-<h4>1. Game Server（最核心）</h4>
-<ul><li><strong>Sticky session by gameId</strong>：同一局的两个玩家通过 gameId hash 路由到同一台 Game Server（一致性哈希）。这样<strong>走子事件只在单机内存里调度</strong>，无需跨节点协调。</li><li><strong>走子合法性校验在服务端</strong>：客户端发 <code>{"from":"e2","to":"e4"}</code>，服务端把状态机推进一步，校验合法（包括将军、王车易位、过路兵、升变等所有规则）。</li><li><strong>内存中保存当前对局状态</strong>（FEN string + 走子列表），Redis 作为热备（每走一步异步写入，用于故障恢复 + 观战快照）。</li><li><strong>超时计时器</strong>：每个玩家剩余时间存在内存，过期触发 <code>timeout</code> 事件判定胜负。</li></ul>
-<h4>2. Matchmaking</h4>
-<ul><li>玩家进入队列：<code>Q_rating_bucket</code> → Redis ZADD by waiting time</li><li>配对 worker 每秒扫描相邻 rating bucket，配对 → 创建 gameId → 推回两个玩家 WSS 通道</li><li>ELO 接近度先严格匹配，每过 5 秒放宽 ±25</li></ul>
-<h4>3. WSS 协议</h4>
-<pre class="language-python"><code class="language-python"># server → client
-{"type":"move", "from":"e2","to":"e4","san":"e4","clock":{"w":297000,"b":300000}}
-{"type":"end","reason":"checkmate","winner":"w"}
-{"type":"chat","from":"playerA","text":"GG"}
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Realtime PvP</strong></td><td>实时玩家对战</td><td>网球场两人对打</td></tr><tr><td><strong>Authoritative server</strong></td><td>服务端是"真理"，client 输入要 server 验证</td><td>球场裁判说了算</td></tr><tr><td><strong>Move validation</strong></td><td>走子合法性检查 (国王不能走 2 格之类)</td><td>裁判判球出界</td></tr><tr><td><strong>Game state</strong></td><td>棋盘当前状态 (FEN 字符串通常)</td><td>棋谱的快照</td></tr><tr><td><strong>WebSocket</strong></td><td>双工长连接，server 主动推</td><td>不挂的电话</td></tr><tr><td><strong>Matchmaking</strong></td><td>给 user 找势均力敌对手</td><td>牵线相亲</td></tr><tr><td><strong>Elo / Glicko-2</strong></td><td>棋手积分系统</td><td>综合实力评估</td></tr><tr><td><strong>Time control</strong></td><td>比赛限时 (e.g., 5+3 = 5 min + 3s/move)</td><td>象棋钟</td></tr><tr><td><strong>Premove</strong></td><td>提前走下一步，对手走完立即执行</td><td>闪电战预判</td></tr><tr><td><strong>Spectator mode</strong></td><td>看比赛的观众</td><td>棋赛旁观者</td></tr><tr><td><strong>Engine / Bot</strong></td><td>电脑棋手 (Stockfish 之类)</td><td>对弈电脑</td></tr><tr><td><strong>Replay / Game replay</strong></td><td>回放走过的棋</td><td>比赛录像</td></tr><tr><td><strong>Reconnection</strong></td><td>断线重连恢复 game</td><td>中场休息后回来</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Online Chess Platform</strong> = chess.com / lichess 级实时在线棋类对战。</p>
+<p><strong>注意</strong>：面试不会让你 30 分钟实现完整国际象棋规则引擎。重点在<strong>实时双玩家状态同步 + 服务端权威走子校验 + 高并发匹配 + 排行榜</strong>。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>chess.com</strong> —— 1 亿+ 注册，5k 同时在线</li><li><strong>lichess</strong> —— 开源，简洁 UI，~10k peak</li><li><strong>Chess24 / playok</strong></li><li><strong>Pokemon Showdown</strong> —— 类似 PvP turn-based 架构</li></ul>
+<p><strong>为什么这是 STAFF 题</strong>：</p>
+<p>考的是 <strong>realtime PvP architecture</strong>（适用于象棋、围棋、扑克、跳棋等多种 turn-based game）：</p>
+<ol><li><strong>Authoritative game state</strong>：server 是 source of truth</li><li><strong>WebSocket 双玩家同步</strong>：低延迟，互不见对方</li><li><strong>Matchmaking</strong>：Elo 接近的玩家配对</li><li><strong>Spectator</strong> at scale：1 局 1M 观众怎么 broadcast</li><li><strong>Reconnection / cheating prevention</strong></li></ol>
+<p>考 STAFF 关键：<strong>server-authoritative + low-latency state sync</strong> 的经典 PvP 模式。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>JoinMatchmaking(user, time_control, rating)</code></td><td>找对手</td></tr><tr><td><code>MakeMove(game_id, from, to)</code></td><td>走子</td></tr><tr><td><code>GetGameState(game_id) -&gt; state</code></td><td>取当前状态</td></tr><tr><td><code>Resign(game_id)</code></td><td>认输</td></tr><tr><td><code>OfferDraw / AcceptDraw</code></td><td>求和</td></tr><tr><td><code>Spectate(game_id)</code></td><td>观战</td></tr><tr><td><code>GetRating(user) -&gt; elo</code></td><td>查积分</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Move latency</strong></td><td>&lt; 100 ms (move → opponent sees)</td></tr><tr><td><strong>Matchmaking</strong></td><td>&lt; 5 s wait for active player</td></tr><tr><td><strong>Concurrent games</strong></td><td>50k concurrent at peak</td></tr><tr><td><strong>Concurrent users</strong></td><td>100k online</td></tr><tr><td><strong>Spectator</strong></td><td>up to 100k per game (championship)</td></tr><tr><td><strong>Game history</strong></td><td>1B+ games, immutable</td></tr><tr><td><strong>Anti-cheat</strong></td><td>detect engine assist + colluders</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li>50k concurrent games × 2 players = 100k WebSocket connections + spectators</li><li>Avg move rate: 1 move / 3 sec / game → 50k × 0.33 = <strong>17k moves/sec sustained</strong>, peak 50k</li><li>Storage: 1B games × 100 KB (PGN + meta) = <strong>100 TB</strong> game history</li><li>Matchmaking: 100k waiting users, 10k matches/sec at peak</li></ul>
+<hr />
+<h3>4. 关键设计：Server-Authoritative</h3>
+<p><strong>Why 必须 server-authoritative</strong>:</p>
+<ul><li>Client can be hacked → 不能 trust client say "I moved knight to e4"</li><li>Cheat prevention：server validates each move</li><li>Time control：server is timer source of truth</li></ul>
+<p><strong>Architecture</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">Player A ─WebSocket─→ Game Server ─WebSocket─→ Player B
+                          ↓
+                     Validate move
+                          ↓
+                     Apply to state
+                          ↓
+                     Broadcast new state</code></pre>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌─────────────────────────────────┐
+│  Player Devices (browser/mobile) │
+└─────────────────────────────────┘
+              │ WebSocket
+              ↓
+┌─────────────────────────────────┐
+│  Game Server Cluster             │
+│   - Sticky session per game      │
+│   - In-memory state per game     │
+│   - Validate + apply + broadcast │
+└─────────────────────────────────┘
+              │ Persist
+              ↓
+┌─────────────────────────────────┐
+│  Game DB (Spanner / DynamoDB)     │
+│  - On move: append to PGN          │
+│  - On end: full game record        │
+└─────────────────────────────────┘
+              │
+              ↓
+┌─────────────────────────────────┐
+│  Matchmaking Service              │
+│  - Elo-based pairing               │
+│  - Pool by time control + rating   │
+└─────────────────────────────────┘
 
-# client → server
-{"type":"move","from":"e2","to":"e4","clientSeq":42}
-{"type":"resign"}
-{"type":"draw_offer"}</code></pre>
-<p><code>clientSeq</code> 用于 dedup + 顺序：服务端只接受 <code>clientSeq == lastClientSeq + 1</code>。</p>
-<h4>4. 悔棋（takeback）</h4>
-<p>服务端保存所有走子的 SAN 历史 + 每步的 FEN 快照（或仅保存初始 FEN + moves，需要时回放）。悔棋请求需要对手同意；服务端把状态机倒回到上一步，广播新状态。</p>
-<h4>5. 排行榜</h4>
-<p>走子事件 ≠ 排行榜更新。<strong>对局结束</strong>事件写入 Kafka，Ranking Worker 消费：</p>
-<ul><li>计算 ELO 增减（标准 K=32 公式）</li><li>更新 Redis <code>ZSET leaderboard</code> 用于实时查询</li><li>同步落库 Postgres 做长期持久化</li></ul>
-<h3>关键技术决策</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>原因</th></tr></thead><tbody><tr><td>实时协议</td><td>WebSocket / WSS</td><td>双向 push，低延迟</td></tr><tr><td>路由</td><td>一致性哈希 by gameId</td><td>同局两端到达同台机器，避免分布式状态同步</td></tr><tr><td>实时状态</td><td>内存 + Redis 异步</td><td>内存低延迟，Redis 做故障恢复源</td></tr><tr><td>历史/回放</td><td>MongoDB（按 gameId 文档）</td><td>走子列表天然适合文档存储</td></tr><tr><td>排行榜</td><td>Redis SortedSet + Postgres</td><td>实时排名 + 长期审计</td></tr><tr><td>防作弊</td><td>走子合法性强校验 + 引擎反作弊（Stockfish 比对走法相似度）</td><td>走子合法性纯规则可校验，外挂检测靠 ML</td></tr></tbody></table>
-<h3>API 设计</h3>
-<pre class="language-python"><code class="language-python"># REST
-POST /games          # 创建对局（vs 好友邀请）
-GET  /games/{id}     # 获取对局元信息 + 当前状态
-GET  /games/{id}/pgn # 下载棋谱
-POST /matchmaking    # 进入快速匹配队列
+┌─────────────────────────────────┐
+│  Rating Service                   │
+│  - Glicko-2 / Elo update          │
+│  - Leaderboard (Redis ZSET)        │
+└─────────────────────────────────┘</code></pre>
+<h4>Step 1: Matchmaking</h4>
+<ul><li>User join queue → place in "rating bucket" (e.g., 1500 ± 100)</li><li>Periodic 100ms cycle: try to pair from each bucket</li><li>If no match in 5s, widen rating range</li><li>Once paired → create <code>game_id</code>, both players connect to same Game Server</li></ul>
+<p><strong>Sticky session</strong>: 同一 game 的两 player WebSocket 走 same Game Server (用 consistent hashing on game_id)。</p>
+<h4>Step 2: Game state machine</h4>
+<p>In-memory state per game:</p>
+<pre class="language-plaintext"><code class="language-plaintext">GameState {
+    board: FEN string,
+    move_history: [moves],
+    turn: 'white' | 'black',
+    clocks: { white_ms: 300000, black_ms: 300000 },
+    status: 'active' | 'over' | 'draw',
+}</code></pre>
+<p><strong>On move from Player A</strong>:</p>
+<ol><li>Validate (legal move? A's turn? clock not 0?)</li><li>Apply (update board, switch turn, deduct clock)</li><li>Broadcast new state to A + B + spectators via WebSocket</li><li>Persist (async write move + new state)</li></ol>
+<h4>Step 3: Game persistence</h4>
+<ul><li>Each move → append to game log (Spanner row)</li><li>On game over → write final record + outcome</li><li>Indexed: by <code>user_id</code> (find user's games), by <code>created_at</code></li></ul>
+<h4>Step 4: Rating update (after game ends)</h4>
+<pre class="language-python"><code class="language-python">def update_elo(winner, loser, k=32):
+    expected_w = 1 / (1 + 10 ** ((loser.rating - winner.rating) / 400))
+    winner.rating += k * (1 - expected_w)
+    loser.rating += k * (0 - (1 - expected_w))</code></pre>
+<p>Or Glicko-2 (chess.com 实际用，更精确 with uncertainty)。</p>
+<h4>Step 5: Spectator broadcast</h4>
+<ul><li>Spectator opens WebSocket → subscribe to <code>game_id</code></li><li>Game Server maintains spectator list per game</li><li>On move: broadcast to all spectators</li><li>Large game (championship 100k spectators): use <strong>fan-out service</strong></li></ul>
+<p>For championship: don't broadcast individual WebSocket from Game Server (slow)。Use:</p>
+<ul><li>Game Server → Kafka <code>game_events.{game_id}</code></li><li>N <strong>Spectator Servers</strong> subscribe Kafka → push to their WebSocket clients</li><li>Scale spectator servers independently</li></ul>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Sticky Session</h4>
+<p>How to ensure player A + B both connect to same Game Server?</p>
+<p><strong>Mechanism</strong>:</p>
+<ol><li>Matchmaking creates <code>game_id</code></li><li>Returns <code>game_id</code> + <code>game_server_address</code> (assigned via <code>consistent_hash(game_id)</code>)</li><li>Both clients connect to that address</li></ol>
+<p>If Game Server crashes:</p>
+<ul><li>Restore game state from DB (replay PGN since last snapshot)</li><li>New Game Server selected</li><li>Notify both clients to reconnect to new endpoint</li></ul>
+<h4>Deep Dive 2: Clock Sync</h4>
+<p>Time control is critical (5 + 3 = 5 min total + 3 sec increment per move).</p>
+<p><strong>Server-authoritative clock</strong>:</p>
+<ul><li>Server starts clock at game start</li><li>On each move: deduct (server_now - move_start), add increment</li><li>Client displays clock based on <code>(server_clock, server_now_offset)</code> — periodic resync</li></ul>
+<p><strong>Network lag compensation</strong>:</p>
+<ul><li>Player A's move took 200 ms to reach server → which clock to deduct?</li><li>Convention: deduct from server-received time (player loses 200 ms latency time)</li><li>Or: use NTP-synced client timestamp + max(client, server) for fairness</li></ul>
+<h4>Deep Dive 3: Premove</h4>
+<p>Player wants to pre-set next move. Common in bullet (1-min games).</p>
+<p><strong>Implementation</strong>:</p>
+<ul><li>Premove stored client-side (visual indicator)</li><li>When opponent's move arrives, client sends premove immediately if still legal</li><li>Server validates premove same as regular move</li></ul>
+<p><strong>Server-side enforcement</strong>: don't allow premove → tactical chess shouldn't allow super-fast premove abuse (chess.com allows, lichess optional)。</p>
+<h4>Deep Dive 4: Anti-cheat</h4>
+<p><strong>Engine assist detection</strong> (chess.com's hardest problem):</p>
+<ol><li><strong>Move similarity to Stockfish</strong>: every move computed vs top engine moves → match rate</li><li><strong>Time pattern</strong>: human move time varies; engine moves uniformly fast</li><li><strong>Move accuracy by phase</strong>: engine has same accuracy throughout, human degrades in time pressure</li><li><strong>Statistical model</strong>: ML classifier on these features</li></ol>
+<p><strong>Action ladder</strong>:</p>
+<ul><li>Suspicious → review by human</li><li>Confirmed → ban / rating reset</li><li>Repeat offender → IP/device ban</li></ul>
+<p><strong>Collusion</strong> (two friends trade rating points):</p>
+<ul><li>Detect repeated pairs winning suspiciously</li><li>Game outcome pattern不正常 (always draws, etc.)</li></ul>
+<h4>Deep Dive 5: Reconnection</h4>
+<p>Player loses connection mid-game → must allow reconnect within time control。</p>
+<p><strong>Implementation</strong>:</p>
+<ul><li>Client maintains <code>session_token</code> (signed, includes user_id + game_id)</li><li>On reconnect: WebSocket reopen + send session_token</li><li>Game Server checks: game still active + player belongs → resume</li><li>Time during disconnect: deduct from disconnected player's clock (or 30s grace period)</li></ul>
+<h4>Deep Dive 6: Matchmaking Algorithm</h4>
+<p><strong>Naive</strong>: queue per rating bucket → FIFO pair.</p>
+<p><strong>Issue</strong>: peak time (10k waiting) vs off-peak (10 waiting) — different optimal strategies.</p>
+<p><strong>Lichess approach</strong>:</p>
+<ul><li>"Pool" model: every 1s tick, match all currently waiting</li><li>Within pool, sort by rating, pair adjacent</li><li>If queue thin: widen rating tolerance over time</li></ul>
+<p><strong>Edge</strong>: avoid pairing same user back-to-back, prevent stale queue items &gt; 30s wait.</p>
+<h4>Deep Dive 7: Game Storage</h4>
+<p>Storage per game:</p>
+<ul><li>PGN (Portable Game Notation): ~5 KB compressed (200 moves × ~15 B each)</li><li>Metadata: 1 KB (players, outcome, ratings, time, tournament)</li><li>Total: ~6 KB/game</li></ul>
+<p>1B games × 6 KB = <strong>6 TB</strong> — manageable single Spanner cluster.</p>
+<p>Indices:</p>
+<ul><li>by user_id (find your games)</li><li>by ELO range (find historical example games)</li><li>Full-text search on opening (Elasticsearch separately)</li></ul>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：scope (chess engine 不做?), spectator scale, time control</td></tr><tr><td>5-10min</td><td>容量：50k concurrent games, 17k moves/sec, 100k spectators per championship</td></tr><tr><td>10-15min</td><td>API + state machine</td></tr><tr><td>15-25min</td><td>高层架构：matchmaking → sticky session game server → DB → rating</td></tr><tr><td>25-40min</td><td>Deep dives: clock sync / anti-cheat / reconnection / spectator broadcast</td></tr><tr><td>40-45min</td><td>tournament / replay / monitoring</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>Online chess 核心是 <strong>server-authoritative state + low-latency WebSocket sync</strong>。Server 永远是 truth，client 只显示。</p>
+<p><strong>架构</strong>：</p>
+<ol><li><strong>Matchmaking</strong>: Elo bucket queue → 100ms tick pair → assign game_id + game_server (consistent hash)</li><li><strong>Game Server</strong>: in-memory state per game (board FEN + clocks + history)，validate move + apply + broadcast via WebSocket</li><li><strong>Sticky session</strong>: both player + spectators 连同一 game server</li><li><strong>Persistence</strong>: 每 move append to Spanner, 每局结束写 final record + update Elo (Redis ZSET leaderboard)</li><li><strong>Spectator at scale</strong>: Kafka game_events.{game_id} + Spectator Servers fan-out for championship (100k viewers)</li></ol>
+<p><strong>Deep dives</strong>:</p>
+<ul><li>Clock sync: server-authoritative, deduct on server-receive time</li><li>Anti-cheat: move similarity vs Stockfish + time pattern + ML classifier</li><li>Reconnection: signed session_token + grace period</li><li>Matchmaking: pool-based pairing, widen tolerance over time</li></ul>
+<p>Numbers: 50k concurrent games, 17k moves/sec, 1B historical games × 6 KB = 6 TB.</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "Player A 的 move 200ms 到 server，怎么 charge clock？"</h4>
+<p><strong>A</strong>：deduct from server-receive time (player loses network latency)。<strong>Fair</strong> because both players have same condition. 如果想更 fair：用 NTP-synced client timestamp + 最大 50ms clamp。</p>
+<h4>Q2: "Game Server crash 怎么办？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Game state 周期 snapshot (每分钟) + 持续 append move 到 DB</li><li>Crash 后：consistent_hash(game_id) 选 new server → server replay from DB → 通知 player 重连</li><li>Client side：connection drop → exponential backoff reconnect → resume</li><li>Time during outage: 暂停 clock 30s, 超 30s 算 player loss</li></ul>
+<h4>Q3: "Stockfish 8 layer 算分 1 秒，怎么实时检测 cheat?"</h4>
+<p><strong>A</strong>：不在 game 时实时检测。Post-game analysis：</p>
+<ul><li>每局结束后 5 min 内跑深度引擎对比每步</li><li>累计 user 移动质量分（如 95% 接近最优）→ threshold trigger</li><li>累计够多 trigger → human review → action</li></ul>
+<p>Real-time impossible，但延迟 5 min ban 仍 effective。</p>
+<h4>Q4: "100k 观众观战决赛，server 怎么撑？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Game Server 不直接 broadcast to 100k WebSocket</li><li>Game Server → Kafka topic <code>game_events.{game_id}</code></li><li>N <strong>Spectator Fan-out Servers</strong> subscribe Kafka → push to spectators</li><li>每 fan-out server 维护 10k WebSocket → 10 server enough</li><li>Fan-out 跨 region (CDN-like)</li></ul>
+<h4>Q5: "Matchmaking 50ms 必须找到对手 vs 等到合适对手 5s, 怎么平衡？"</h4>
+<p><strong>A</strong>：tunable per game type:</p>
+<ul><li>Bullet (1 min): 优先快 match，rating tolerance 大</li><li>Rated tournament: 严格 rating，等久也行</li><li>Smart：如果 queue 一边 thick（high rating waiting）一边 thin（low rating waiting），不能 wide cross 否则 rating 暴动</li></ul>
+<p>Lichess 实测：90% match in 10s, 99% in 30s for active hours。</p>
+<h4>Q6: "用户 board 数据可以本地缓存吗？"</h4>
+<p><strong>A</strong>：client 缓存 visual board state 但<strong>不能 trust</strong>。Server-side validates every move. Client UX 改进：optimistic update (client immediately shows own move before server ack)，但 server reject → rollback 显示。</p>
+<h4>Q7: "怎么实现 takeback (撤销上一步)?"</h4>
+<p><strong>A</strong>：两玩家协议 feature。</p>
+<ul><li>Player A 请求 takeback → server send "takeback offer" to B</li><li>B accept → server rollback game state to previous move (从 log replay 或保留 snapshot)</li><li>Broadcast new state to both</li><li>Rated games 通常 disabled (防 cheese)</li></ul>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Client-authoritative move</strong> → cheater 直接发 invalid move</li><li><strong>不用 sticky session</strong> → player A 在 server X 走，player B 在 server Y，状态不同步</li><li><strong>Broadcast spectator 直接 from Game Server</strong> → 大场观战时单 server 过载</li><li><strong>Clock 用 client time</strong> → 时钟漂移可作弊</li><li><strong>不考虑 reconnection</strong> → mobile 网差直接判负</li><li><strong>Storage 全 SQL ORM</strong> → 1B games 慢</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Server-authoritative</strong> state 主动强调</li><li><strong>Consistent hashing for game_id</strong> sticky session</li><li><strong>Kafka + fan-out servers</strong> for spectator scale</li><li><strong>Server-side clock</strong> with latency compensation</li><li><strong>Glicko-2</strong> (chess.com 实际用) instead of plain Elo</li><li><strong>Anti-cheat ML</strong> (Stockfish move similarity + time pattern)</li><li><strong>Premove + optimistic UI</strong> 提一嘴</li><li><strong>Pool-based matchmaking</strong> (vs naive queue FIFO)</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲 <strong>sticky session + clock sync + spectator fan-out + anti-cheat ML</strong> 是 STAFF；只说 "WebSocket + DB" 是 SENIOR。</p></div>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心: Server-authoritative state, WebSocket bidirectional
 
-# WebSocket
-ws://game.example.com/ws?gameId=xxx&amp;token=yyy</code></pre>
-<div class="callout callout-key"><strong>核心要点</strong><p>这题在 OpenAI 被报告 58 次，是最近最热的 SD 题。OpenAI 面试官最爱追问：(1) 如何保证两端看到的棋盘状态一致？答：服务端权威 + 全局递增 moveSeq；(2) 一台 Game Server 挂了怎么办？答：Redis 持久化 + 重连时拉 FEN 重建；(3) 走子合法性的算法复杂度？答：O(1) per move（位棋盘 bitboard）。</p></div>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>不要把走子合法性放客户端 —— 1 分钟内会被作弊；不要用 HTTP 长轮询替代 WSS —— 延迟会被打爆；不要把所有对局放在一个 DB 表 —— 写热点。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>常见追问：观战如何做？答：观战者订阅 <code>gameId/spectator</code> channel，Game Server 走完每步多 fan-out 一份。观战延迟可放宽到 1-2 秒。</p></div>
+架构:
+  Matchmaking → assign game_id → consistent_hash → Game Server
+  Game Server (sticky) → validate move → broadcast WS → persist DB
+  Rating Service post-game → Elo/Glicko-2 → Redis ZSET leaderboard
+
+State:
+  In-memory FEN + clocks + history per game
+  Periodic snapshot + persistent move log (Spanner)
+
+Spectator:
+  Small: Game Server direct broadcast
+  Large: Game Server → Kafka → Fan-out Servers (10k WS each)
+
+Anti-cheat:
+  Move similarity vs Stockfish
+  Time pattern analysis
+  ML classifier
+  Async detection (5 min post-game)
+  Human review for confirmed cases
+
+Reconnect:
+  Signed session_token
+  Replay from DB on server crash
+  Grace period 30s
+
+Matchmaking:
+  Pool tick every 1s
+  Pair adjacent rating
+  Widen tolerance over time
+
+数字:
+  50k concurrent games
+  17k moves/sec
+  100k spectators per championship
+  1B games × 6 KB = 6 TB storage
+  p99 move latency &lt; 100 ms</code></pre>
   </section>
 
   

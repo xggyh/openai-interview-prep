@@ -35,85 +35,240 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Identity and Access Management (IAM) system for AI agents</strong>：管理 AI agent（LLM-powered automated workers）的 identity + 访问权限。AI agent 调用 internal APIs / 外部 service，需 secure auth + audit。</p>
-<p>OpenAI / Anthropic / Google 都需要。新兴 problem。</p>
-<h3>需求</h3>
-<ul><li>每 agent 有 unique identity</li><li>细粒度权限（什么 API 可访问，什么 data 可读）</li><li>Time-bounded credentials（避免永久暴露）</li><li>Full audit log</li><li>Cross-org agent federation</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   User / Org
-       │ create agent + policy
-       ▼
-  ┌──────────────────┐
-  │ Agent Identity   │  → assign agent_id, attach IAM policy
-  │ Service          │
-  └──────┬───────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Token Issuer     │  STS-like, issue short-lived JWT
-  │ (per agent run)  │
-  └──────┬───────────┘
-         │
-   Agent runtime
-         │ call with token
-         ▼
-  ┌──────────────────┐
-  │ Resource API     │  → policy check
-  └──────┬───────────┘
-         │ audit
-         ▼
-  ┌──────────────────┐
-  │ Audit Log        │  immutable, append-only
-  └──────────────────┘</div>
-<h3>核心组件</h3>
-<h4>1. Agent identity</h4>
-<p>每 agent 一个 stable identity：</p>
-<ul><li><code>agent_id</code> UUID</li><li>Owner (user / org)</li><li>Type (<code>code-assistant</code> / <code>customer-support</code> / <code>research</code>)</li><li>Creator's role 决定 max permission scope</li></ul>
-<h4>2. Policy 设计</h4>
-<p>IAM policy JSON（类 AWS IAM）：</p>
-<pre class="language-json"><code class="language-json">{
-  "agent_id": "...",
-  "policies": [
-    {"action": "read", "resource": "code/repo:foo", "effect": "allow"},
-    {"action": "write", "resource": "*", "effect": "deny"},
-    {"action": "call", "resource": "tool:web-search", "effect": "allow",
-     "conditions": {"max_calls_per_min": 30}}
-  ]
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>IAM (Identity &amp; Access Mgmt)</strong></td><td>谁能访问什么的系统</td><td>大楼门禁 + 卡片权限</td></tr><tr><td><strong>Principal</strong></td><td>被认证的"主体" (user/service/agent)</td><td>一张工卡背后的人/物</td></tr><tr><td><strong>Authentication (AuthN)</strong></td><td>验证"你是谁"</td><td>验工卡照片</td></tr><tr><td><strong>Authorization (AuthZ)</strong></td><td>决定"你能做什么"</td><td>看权限表</td></tr><tr><td><strong>OAuth2 / OIDC</strong></td><td>业界标准 auth 协议</td><td>国际通用通行证规则</td></tr><tr><td><strong>JWT (JSON Web Token)</strong></td><td>短期凭证，含 claims 的签名 token</td><td>临时通行证</td></tr><tr><td><strong>API Key</strong></td><td>长期 token，简单不安全</td><td>万能钥匙（要保密）</td></tr><tr><td><strong>mTLS</strong></td><td>双向 TLS，client 也有 cert</td><td>双向身份证检查</td></tr><tr><td><strong>RBAC</strong></td><td>Role-Based AC，按角色分配权限</td><td>部门职位分门禁</td></tr><tr><td><strong>ABAC</strong></td><td>Attribute-Based AC，按属性更精细</td><td>"只有财务、夜班、A 大楼"才能进</td></tr><tr><td><strong>Capability token</strong></td><td>包含具体权限的 token</td><td>工卡上写明"只能进 5 楼"</td></tr><tr><td><strong>Audit log</strong></td><td>谁做了什么的不可篡改记录</td><td>监控录像</td></tr><tr><td><strong>Agent</strong></td><td>AI 代理：LLM driven 自动 worker</td><td>自动化助理</td></tr><tr><td><strong>Delegation</strong></td><td>user 把权限委托给 agent 用</td><td>我让助理替我办事，授权一部分</td></tr><tr><td><strong>Scope</strong></td><td>权限范围 (e.g., "read email only")</td><td>工卡限定"仅 3 楼"</td></tr><tr><td><strong>Short-lived credential</strong></td><td>短期 token，到期失效</td><td>24h 临时通行证</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>IAM for AI Agents</strong> = 给 AI agent（LLM-powered automated worker）一套<strong>identity + 访问权限管理</strong>系统。AI agent 代用户调内部 API / 外部 service，需要安全 auth + auditable + revocable。</p>
+<p><strong>典型场景</strong>：</p>
+<ul><li><strong>ChatGPT plugin</strong> —— 代你查 Expedia / Slack</li><li><strong>Anthropic Claude agents</strong> —— 代你处理 email</li><li><strong>Google Bard</strong> —— 代你查 Gmail 信息</li><li><strong>Internal AI assistant</strong> —— 代员工查公司 internal docs</li><li><strong>AI customer support</strong> —— 代理用户做客服操作</li></ul>
+<p><strong>为什么这是 STAFF 题（前沿，1 ppl 报告但每家 frontier lab 都做）</strong>：</p>
+<p>考的是 <strong>AuthN/AuthZ + agent-specific 挑战</strong>：</p>
+<ol><li><strong>Agent identity</strong> ≠ user identity（agent acts on behalf of user）</li><li><strong>Scoped delegation</strong>（只给 agent 部分权限）</li><li><strong>Short-lived credentials</strong>（防 token 泄露后长期可用）</li><li><strong>Audit trail</strong>（agent 干了什么必须可追溯）</li><li><strong>Prompt injection 防护</strong>（agent 被 hack 后限制爆炸半径）</li></ol>
+<p>考 STAFF 关键：<strong>OAuth2 + capabilities + audit + 防 agent abuse 的完整系统</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>RegisterAgent(name, owner, capabilities) -&gt; agent_id</code></td><td>创建 agent identity</td></tr><tr><td><code>Authenticate(agent_id, secret) -&gt; token</code></td><td>登录</td></tr><tr><td><code>GrantDelegation(user, agent, scopes, ttl) -&gt; grant_id</code></td><td>用户授权 agent 权限</td></tr><tr><td><code>RevokeDelegation(grant_id)</code></td><td>撤销</td></tr><tr><td><code>CheckPermission(token, action, resource) -&gt; allow/deny</code></td><td>调用时检查</td></tr><tr><td><code>GetAuditLog(filter) -&gt; events[]</code></td><td>审计查询</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Latency</strong></td><td>AuthZ check &lt; 10 ms (调用 API 前)</td></tr><tr><td><strong>Scale</strong></td><td>1M agents, 100M users, 1B requests/day</td></tr><tr><td><strong>Audit</strong></td><td>100% requests logged, immutable</td></tr><tr><td><strong>Revocation</strong></td><td>&lt; 30 s for token revocation to propagate</td></tr><tr><td><strong>Token TTL</strong></td><td>minutes-to-hours (NOT days)</td></tr><tr><td><strong>Availability</strong></td><td>99.999% (auth 挂 = 系统 down)</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li>1M agents × avg 100 requests/day = 100M req/day = <strong>1.2k QPS sustained, 10k peak</strong></li><li>Audit log: 1B events/day × 500 B = 500 GB/day → cold tier (~6 months retention min for compliance)</li><li>Token issuance: 100M tokens/day issued (most short-lived)</li></ul>
+<hr />
+<h3>4. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌──────────────────────────────────────────────┐
+│  User (granting delegation)                   │
+└──────────────────────────────────────────────┘
+            │ OAuth-style consent
+            ↓
+┌──────────────────────────────────────────────┐
+│  IAM Service                                  │
+│   ├── Identity Registry (agents, users)       │
+│   ├── Delegation Manager (grants, scopes)     │
+│   ├── Token Service (issue/verify JWT)        │
+│   ├── Policy Engine (RBAC / ABAC)             │
+│   └── Audit Logger                            │
+└──────────────────────────────────────────────┘
+            │
+            ↓
+┌──────────────────────────────────────────────┐
+│  AI Agent (e.g., Claude, GPT)                 │
+│   - Holds short-lived token                   │
+│   - On API call: include token                │
+└──────────────────────────────────────────────┘
+            │
+            ↓
+┌──────────────────────────────────────────────┐
+│  Target API (Gmail, Slack, Internal Docs etc.) │
+│   - Validate token via IAM                     │
+│   - Enforce scopes                             │
+│   - Log to audit                               │
+└──────────────────────────────────────────────┘</code></pre>
+<h4>Step 1: Agent registration</h4>
+<pre class="language-python"><code class="language-python">agent = {
+  "agent_id": "ai-assistant-v3",
+  "owner": "openai",
+  "capabilities_requested": ["read_email", "send_email_with_user_confirm"],
+  "trust_tier": "verified",  # gating for fast track
 }</code></pre>
-<h4>3. Token lifecycle</h4>
-<p>每 agent run / session 颁发 short-lived JWT (15 min):</p>
-<pre class="language-plaintext"><code class="language-plaintext">agent invocation → STS issues JWT (claims: agent_id, policies summary, exp)
-agent stores in env → use in API calls
-expired → refresh via refresh token (also bounded)</code></pre>
-<p>Long-running agent run → 周期 refresh。</p>
-<h4>4. Resource server auth check</h4>
-<pre class="language-python"><code class="language-python">@require_agent_auth
-def api_handler(request):
-    token = parse_jwt(request.headers['Authorization'])
-    if not policy_engine.allows(token.agent_id, action='read', resource=...):
-        raise Forbidden
-    # ... handle
-    audit.log(agent_id=token.agent_id, action=..., resource=..., result='allowed')</code></pre>
-<p>Policy engine = OPA (Open Policy Agent) or custom Rego-like。</p>
-<h4>5. Rate limiting per agent</h4>
-<p>防止 agent runaway 调用：per-agent QPS cap, daily cost cap. 超额 → token revoke + alert owner。</p>
-<h4>6. Audit log</h4>
-<p>每 agent action 写 immutable log:</p>
-<ul><li>Who (agent_id, owner)</li><li>What (action + resource + parameters)</li><li>When (timestamp)</li><li>Result (allowed / denied)</li><li>Cost ($$/tokens used)</li></ul>
-<p>Append-only Spanner / S3 + WORM。Compliance + forensics。</p>
-<h4>7. Agent-to-agent delegation</h4>
-<p>Agent A 调用 agent B（multi-agent system）：A 把自己 token delegated to B，B 继承 A's scope <strong>intersect</strong> B's policy。Prevent privilege escalation。</p>
-<h4>8. Revocation</h4>
-<p>Owner 可立即 revoke agent。Resource server 每次 verify token 时 check revocation list (Redis cached)。</p>
-<h4>9. Cross-org federation</h4>
-<p>Agent 跨 org 调用：OAuth-like consent flow，owner org confirm。Token claim 含 source org + target org。</p>
-<h3>关键安全考虑</h3>
-<ul><li><strong>No long-lived secrets</strong> in agent code</li><li><strong>Per-invocation tokens</strong> not per-agent</li><li><strong>Policy review</strong> 强制 human approval for sensitive permissions</li><li><strong>Anomaly detection</strong> on agent behavior (突然调用 different APIs)</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Static API key per agent → 泄漏永久； ❌ 不 audit → forensics 时无线索； ❌ Token lifetime 太长 → 攻击窗口大； ❌ Multi-agent delegation 不 intersect policy → privilege escalation； ❌ Rate limit only at API → agent 内部死循环消耗自己 budget。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Short-lived per-invocation JWT</strong> + STS；(2) <strong>OPA-style policy + audit log</strong>；(3) <strong>Delegation with intersection</strong> 防 privilege escalation。本质是 AWS IAM 应用到 AI agent。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Agent 在 sandbox 里跑 untrusted code？" → 加 process sandboxing (Firecracker)；"Cost attribution per agent？" → 每 token / API call 记 cost + bill owner；"How to deprecate agent？" → revoke + grace period notice。</p></div>
+<p>Agent provider (OpenAI / Anthropic) registers agent ahead of time with capability list. User-facing then asks for delegation.</p>
+<h4>Step 2: User delegation flow (OAuth-like consent)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">User → "Authorize Claude to read my Gmail"
+   → IAM shows: "Claude wants read_email scope. Continue?"
+   → User clicks "Allow"
+   → IAM creates Grant(user, agent, [read_email], ttl=24h)
+   → Returns auth_code → agent exchanges for short-lived token</code></pre>
+<h4>Step 3: Token issuance</h4>
+<p>Token = <strong>JWT</strong> signed by IAM:</p>
+<pre class="language-json"><code class="language-json">{
+  "iss": "iam.openai.com",
+  "sub": "agent:claude-v3",
+  "act": "user:alice",      // act-as user
+  "scope": ["gmail.read"],
+  "exp": 1715000000,         // 15 min
+  "jti": "unique-token-id"
+}</code></pre>
+<p>Sign with rotating EC256 key (JWKS endpoint exposes pub key).</p>
+<h4>Step 4: API call</h4>
+<p>Agent calls Gmail API:</p>
+<pre class="language-plaintext"><code class="language-plaintext">GET /gmail/messages
+Authorization: Bearer &lt;jwt&gt;</code></pre>
+<p>Gmail server:</p>
+<ol><li>Verify JWT signature (cached JWKS pub key)</li><li>Check <code>exp</code>, <code>scope</code>, <code>act</code></li><li>Check <strong>agent token has read_email scope</strong> AND <strong>user (act-as) has gmail account</strong></li><li>Apply user-level row-level security</li><li>Log to audit</li></ol>
+<h4>Step 5: Revocation</h4>
+<p>Two-track:</p>
+<ul><li><strong>Short TTL</strong> (15 min) → wait it out</li><li><strong>Immediate</strong>: write revocation to <strong>block list</strong> (Redis SET of <code>jti</code> revoked)</li><li>Gmail / target servers query block list on each request → &lt; 30s propagation</li></ul>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: Why Short-Lived Tokens</h4>
+<p>15-min JWT vs 1-year API key:</p>
+<table class="md-table"><thead><tr><th>Aspect</th><th>API key</th><th>Short JWT</th></tr></thead><tbody><tr><td>泄露 impact</td><td>full access until rotation</td><td>max 15 min</td></tr><tr><td>Revocation</td><td>manual rotation needed</td><td>natural expiry</td></tr><tr><td>Auditability</td><td>per call (key always same)</td><td>per token jti</td></tr><tr><td>User experience</td><td>need rotation reminder</td><td>automatic</td></tr></tbody></table>
+<p><strong>STAFF 答</strong>：default short JWT, refresh via OAuth refresh_token (longer-lived but server-side stored).</p>
+<h4>Deep Dive 2: Scoped Delegation</h4>
+<p>User grants Claude "read_email" but <strong>not</strong> "send_email"。</p>
+<p><strong>Granular scopes</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">gmail.read
+gmail.send_with_user_confirm  # requires user click
+gmail.send_unattended          # full autonomy
+calendar.read
+calendar.write_with_confirm</code></pre>
+<p><strong>Hierarchical scopes</strong>: <code>gmail.*</code> implies all gmail。Use prefix matching at policy check。</p>
+<p><strong>Capability ranking</strong>: user choose trust tier per agent。Agent escalates → user re-consent。</p>
+<h4>Deep Dive 3: Audit Logging</h4>
+<p>Every action logged immutable:</p>
+<pre class="language-json"><code class="language-json">{
+  "timestamp": "2026-05-18T10:00:00Z",
+  "actor": "agent:claude-v3",
+  "on_behalf_of": "user:alice",
+  "action": "gmail.send",
+  "resource": "message_id",
+  "result": "success",
+  "ip": "...",
+  "session_id": "...",
+}</code></pre>
+<p><strong>Storage</strong>:</p>
+<ul><li>Immediate: Kafka (event sourcing)</li><li>Hot 30 days: Elasticsearch (for query)</li><li>Cold 5 years: S3 (compliance retention)</li></ul>
+<p><strong>Tamper-proof</strong>:</p>
+<ul><li>Append-only Kafka topic</li><li>Hash-chain blocks (like blockchain): block N hash includes block N-1 hash → 改老的会破链</li><li>Periodic root hash anchored to immutable external system</li></ul>
+<h4>Deep Dive 4: Policy Engine</h4>
+<p>Decide allow/deny per request。</p>
+<p><strong>Open Policy Agent (OPA)</strong> style — write policies in Rego:</p>
+<pre class="language-rego"><code class="language-rego">allow {
+    input.token.scope[_] == "gmail.read"
+    input.action == "gmail.read"
+    input.resource.owner == input.token.act
+}</code></pre>
+<p><strong>ABAC</strong>: attribute-based (time, IP, device, geo)</p>
+<pre class="language-rego"><code class="language-rego">allow {
+    input.token.scope == "internal_doc.read"
+    input.time.hour &gt;= 9
+    input.time.hour &lt; 18
+    input.ip_range == "office"
+}</code></pre>
+<p><strong>Caching</strong>: policy evaluated &lt; 1ms with cached compiled policy (Rust/Go runtime).</p>
+<h4>Deep Dive 5: Token Revocation at Scale</h4>
+<p>100M tokens active, revocation &lt; 30s:</p>
+<p><strong>Strategy 1: Centralized revocation list</strong>:</p>
+<ul><li>Redis SET of revoked <code>jti</code></li><li>All validators query on each request</li><li>100M tokens × N TPS check = high read QPS → cache in app server with TTL</li></ul>
+<p><strong>Strategy 2: Short TTL + no list</strong>:</p>
+<ul><li>15-min TTL means worst-case 15 min for revocation</li><li>For most use cases, OK</li></ul>
+<p><strong>Strategy 3: Push-based invalidation</strong>:</p>
+<ul><li>IAM publishes revocation events to Kafka</li><li>All API servers subscribe → local invalidation cache</li><li>Propagation &lt; 1 s</li></ul>
+<p><strong>Hybrid</strong>: Strategy 2 + 3 (short TTL for cleanup, push for immediate compliance).</p>
+<h4>Deep Dive 6: Prompt Injection Defense</h4>
+<p>Attacker tricks LLM into using its capabilities maliciously.</p>
+<p><strong>Defenses</strong>:</p>
+<ol><li><strong>Capability scoping</strong>: agent only has minimum scopes (least privilege)</li><li><strong>User confirmation required</strong> for high-risk actions (send email, transfer money)</li><li><strong>Rate limiting</strong>: max N "destructive" actions per user per day</li><li><strong>Anomaly detection</strong>: agent suddenly做 unusual pattern → require re-auth</li><li><strong>Action review</strong>: high-risk actions queued for human review (e.g., approving $1k transactions)</li><li><strong>Sandbox per session</strong>: token scoped to specific session, can't reuse for other intents</li></ol>
+<h4>Deep Dive 7: Agent Identity vs User Identity</h4>
+<p><strong>Key distinction</strong>: token carries both</p>
+<ul><li><code>sub</code> (subject) = agent (<code>claude-v3</code>)</li><li><code>act</code> (acting on behalf of) = user (<code>alice</code>)</li></ul>
+<p><strong>Why both matter</strong>:</p>
+<ul><li>Audit: know "Claude did X for Alice" not just "Alice did X"</li><li>Trust: agent identity has its own trust tier</li><li>Billing: charge agent provider, not user</li><li>Compliance: if agent misbehaves, action is "Alice's request" but "Claude's responsibility"</li></ul>
+<p><strong>Token format</strong>: extends OAuth2 with <code>act</code> claim (RFC 8693 — Token Exchange spec).</p>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：scope（internal vs external API）, audit retention, anomaly detection</td></tr><tr><td>5-10min</td><td>容量：1M agents, 1B req/day, 10k QPS peak</td></tr><tr><td>10-15min</td><td>OAuth2 + JWT 标准协议建议</td></tr><tr><td>15-25min</td><td>高层架构：IAM Service + Agent + Target API</td></tr><tr><td>25-40min</td><td>Deep dives: short token / scope / audit / policy / revocation / prompt injection</td></tr><tr><td>40-45min</td><td>trust tier / billing / compliance</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>AI agent IAM 跟普通 user IAM 主要区别：(1) agent 代用户 act, 双重 identity; (2) prompt injection 攻击面更大; (3) 需要 fine-grained capability + audit。</p>
+<p><strong>架构</strong>：</p>
+<ol><li><strong>Identity Registry</strong>: agents 注册 by provider (OpenAI/Anthropic), users 注册 by your platform</li><li><strong>Delegation flow</strong>: OAuth-like consent — user 看到 scope list, 同意 → grant created with TTL</li><li><strong>Token issuance</strong>: short-lived JWT (15 min) signed by IAM, contains <code>sub=agent, act=user, scope=[...]</code></li><li><strong>Target API</strong>: validate JWT (cached JWKS pub key) + check scope + enforce</li><li><strong>Audit</strong>: every action → Kafka → Elasticsearch (30d hot) → S3 (5y cold), append-only + hash chain</li><li><strong>Revocation</strong>: Redis revoke list + Kafka push to API servers</li></ol>
+<p><strong>Defenses against prompt injection</strong>:</p>
+<ul><li>Least-privilege scoping</li><li>User confirmation for high-risk actions</li><li>Rate limiting + anomaly detection</li><li>Action queue for human review</li></ul>
+<p><strong>Numbers</strong>: 1M agents × 100 req/day = 100M req/day = 10k peak QPS, 500 GB/day audit log.</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "Long-lived API key vs short-lived JWT, 真有区别吗？"</h4>
+<p><strong>A</strong>：huge。Long-lived key: leak = full access until manual rotate (months)。Short JWT: leak = 15 min impact + auto-expire。Plus audit log shows exact <code>jti</code> of stolen token vs "this key being used in 5 places, which leaked?"。</p>
+<h4>Q2: "Agent 突然要更多权限 mid-session 怎么办？"</h4>
+<p><strong>A</strong>：<strong>Re-consent flow</strong>:</p>
+<ul><li>Agent calls IAM with "need additional scope X"</li><li>IAM checks if user is online → prompt for additional consent</li><li>If approved: issue new token with extended scope</li><li>If user offline: agent must wait</li></ul>
+<p>Never auto-escalate without user consent (security 红线)。</p>
+<h4>Q3: "Agent 被 prompt-inject 让它给攻击者发 user 的 email，怎么防？"</h4>
+<p><strong>A</strong>：分层防御：</p>
+<ol><li><strong>Scope</strong>: <code>gmail.read</code> 不含 send → 阻止</li><li><strong>User confirmation</strong>: <code>gmail.send</code> requires user click "Confirm" → 用户察觉</li><li><strong>Anomaly</strong>: agent suddenly send email to never-emailed address → flag</li><li><strong>Rate limit</strong>: 10 emails/day max for agent</li><li><strong>Audit + retroactive review</strong>: 即使发出，user 能 see audit log 撤销</li></ol>
+<h4>Q4: "Audit log 是 source of truth, 怎么保证不被篡改？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Append-only Kafka topic</strong> (compaction disabled)</li><li><strong>Hash chain</strong>: block N includes hash(block N-1) → 改老 block 破链</li><li><strong>External anchor</strong>: periodically hash root → publish to immutable system (e.g., blockchain or notarization service)</li><li><strong>Access control</strong>: only audit-readers can query, no write/delete from anywhere</li></ol>
+<h4>Q5: "1B req/day, 怎么 token validate &lt; 10ms?"</h4>
+<p><strong>A</strong>：</p>
+<ol><li>JWT signature verify locally (&lt; 1ms with cached public key)</li><li>Revocation check: app server-local cache (Kafka invalidation events) 1ms</li><li>Policy eval: compiled OPA in-process ~1ms</li><li>Audit: async (Kafka producer non-blocking)</li><li>Total: 3-5ms typical</li></ol>
+<h4>Q6: "Token 在 15 min 内被 leak，怎么紧急 revoke?"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>User clicks "Revoke" → IAM writes to Redis revoke list + publish to Kafka <code>revocations</code></li><li>All target API servers subscribe → local cache update (&lt; 1s)</li><li>Next request with this <code>jti</code> → reject 401</li><li>Worst case: 1-2s before all servers see revocation</li></ul>
+<h4>Q7: "Agent 跨 OpenAI / Anthropic / Google，每家 IAM 不同，怎么 interop？"</h4>
+<p><strong>A</strong>：standardize on OAuth2 + JWT + RFC 8693 (Token Exchange)：</p>
+<ul><li>Common OIDC discovery endpoint</li><li>JWKS for public key</li><li>Scope naming convention (gmail.read 全行业一致)</li><li>Cross-platform attestation: agent provider signs "this is Claude v3" → user 信任 chain</li></ul>
+<p><strong>Reality</strong>: working draft, "MCP" (Model Context Protocol) by Anthropic 也是类似思路。</p>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Single shared API key for agent</strong> → leak = total compromise</li><li><strong>No <code>act</code> claim</strong> → audit log 只看到 agent 不知 user</li><li><strong>Long TTL (days)</strong> → revoke 难</li><li><strong>No scope</strong> → agent 一旦 auth 全权限</li><li><strong>No audit</strong> → 不可追溯</li><li><strong>Prompt injection 不防</strong> → agent 危险</li><li><strong>All-or-nothing consent</strong> → 用户不愿全权限同意</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>OAuth2 + OIDC + JWT</strong> 标准协议</li><li><strong>RFC 8693 Token Exchange</strong> with <code>act</code> claim</li><li><strong>Short TTL + refresh token</strong> model</li><li><strong>Hash-chain audit log</strong> for tamper-proof</li><li><strong>OPA policy engine</strong> with Rego</li><li><strong>Capability + scope + ABAC</strong> for fine-grained control</li><li><strong>Prompt injection defenses</strong>: scope + confirm + rate limit + anomaly</li><li><strong>Cross-platform via OIDC standard</strong></li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲清 <strong>act-as claim + OAuth2 token exchange + hash-chain audit + prompt injection layered defense</strong> 是 STAFF；只说 "JWT + auth check" 是 SENIOR。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心模型:
+  Token: short JWT 15 min
+  Claims: sub=agent, act=user, scope=[...], jti
+  Sign: IAM rotating key (JWKS expose pub)
+
+Flow:
+  1. Agent registered ahead (capability list)
+  2. User OAuth consent (scope + TTL)
+  3. Issue auth_code → exchange for JWT
+  4. Agent calls target API with Bearer JWT
+  5. Target validate (sig + scope + act) + audit
+  6. Refresh via refresh_token before expire
+
+Components:
+  Identity Registry (agents/users)
+  Delegation Manager (grants)
+  Token Service (issue/verify)
+  Policy Engine (OPA / Rego, RBAC + ABAC)
+  Audit Logger (Kafka → ES → S3, hash-chain)
+
+Revocation:
+  Short TTL primary
+  Redis revoke list secondary
+  Kafka push to invalidate &lt; 1s
+
+Prompt injection defense:
+  Least-privilege scoping
+  User confirm for high-risk
+  Rate limit + anomaly detect
+  Human review queue
+  Sandbox per session
+
+数字:
+  1M agents, 100M users
+  1B req/day, 10k peak QPS
+  500 GB/day audit log
+  Token validate &lt; 10ms
+  Revocation &lt; 30s
+  TTL default 15 min</code></pre>
   </section>
 
   

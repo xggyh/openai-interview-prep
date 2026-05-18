@@ -35,51 +35,230 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Proximity Alert System for Apple Tags</strong>（Apple AirTag / Tile）：物品丢失时 owner app 显示位置。利用 <strong>anonymous nearby Apple devices 中继</strong>报告 tag 位置。</p>
-<h3>需求</h3>
-<ul><li>100M+ tags worldwide</li><li>Privacy：owner 之外没人知道 tag 位置</li><li>离 owner 几公里仍能定位 (crowdsourced location)</li><li>Battery：tag 1 年电池</li></ul>
-<h3>整体架构 (Find My network)</h3>
-<div class="ascii-diagram">   AirTag (BLE beacon)
-       │ broadcasts encrypted public key
-       ▼
-   Nearby Apple devices (iPhone / iPad)
-       │ pick up BLE，relay encrypted (location, time, key)
-       ▼
-  ┌──────────────┐
-  │ Apple cloud  │  end-to-end encrypted - server 看不懂内容
-  │ (E2E         │
-  │ encrypted)   │
-  └──────┬───────┘
-         │
-         ▼
-   Owner device
-       │ query server with private key
-       ▼
-   Decrypt → location → display</div>
-<h3>核心技术：End-to-End Encryption</h3>
-<h4>1. Key rotation</h4>
-<p>Tag generate (private, public) key pair。Periodic rotate public key (every ~15 min) to prevent tracking by 3rd parties。</p>
-<p>Owner device shares private key（through iCloud key sync），可以 derive 任意时刻 public key + decrypt corresponding reports。</p>
-<h4>2. Anonymous relay</h4>
-<p>Nearby iPhone:</p>
-<ul><li>扫到 BLE beacon (public key advertised)</li><li>不知道是谁的 tag</li><li>Encrypt (current GPS, time) with that public key → upload to Apple cloud</li></ul>
-<p>Apple 也不知道内容。Only owner with private key can decrypt。</p>
-<h4>3. Tag → server (NO direct path)</h4>
-<p>Tag itself 只 BLE broadcast，不连 internet。完全依赖 nearby Apple device crowd-sourced。</p>
-<h4>4. Owner queries</h4>
-<p>Owner app:</p>
-<ul><li>Generate set of public keys（基于 private key + time range）</li><li>Query server by public key hashes</li><li>Server returns encrypted location reports matching</li><li>Owner decrypts locally</li></ul>
-<h4>5. Privacy guarantees</h4>
-<ul><li>Apple server: 只见加密 blob + opaque public key</li><li>Relay device: 不知道是哪个 tag / 谁的</li><li>Public key rotation: 防长期 tracking by adversary observing BLE</li><li>Anti-stalking: tag away from owner for X hours → 主动 beep + iPhone 通知附近 user "an AirTag is following you"</li></ul>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Network</td><td>Crowdsourced via Apple devices</td><td>Cellular tag：贵 + battery 短</td></tr><tr><td>Crypto</td><td>E2E with key rotation</td><td>Server-known location：privacy fail</td></tr><tr><td>Range</td><td>BLE</td><td>Cellular：5x battery drain</td></tr><tr><td>Anti-stalk</td><td>Auto-beep + alert</td><td>None：abuse risk</td></tr></tbody></table>
-<h3>关键技术细节</h3>
-<ul><li>ECC P-224 + AES encryption</li><li>Key derivation: T_i = HKDF(master_key, time_i)</li><li>Per-tag periodic key rotation period ~15 min</li><li>BLE advertisement: includes public key fragment</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Apple sees plain location → privacy disaster； ❌ 不 rotate key → stalker can track by static key； ❌ 不 anti-stalking → 严重 abuse； ❌ Cellular instead of BLE → battery 几天 die； ❌ Owner key 不 backed up → 丢失永远定位不回 tag。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>E2E encryption with rotating public key</strong> 让 server 看不见内容；(2) <strong>Crowdsourced relay via Apple devices</strong> 不依赖蜂窝；(3) <strong>Anti-stalking measures</strong> balance utility + safety。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Battery life 1 year？" → BLE low duty cycle + small battery；"Anti-spoof (假装 AirTag 引人到陷阱)？" → 加 cert chain，only verified hardware can emit；"非 iOS 设备能查 AirTag？" → Apple 提供 Android app 检测 stalking AirTag。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>AirTag</strong></td><td>Apple 的物品追踪小硬件 (button battery, BLE)</td><td>钥匙扣大小的追踪器</td></tr><tr><td><strong>BLE (Bluetooth Low Energy)</strong></td><td>低功耗蓝牙，AirTag 用它广播</td><td>短距离低能耗的"喊话"</td></tr><tr><td><strong>UWB (Ultra-Wideband)</strong></td><td>厘米级精度定位</td><td>精准到几厘米 vs BLE 几米</td></tr><tr><td><strong>Find My network</strong></td><td>Apple 用全球 1B+ iPhone 中继他人 AirTag 位置</td><td>全球 Apple 用户帮你找物</td></tr><tr><td><strong>Crowdsourcing location</strong></td><td>用海量 device 提供数据</td><td>全民众包</td></tr><tr><td><strong>E2EE (End-to-End Encryption)</strong></td><td>只有 owner 能解密位置</td><td>信封封口，只 owner 钥匙打开</td></tr><tr><td><strong>Anonymous beacon</strong></td><td>AirTag 广播的 ID 是匿名的、rotate 的</td><td>假名身份证，定期换</td></tr><tr><td><strong>Rolling identifier</strong></td><td>ID 每 15 min 换一次防 track</td><td>间谍代号每天换</td></tr><tr><td><strong>Stalker protection</strong></td><td>防 AirTag 被恶意贴到他人身上</td><td>反追踪报警</td></tr><tr><td><strong>Find My item</strong></td><td>通用 API，第三方设备也能加入</td><td>开放给第三方加入"找你"网络</td></tr><tr><td><strong>NFC / iCloud</strong></td><td>AirTag 用 NFC 配对，iCloud 同步</td><td>近距离握手 + 云端登记</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Proximity Alert System for Apple Tags</strong> = 物品丢失时 owner 看到位置。<strong>关键</strong>：AirTag 自己没 GPS / 没 cellular，全靠 <strong>附近的 1B+ Apple devices 匿名中继</strong>。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Apple Find My</strong> —— AirTag, AirPods, MacBook, iPhone</li><li><strong>Tile</strong> —— 早期市场，加入 Amazon Sidewalk</li><li><strong>Samsung SmartTag</strong> —— Galaxy 生态</li><li><strong>Google Find My Device network</strong> —— Android version (2024+)</li><li><strong>Chipolo, Pebblebee</strong></li></ul>
+<p><strong>为什么这是 STAFF 题（前沿，1 ppl 报告）</strong>：</p>
+<p>考的是<strong>privacy-preserving distributed location reporting</strong>:</p>
+<ol><li><strong>No-GPS device</strong>: AirTag 自身只有 BLE，怎么知道位置</li><li><strong>Anonymous relay</strong>: 附近 iPhone 报告 AirTag 位置，但<strong>不能让 Apple 知道这是哪个 user</strong></li><li><strong>E2EE location</strong>: Apple server <strong>解不开</strong> location（只 store ciphertext）</li><li><strong>Crowd density</strong>: 城市好用，乡野差</li><li><strong>Anti-stalking</strong>: AirTag 被恶意贴到陌生人身上，要 alert 那个陌生人</li></ol>
+<p>考 STAFF 关键：<strong>privacy-preserving crowdsourcing</strong> — 这是 Apple 真实部署 1B+ devices 的系统。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>RegisterTag(owner, tag_id)</code></td><td>注册 tag 给 user</td></tr><tr><td><code>FindTag(owner) -&gt; last_locations</code></td><td>owner 查找位置</td></tr><tr><td><code>MarkLost(tag_id, contact_info)</code></td><td>标记丢失，捡到的可联系</td></tr><tr><td>(Implicit) AirTag → 附近 iPhone → Apple → owner</td></tr><tr><td><code>StalkerAlert(unknown_tag_id)</code></td><td>提醒被追踪的人</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Privacy</strong></td><td>Apple <strong>不知</strong> AirTag → user mapping (no plaintext access)</td></tr><tr><td><strong>Update latency</strong></td><td>Tag 位置 &lt; 1 hour 后 owner 可见 (typical)</td></tr><tr><td><strong>Coverage</strong></td><td>城市 &gt; 95%，乡野 &gt; 50%</td></tr><tr><td><strong>Battery</strong></td><td>AirTag 1 year on coin cell</td></tr><tr><td><strong>Scale</strong></td><td>100M+ AirTags, 1B+ relay devices</td></tr><tr><td><strong>Anti-stalk</strong></td><td>Foreign AirTag near you &gt; 8h → alert</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>AirTags</strong>: 100M active</li><li><strong>Relays</strong>: 1B iPhones globally</li><li><strong>Each AirTag broadcasts every 2 s</strong>, each iPhone scans nearby BLE periodically</li><li><strong>Reports/day</strong>: each AirTag detected ~10-100 times/day (in populated area)</li><li>→ 100M × 50 reports/day = <strong>5B reports/day = 58k QPS sustained</strong></li><li>Each report: ~200 B encrypted payload → 1 TB/day → 365 TB/year</li></ul>
+<hr />
+<h3>4. 关键设计：Privacy-Preserving Architecture</h3>
+<h4>4.1 The puzzle</h4>
+<p>If Apple <strong>knows</strong> AirTag 位置 + AirTag 关联 owner → Apple knows owner location everywhere.</p>
+<p><strong>Apple 的承诺</strong>: cannot know owner's location even if subpoenaed.</p>
+<p><strong>怎么做到</strong>:</p>
+<h4>4.2 Public key cryptography per AirTag</h4>
+<p>AirTag has private key <code>priv_T</code>, public key <code>pub_T</code>. Owner also stores <code>pub_T</code>。</p>
+<p><strong>AirTag broadcasts (every 15 min, rotated)</strong>:</p>
+<ul><li>A pseudonym <code>pseudo_id = HMAC(priv_T, time_window)</code> — 不可逆 derive</li><li>Not directly identifying — different every 15 min</li></ul>
+<h4>4.3 Anonymous relay</h4>
+<p>Nearby iPhone scans BLE:</p>
+<ul><li>Detects pseudo_id (doesn't know which AirTag)</li><li>Encrypts location with <strong>pub_T</strong> (key the iPhone derives from the broadcast somehow)</li><li>Wait — but iPhone doesn't know <code>pub_T</code>!</li></ul>
+<p><strong>Solution (real Apple design)</strong>:</p>
+<ul><li>AirTag broadcasts use a key derivation: each rotated <code>pseudo_id_i</code> corresponds to a <code>pub_T_i</code></li><li>Both AirTag (knows priv) and owner (knows priv) can derive both</li><li>iPhone uses <code>pseudo_id_i</code> as <strong>the public key itself</strong> (or derives pub key from it)</li><li>iPhone encrypts location with <code>pub_T_i</code> → reports <code>(pseudo_id_i, encrypted_location)</code> to Apple</li></ul>
+<h4>4.4 Apple server's view</h4>
+<p>Sees: <code>(pseudo_id_i, encrypted_location, reporter_iPhone_id_hashed)</code></p>
+<ul><li>Cannot decrypt location (no private key)</li><li>Cannot link pseudo_id to AirTag identity</li><li>Just stores tuples indexed by pseudo_id</li></ul>
+<h4>4.5 Owner查询</h4>
+<p>Owner phone:</p>
+<ul><li>Derives all possible <code>pseudo_id_i</code> for last 7 days (knows priv_T)</li><li>Queries Apple: <code>give me reports for these pseudo_ids</code></li><li>Apple returns encrypted_location tuples</li><li>Owner phone decrypts using priv_T → see locations</li></ul>
+<p><strong>Apple still doesn't know</strong> what was queried or returned → just stored ciphertext + handed back。</p>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌────────────────────────────────────────┐
+│  AirTag                                 │
+│   - Private key priv_T                  │
+│   - BLE broadcast every 2s              │
+│   - Rotates pseudo_id every 15 min      │
+└────────────────────────────────────────┘
+              │ BLE
+              ↓
+┌────────────────────────────────────────┐
+│  Nearby iPhone (relay)                  │
+│   - Scans BLE periodically              │
+│   - Encrypts (its location) with        │
+│     pseudo_id-derived pub key           │
+│   - Sends (pseudo_id, ciphertext) → Apple│
+└────────────────────────────────────────┘
+              │ HTTPS
+              ↓
+┌────────────────────────────────────────┐
+│  Apple Find My Service                  │
+│   - Stores reports indexed by pseudo_id │
+│   - Cannot decrypt (no priv key)        │
+│   - Retention 7 days                    │
+└────────────────────────────────────────┘
+              │ Owner queries
+              ↓
+┌────────────────────────────────────────┐
+│  Owner iPhone                           │
+│   - Derive past pseudo_ids               │
+│   - Fetch matching reports               │
+│   - Decrypt locations                    │
+│   - Show on map                          │
+└────────────────────────────────────────┘</code></pre>
+<h4>Step 1: AirTag pairing</h4>
+<p>User taps AirTag on iPhone (NFC):</p>
+<ul><li>iPhone generates <code>priv_T / pub_T</code></li><li>Writes <code>priv_T</code> to AirTag (via secure NFC) and to user's iCloud Keychain (encrypted with user's iCloud key)</li><li>AirTag starts broadcasting</li></ul>
+<h4>Step 2: BLE broadcast</h4>
+<p>Every 2 seconds: AirTag emits BLE packet:</p>
+<pre class="language-plaintext"><code class="language-plaintext">[Apple BLE manufacturer-specific]
+[pseudo_id_i derived from priv_T, current 15-min window]
+[battery level]
+[lost flag — 1 if lost mode]</code></pre>
+<p>Power: 2-3 mA peak, ~10 μA avg → 1 year on CR2032 battery (220 mAh)。</p>
+<h4>Step 3: Relay iPhone scans</h4>
+<p>iPhone in BG scans BLE every 30s-1min (varies by foreground/background):</p>
+<ul><li>Detect AirTag pseudo_ids</li><li>iPhone has own location (GPS + WiFi)</li><li>Encrypt location + timestamp using pseudo_id-derived key</li><li>Send to Apple over HTTPS (<code>POST /reports</code>)</li></ul>
+<p><strong>Privacy</strong>: iPhone doesn't store these — just relay。</p>
+<h4>Step 4: Apple server storage</h4>
+<pre class="language-plaintext"><code class="language-plaintext">table: reports
+  pseudo_id (indexed, sharded by hash)
+  encrypted_location (ciphertext bytes ~200 B)
+  reporter_hash (anonymized iPhone id for spam detection)
+  timestamp
+  TTL: 7 days</code></pre>
+<h4>Step 5: Owner查询</h4>
+<p>Owner opens Find My app:</p>
+<ul><li>iCloud Keychain provides priv_T</li><li>For each AirTag, derive past 7 days of <code>pseudo_id_i</code> (~672 values)</li><li>Query Apple: <code>GET /reports?pseudo_ids=[...]</code></li><li>Receive ciphertext list → decrypt locally</li><li>Show on map</li></ul>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Why pseudo_id rotation 15 min</h4>
+<p><strong>Why rotate</strong>:</p>
+<ul><li>防 cross-day tracking by attacker scanning continuously</li><li>If pseudo_id stable: attacker logs "I saw pseudo_X at coffee shop Mon 9am, Tue 9am... that's same person's commute"</li><li>Rotated: each session shows different pseudo_id → can't link</li></ul>
+<p><strong>Why 15 min and not shorter</strong>:</p>
+<ul><li>Battery: more crypto ops per broadcast = more power</li><li>Server storage: more unique pseudo_ids</li><li>15 min is enough for "lost AirTag won't be found within 15 min anyway"</li></ul>
+<h4>Deep Dive 2: Server cannot decrypt — guarantees</h4>
+<p>Apple internal:</p>
+<ul><li>Reports DB encrypted at rest (Apple key)</li><li>Even Apple employees with full DB access see only ciphertext</li><li>Owner phone is <strong>only</strong> entity with priv_T → only entity that can decrypt</li><li><strong>External attacker breaching Apple DB</strong> still see only ciphertext</li><li><strong>Government subpoena</strong>: Apple can produce ciphertext only — useless without priv_T</li></ul>
+<p>This is <strong>E2EE at infrastructure level</strong>, not just transport。</p>
+<h4>Deep Dive 3: Anti-Stalker Protection</h4>
+<p>Threat: someone hides AirTag in your bag/car → tracks you.</p>
+<p><strong>Defense</strong>:</p>
+<ol><li><strong>Unknown AirTag detection</strong>: iPhone tracks AirTag pseudo_ids it sees over time. If same AirTag (clustered by physical proximity heuristics, since pseudo rotates) is with you &gt; N hours without being its owner → <strong>alert: "AirTag found moving with you"</strong></li><li><strong>Sound alarm</strong>: After 8-24 hours separated from owner, AirTag plays sound → discoverable by victim</li><li><strong>Disable / NFC ID</strong>: victim can tap AirTag with phone (NFC) → reveal partial ID + serial → report to authorities</li><li><strong>Pre-configured allowlist</strong>: owner can mark "shared use" so co-located people don't get alerts (e.g., couple sharing keys)</li></ol>
+<p><strong>Challenge</strong>: iPhone clustering "same AirTag" with rotating ID is non-trivial — uses signal pattern + co-occurrence + ML。</p>
+<h4>Deep Dive 4: Reporting Frequency vs Battery</h4>
+<p>iPhone battery is precious — frequent BLE scan drains。</p>
+<p><strong>Background scan throttling</strong>:</p>
+<ul><li>Foreground app: scan every 1s</li><li>Background: scan every 30-60s (iOS controls aggressively)</li><li>"Find My" app open: aggressive scan</li></ul>
+<p><strong>Crowd density</strong>: in city, many iPhones contribute → each one scans less often, aggregated coverage 仍 high。In rural area, fewer relays → updates sparse。</p>
+<h4>Deep Dive 5: Adaptive Lost Mode</h4>
+<p>When AirTag is "lost":</p>
+<ul><li>Owner marks lost via Find My app</li><li>Apple notifies AirTag through BLE next time it's relayed (via signed message back to AirTag)</li><li>AirTag enters "lost mode": broadcast includes lost flag + URL for finder</li><li>Stranger taps AirTag with phone → NFC + URL shows owner contact info</li></ul>
+<h4>Deep Dive 6: Cross-Vendor Open Network</h4>
+<p><strong>Google Find My Device</strong> (2024) joins:</p>
+<ul><li>Cross-platform spec for AirTag-like devices</li><li>Anti-stalker alerts work across iPhone + Android</li><li>Open spec: third-party makers (Chipolo, Pebblebee) make devices that work in both Apple and Google networks</li><li>Privacy-preserving same way</li></ul>
+<p><strong>Architectural impact</strong>:</p>
+<ul><li>iPhone relays Android tags too (with separate keys)</li><li>Servers (Apple and Google) interoperate via anti-stalker API</li><li>Standard format for tag broadcasts</li></ul>
+<h4>Deep Dive 7: Scale of Reports</h4>
+<p>5B reports/day:</p>
+<ul><li>Storage 1 TB/day × 7 days = 7 TB hot</li><li>Sharded by pseudo_id hash</li><li>Owner query: 672 pseudo_ids → multi-shard parallel fetch</li><li>Most queries return &lt; 100 hits → small payload back to owner</li></ul>
+<p><strong>Reporter spam</strong>: bot creates fake reports? Mitigate:</p>
+<ul><li>Reporter device must be authenticated iPhone (Apple ID)</li><li>Rate limit reports per device</li><li>Anomaly detect: same device reports for many different pseudos in short period</li></ul>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：privacy要求, crowd network 假设, stalker protection</td></tr><tr><td>5-10min</td><td>容量：100M AirTags × 1B relays, 5B reports/day</td></tr><tr><td>10-15min</td><td>关键设计：E2EE + anonymous relay, why server 解不开</td></tr><tr><td>15-25min</td><td>高层架构: AirTag → BLE → iPhone relay → Apple server → owner phone decrypt</td></tr><tr><td>25-40min</td><td>Deep dives: pseudo_id rotation / anti-stalker / battery / cross-vendor / scale</td></tr><tr><td>40-45min</td><td>adaptive lost mode / spam</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>这题核心是 <strong>privacy-preserving crowdsourced location</strong>。AirTag 没 GPS / 没 cellular，靠 1B+ Apple device crowd 中继。</p>
+<p><strong>关键约束</strong>：Apple 自己<strong>不能知道</strong> AirTag 在哪 (privacy promise) → 必须 E2EE。</p>
+<p><strong>架构</strong>：</p>
+<ol><li>AirTag has priv key, broadcasts rotated <code>pseudo_id</code> every 15 min via BLE</li><li>Nearby iPhone scans BLE, encrypts its location with <code>pseudo_id</code>-derived pub key, posts (pseudo_id, ciphertext) to Apple</li><li>Apple server stores ciphertext indexed by pseudo_id — <strong>cannot decrypt</strong></li><li>Owner phone derives past pseudo_ids (has priv) → fetch reports → decrypt locally</li></ol>
+<p><strong>Privacy guarantees</strong>:</p>
+<ul><li>Apple sees only ciphertext (E2EE infra-level)</li><li>Rotating pseudo_id prevents tracking across sessions</li><li>Reporter iPhone identity hashed (anonymous)</li></ul>
+<p><strong>Anti-stalker</strong>:</p>
+<ul><li>Foreign AirTag near you &gt; 8h → alert</li><li>AirTag plays sound after 8-24h separation from owner</li><li>NFC reveal for victim</li></ul>
+<p><strong>Scale</strong>: 5B reports/day, 7-day retention = 7 TB hot。</p>
+<p><strong>Battery</strong>: BLE every 2s, ~10μA avg → CR2032 1 year。</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "iPhone doesn't know AirTag's pub key, how does it encrypt?"</h4>
+<p><strong>A</strong>：Brilliant Apple trick: the rotated <code>pseudo_id</code> itself serves as <strong>the public key</strong> (or short-form: pub key is derivable from pseudo_id given some shared parameters)。 Specifically, the cryptographic scheme uses <strong>elliptic curve point</strong> as both pseudo_id (broadcast) and pub key — iPhone encrypts with this point, owner who has priv can decrypt。</p>
+<h4>Q2: "How does the iPhone cluster same AirTag with rotating pseudo_id (for anti-stalker)?"</h4>
+<p><strong>A</strong>：Heuristics:</p>
+<ul><li>Same physical co-location over time</li><li>Signal pattern (RSSI) consistency</li><li>Time-based: pseudo_id_t and pseudo_id_t+1 (15 min later) share key derivation → iPhone can store last seen pseudo_id and check next one</li><li>Apple's actual algorithm has cryptographic tweaks to allow trusted relays to link without full identity disclosure</li></ul>
+<h4>Q3: "Lost mode 怎么 owner 把消息 push 回 AirTag？"</h4>
+<p><strong>A</strong>：reverse channel via relay:</p>
+<ul><li>Owner marks lost → Apple writes signed "lost" message in ciphertext tied to AirTag's future pseudo_ids</li><li>Next time iPhone relays an report for this pseudo_id, server pushes signed message back through iPhone via BLE write</li><li>AirTag verifies signature (owner's pub key) → enters lost mode + plays sound</li></ul>
+<h4>Q4: "如果 Apple 想偷偷解密 AirTag 位置呢？"</h4>
+<p><strong>A</strong>：cryptographically impossible without owner's priv key。Apple does have iCloud Keychain — priv keys ARE there but they're encrypted with <strong>user's</strong> iCloud key (derived from user's password + secure enclave)。Apple doesn't have plaintext access to keychain。</p>
+<p><strong>Defense in depth</strong>：</p>
+<ul><li>iCloud Keychain Advanced Data Protection: Apple cannot access even if it wanted to</li><li>Subpoena: Apple can hand over encrypted blobs, useless without password</li></ul>
+<h4>Q5: "5B reports/day storage 怎么 efficient?"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Sharded by <code>pseudo_id[:n]</code> prefix → 1000 shards</li><li>Each report ~200 B encrypted + 32 B metadata = 232 B → 5B × 232 B = 1.1 TB/day raw</li><li>7-day retention → 7.7 TB hot in S3 / Cassandra</li><li>TTL deletion automatic at 7d</li></ul>
+<h4>Q6: "Rural area coverage 差，怎么改善？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Encourage AirTag plus on cars (always-on relay)</li><li>Future: pair with low-orbit satellite networks (Find My satellites?)</li><li>Tile / SmartTag join Apple network = denser crowd</li><li>Apple Watch / AirPods also relay = more devices on body</li></ul>
+<h4>Q7: "Anti-stalker 误判怎么办？"</h4>
+<p><strong>A</strong>：whitelist + UX:</p>
+<ul><li>Owner can mark "shared use" (couple sharing keys, family)</li><li>iPhone alert: "Unknown AirTag traveling with you" + option to view / dismiss / mark friendly</li><li>Repeat alerts only daily, not every hour</li><li>Children's iPhones: stricter alerting (school staff don't accidentally trigger)</li></ul>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Server stores plaintext location</strong> → privacy violation</li><li><strong>Static pseudo_id</strong> → trackable across sessions</li><li><strong>Owner phone constantly polls</strong> → battery drain</li><li><strong>No anti-stalker</strong> → AirTag 被恶意 weaponized</li><li><strong>Tag broadcasts identifying info</strong> → privacy leak</li><li><strong>AirTag has GPS / cellular</strong> → battery dies in days</li><li><strong>Pure server-side detection</strong> without crowd network → impossible at scale</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>E2EE infrastructure</strong> (server cannot decrypt)</li><li><strong>Rotated pseudo_id</strong> for unlinkability</li><li><strong>Crowdsourced anonymous relay</strong></li><li><strong>Anti-stalker layered</strong>: alert + sound + NFC reveal</li><li><strong>Cross-vendor open spec</strong> (Google Find My Network)</li><li><strong>Lost mode signed message back-channel</strong></li><li><strong>Battery 1 year</strong> via BLE-only + crypto-light per packet</li><li><strong>Whitelist for shared use</strong> UX</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲清 <strong>E2EE + rotating pseudo_id + crowd relay + anti-stalker</strong> 完整 stack 是 STAFF；只说 "tag → server → owner" 是 SENIOR。</p></div>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心: Privacy-preserving crowdsourced location
+  AirTag: BLE-only, no GPS, no cellular
+  Relay: nearby iPhones (1B+)
+  Server: stores ciphertext only
+
+Crypto:
+  AirTag has priv_T; owner has priv_T via iCloud Keychain
+  Broadcast rotated pseudo_id every 15 min
+  pseudo_id derivable as pub key for encryption
+  Owner derives past pseudo_ids → fetch → decrypt locally
+
+Privacy guarantees:
+  Apple server: cannot decrypt locations
+  Rotated ID: cannot track across sessions
+  Reporter iPhone: anonymized
+
+Anti-stalker:
+  Detection: foreign AirTag near you &gt; 8h → alert
+  Sound: AirTag plays after 8-24h separation
+  NFC: tap reveals identity (for victim/authorities)
+  Whitelist: shared/family use
+
+Battery:
+  CR2032 ~220 mAh
+  BLE 2s broadcast, 10 μA avg
+  ~1 year life
+
+Scale:
+  100M AirTags × 1B relays
+  5B reports/day = 58k QPS
+  1.1 TB/day, 7-day retention = 7.7 TB hot
+  Sharded by pseudo_id prefix
+
+Storage:
+  Reports table (pseudo_id, ciphertext, ts)
+  TTL 7 days
+  Sharded 1000 ways
+  No PII server-side
+
+Cross-vendor:
+  Google Find My Network (2024+)
+  Common standard for tags
+  Anti-stalker works cross-platform</code></pre>
   </section>
 
   

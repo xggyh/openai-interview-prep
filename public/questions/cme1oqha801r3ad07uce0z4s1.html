@@ -35,76 +35,222 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>system to display aggregation of events where multiple robots are continuously generating events in real-time</strong> —— 工厂 / 仓库里数百个 robot 每秒产生 events（位置 / 任务进度 / error）。Dashboard 实时显示<strong>聚合视图</strong>。</p>
-<p>类似 IoT telemetry 系统。</p>
-<h3>需求</h3>
-<ul><li>1000+ robots</li><li>每 robot 10-100 events/sec</li><li>Dashboard &lt; 5 sec lag</li><li>Filter by zone / type / status</li><li>Historical replay</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Robots (1000)
-       │ MQTT / gRPC stream events
-       ▼
-  ┌──────────────┐
-  │ Ingest GW    │  edge servers per facility
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Kafka        │  per-zone partition
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Stream Processor │  Flink: 1s tumbling agg
-  │ (aggregate)      │  per zone / per robot type
-  └──┬───────────┬───┘
-     │           │
-     ▼           ▼
-  ┌──────┐  ┌──────────────┐
-  │ Redis│  │ TSDB         │  historical
-  │ live │  │ (InfluxDB)   │
-  │ agg  │  └──────────────┘
-  └──┬───┘
-     │
-     ▼
-  Dashboard (WebSocket subscribe)</div>
-<h3>核心组件</h3>
-<h4>1. Ingest</h4>
-<p>Robots 用 MQTT (低 bandwidth IoT 标准) push event。Edge GW 接收，batch + forward to Kafka。</p>
-<h4>2. Event schema</h4>
-<pre class="language-json"><code class="language-json">{
-  "robot_id": "R-001",
-  "zone": "warehouse-A",
-  "ts": 1234567890,
-  "type": "position" | "task" | "error",
-  "payload": {...}
-}</code></pre>
-<h4>3. Aggregation</h4>
-<p>Flink 1-second tumbling window:</p>
-<ul><li>Per zone: active_robot_count, error_count, avg_position</li><li>Per robot type: ...</li><li>加权: avg / max / count / histogram</li></ul>
-<p>Output to Redis (live) + InfluxDB (historical)。</p>
-<h4>4. Dashboard</h4>
-<p>WebSocket subscribe Redis pub/sub channel "agg.zone.warehouse-A"。每秒 push update。</p>
-<p>Visualizations:</p>
-<ul><li>Heatmap of robot positions per zone</li><li>Error rate timeseries</li><li>Per-robot detail panel (click drill-down)</li></ul>
-<h4>5. Drill down</h4>
-<p>Click a zone → detailed view → query per-robot recent events from InfluxDB (last 5 min full event log)。</p>
-<h4>6. Replay</h4>
-<p>User selects time range "yesterday 2-3 PM"。Server replays InfluxDB events at 10x speed back to UI。</p>
-<h4>7. Alert</h4>
-<p>Stream processor sets rule:</p>
-<ul><li>error_count &gt; 10/min in zone → alert</li><li>robot_idle_time &gt; 30s → maintenance check</li><li>position out_of_bounds → safety alert</li></ul>
-<p>Alert push to PagerDuty / Slack。</p>
-<h4>8. 数据压缩</h4>
-<p>Robot position 每 100ms 报送 raw 浪费。Delta-encoded position：只发与上次差异。Server 还原 full state。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Transport</td><td>MQTT</td><td>HTTP：开销大</td></tr><tr><td>Aggregation</td><td>Flink stream</td><td>Batch：lag 大</td></tr><tr><td>Live store</td><td>Redis pub/sub</td><td>DB poll：慢</td></tr><tr><td>Historical</td><td>TSDB</td><td>RDBMS：write 慢</td></tr><tr><td>Compression</td><td>Delta encoding</td><td>Raw：bandwidth 浪费</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1000 robots × 50 events/sec = 50k events/sec</li><li>Aggregation per 1s × 10 zones = 10 outputs/sec → trivial</li><li>Storage: 50k × 100B = 5 MB/sec raw → InfluxDB compressed ~1 MB/sec → 86 GB/day</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ HTTP POST per event → 网络 overhead 爆； ❌ 全 raw event 推 dashboard → 浏览器死； ❌ Aggregation 在 dashboard 端做 → 数据传量大； ❌ 不区分 alert vs metric → alert latency 高； ❌ Replay 实时计算 → 慢。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>MQTT + Kafka + Flink</strong> 经典 IoT stack；(2) <strong>Tumbling agg + Redis live + TSDB historical</strong>；(3) <strong>Delta encoding + sampling</strong> 节省 bandwidth。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"1000 → 10000 robots？" → kafka partition + flink parallelism scale 即可；"Robots 之间互通信？" → P2P + edge consensus；"AR 显示 robot 实时位置（superimpose on camera feed）？" → unity SDK + WebSocket。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Robot / IoT device</strong></td><td>工厂/仓库里实时上报状态的机器</td><td>工人不断打卡 + 报进度</td></tr><tr><td><strong>Telemetry</strong></td><td>设备上报的数据流 (位置/电池/状态)</td><td>工人随时汇报</td></tr><tr><td><strong>Time-series data</strong></td><td>按时间戳排序的数据</td><td>心电图</td></tr><tr><td><strong>TSDB (InfluxDB / TimescaleDB / ClickHouse)</strong></td><td>专为时序优化的 DB</td><td>心电图专用记录纸</td></tr><tr><td><strong>Stream processing (Flink / Kafka Streams)</strong></td><td>实时处理无限数据流</td><td>流水线工人</td></tr><tr><td><strong>Tumbling window</strong></td><td>不重叠的时间窗 (e.g., 1 min)</td><td>钟表分针一格</td></tr><tr><td><strong>Sliding window</strong></td><td>重叠的时间窗 (e.g., last 5 min, slide every 1 min)</td><td>缓行车的视野</td></tr><tr><td><strong>Downsampling</strong></td><td>老数据降精度 (秒级 → 分钟级)</td><td>老报表只保留每日总数</td></tr><tr><td><strong>Retention policy</strong></td><td>数据保留多久</td><td>"三年内的报表不丢"</td></tr><tr><td><strong>Aggregation</strong></td><td>求和 / 平均 / 计数</td><td>月销售总额</td></tr><tr><td><strong>Dashboard</strong></td><td>实时可视化界面</td><td>工厂中控室大屏</td></tr><tr><td><strong>Alerting</strong></td><td>异常时报警</td><td>工厂报警铃</td></tr><tr><td><strong>MQTT</strong></td><td>轻量级 IoT 协议</td><td>IoT 设备的"短信"</td></tr><tr><td><strong>Edge computing</strong></td><td>数据在设备端先聚合再上传</td><td>工厂本地先合并报告</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Event Aggregation for Robots</strong> = 工厂 / 仓库中数百到数万个 robot 每秒产生 events，<strong>实时聚合 + 显示 dashboard + 报警</strong>。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>AWS IoT Core / Azure IoT Hub</strong> —— cloud IoT platform</li><li><strong>Grafana + InfluxDB / Prometheus</strong> —— monitoring 标杆</li><li><strong>Splunk / Datadog</strong> —— enterprise observability</li><li><strong>Amazon FBA warehouse robots</strong> —— Kiva robots 监控</li><li><strong>Tesla autopilot fleet</strong> —— 车辆遥测</li><li><strong>Industry 4.0</strong> —— smart factory</li></ul>
+<p><strong>为什么这是 STAFF 题</strong>：</p>
+<p>考的是 <strong>IoT pipeline architecture</strong>:</p>
+<ol><li><strong>High-volume ingestion</strong> (1k robots × 10 events/sec = 10k events/sec)</li><li><strong>Time-series storage</strong> 选型</li><li><strong>Stream aggregation</strong> for real-time dashboard</li><li><strong>Downsampling + retention</strong> for long-term storage</li><li><strong>Multi-tenancy</strong> (多客户 / 多 site)</li></ol>
+<p>考 STAFF 关键：<strong>完整 IoT/observability stack</strong>，不只是 "events 存 DB"。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>IngestEvent(robot_id, timestamp, metrics)</code></td><td>设备上报</td></tr><tr><td><code>GetCurrentState(robot_id) -&gt; state</code></td><td>当前状态</td></tr><tr><td><code>GetTimeSeries(robot_id, metric, range) -&gt; data[]</code></td><td>历史曲线</td></tr><tr><td><code>GetAggregated(facility, range, granularity) -&gt; data</code></td><td>聚合视图</td></tr><tr><td><code>SetAlert(metric, threshold)</code></td><td>设置报警</td></tr><tr><td><code>Subscribe(facility) for dashboard</code></td><td>实时 dashboard 订阅</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Ingestion rate</strong></td><td>100k events/sec (10k robots × 10 Hz)</td></tr><tr><td><strong>End-to-end latency</strong></td><td>&lt; 5 s (event → dashboard)</td></tr><tr><td><strong>Dashboard update</strong></td><td>1 Hz refresh</td></tr><tr><td><strong>Storage</strong></td><td>1 year hot + 5 years cold</td></tr><tr><td><strong>Retention</strong></td><td>raw 7 days, 1-min agg 1 year, 1-hour agg 5 years</td></tr><tr><td><strong>Multi-tenancy</strong></td><td>1000 facilities, isolated</td></tr><tr><td><strong>Alerting</strong></td><td>&lt; 30 s from anomaly to notification</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li>10k robots × 10 events/sec × 100 B = <strong>100 MB/sec raw</strong> = <strong>8.6 TB/day</strong></li><li>7 days hot raw: 60 TB</li><li>1-min agg: 10k robots × 1440 min/day × 100 B = 14 GB/day × 365 = <strong>5 TB/year</strong></li><li>1-hour agg over 5 years: 0.2 TB total</li></ul>
+<p>Total cold storage: ~10 TB / facility / 5 years. With 1000 facilities: 10 PB total.</p>
+<hr />
+<h3>4. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌───────────────────────────────────────┐
+│  Robots (10k devices × 10 Hz)          │
+└───────────────────────────────────────┘
+              │ MQTT / HTTP / WebSocket
+              ↓
+┌───────────────────────────────────────┐
+│  IoT Gateway / Ingestion Layer        │
+│   - Authenticate + rate limit          │
+│   - Validate + enrich (facility_id, etc)│
+└───────────────────────────────────────┘
+              │
+              ↓
+┌───────────────────────────────────────┐
+│  Kafka (partition by facility_id)      │
+└───────────────────────────────────────┘
+              │
+              ├──── Stream Processor (Flink) ──→ Aggregation Store (Redis/Druid)
+              │                                ├── Per-robot current state
+              │                                └── Per-facility 1-min aggregates
+              │
+              ├──── Raw Sink ──→ Time-series DB (InfluxDB / ClickHouse)
+              │
+              └──── Alert Engine ──→ Notification (Slack/Email/PagerDuty)
+
+              ↓
+┌───────────────────────────────────────┐
+│  Dashboard Service                     │
+│   - WebSocket subscriptions            │
+│   - Real-time chart updates            │
+└───────────────────────────────────────┘</code></pre>
+<h4>Step 1: Ingestion</h4>
+<p>Devices push events via MQTT (lightweight, QoS 1):</p>
+<ul><li>Robot connects to MQTT broker</li><li>Publish to topic <code>facility/{site_id}/robot/{robot_id}/events</code></li><li>Broker (Mosquitto / EMQX / AWS IoT Core) routes to backend</li></ul>
+<p><strong>Why MQTT over HTTP</strong>:</p>
+<ul><li>Persistent connection (省 TCP handshake)</li><li>Low overhead (binary protocol)</li><li>QoS levels (0=fire-forget, 1=at-least-once, 2=exactly-once)</li></ul>
+<h4>Step 2: Stream processing (Flink)</h4>
+<p>Flink job consumes Kafka:</p>
+<pre class="language-python"><code class="language-python">events
+  .keyBy(robot_id)
+  .timeWindow(Time.minutes(1))
+  .aggregate(MinMaxAvg)  # 1-min agg per robot
+
+events
+  .keyBy(facility_id)
+  .timeWindow(Time.seconds(10))
+  .aggregate(EventCount, AverageHealth)  # facility-level
+
+events
+  .filter(temperature &gt; 80)
+  .keyBy(robot_id)
+  .reduce(triggerAlert)  # alert rule</code></pre>
+<h4>Step 3: Storage layers</h4>
+<ul><li><strong>Hot (last 7 days raw)</strong>: InfluxDB / ClickHouse</li><li><strong>Warm (1-year 1-min agg)</strong>: InfluxDB downsampled</li><li><strong>Cold (5-year 1-hour agg)</strong>: S3 Parquet</li><li><strong>Current state (latest event per robot)</strong>: Redis Hash</li></ul>
+<h4>Step 4: Dashboard</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Browser opens dashboard
+  → WebSocket to Dashboard Service
+  → subscribe(facility_id)
+  → Stream of aggregated events from Redis pub/sub
+  → Browser renders chart (D3 / Recharts)</code></pre>
+<p><strong>Update rate</strong>: 1 Hz (every second). For historical view (last 24h chart): query InfluxDB on dashboard open, then live updates via WebSocket.</p>
+<h4>Step 5: Alerting</h4>
+<p>Alert rules in YAML:</p>
+<pre class="language-yaml"><code class="language-yaml">- name: high_temperature
+  metric: robot.temperature
+  condition: avg over 5min &gt; 80
+  action: notify @ops via PagerDuty</code></pre>
+<p>Flink applies rules → when fires → Kafka topic <code>alerts</code> → Notification service.</p>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: MQTT at Scale</h4>
+<p>100k events/sec from 10k robots:</p>
+<ul><li>Single MQTT broker: ~100k connections, 100k QPS</li><li>Cluster: EMQX / VerneMQ (Erlang BEAM 原生 high connection)</li><li><strong>Sharded topic</strong>: <code>facility/{site}/robot/{id}</code> natural sharding</li></ul>
+<p><strong>Authentication</strong>: cert-based (each robot has client cert) or token-based with rotation.</p>
+<h4>Deep Dive 2: Time-Series DB Choice</h4>
+<table class="md-table"><thead><tr><th>DB</th><th>优势</th><th>劣势</th></tr></thead><tbody><tr><td><strong>InfluxDB</strong></td><td>Easy, popular, native TSDB</td><td>Single-node oss, paid for cluster</td></tr><tr><td><strong>TimescaleDB</strong></td><td>Postgres-based, SQL friendly</td><td>Less optimized than pure TSDB</td></tr><tr><td><strong>ClickHouse</strong></td><td>Insane analytics speed, columnar</td><td>Not pure TSDB, harder ops</td></tr><tr><td><strong>Prometheus</strong></td><td>Pull-based, k8s native</td><td>Local storage, scaling hard</td></tr><tr><td><strong>VictoriaMetrics</strong></td><td>Prom-compatible, durable</td><td>Newer</td></tr><tr><td><strong>Druid</strong></td><td>Real-time + historical hybrid</td><td>Complex ops</td></tr></tbody></table>
+<p><strong>STAFF 答</strong>：</p>
+<ul><li>小规模 (&lt; 1M points/s): InfluxDB</li><li>大规模 + analytics: ClickHouse</li><li>k8s monitoring: Prometheus + VictoriaMetrics</li></ul>
+<h4>Deep Dive 3: Downsampling Pipeline</h4>
+<p>Hot 7 days raw → after 7 days, downsample to 1-min, drop raw。</p>
+<p><strong>Flink continuous query</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">window_1m = events.window(1 min).aggregate()
+write window_1m to storage_warm
+
+after 7 days: 
+  raw deleted (InfluxDB retention policy)
+  warm 1-min retained 1 year
+  
+after 1 year:
+  warm 1-min → downsample to 1-hour → cold storage</code></pre>
+<p><strong>Compression</strong>: Parquet for cold (~10× compression on time-series).</p>
+<h4>Deep Dive 4: Real-time Dashboard via WebSocket</h4>
+<p>Browser connects WebSocket, subscribes to <code>facility_id</code> channel.</p>
+<p><strong>Server side</strong>:</p>
+<ul><li>Maintain map: WebSocket connection → facility filter</li><li>Redis pub/sub: stream processor publishes 1-Hz aggregated update to <code>facility.{id}</code> channel</li><li>Dashboard Service subscribe → fan-out to all connected WebSockets</li></ul>
+<p><strong>Scaling</strong>: 1 facility might have 100 dashboard users. 1000 facilities × 100 = 100k WebSocket → 1 Dashboard Service node holds.</p>
+<h4>Deep Dive 5: Alert Engine</h4>
+<p>Rule types:</p>
+<ol><li><strong>Threshold</strong>: metric &gt; X for Y duration</li><li><strong>Rate of change</strong>: derivative &gt; X</li><li><strong>Composite</strong>: A AND B AND NOT C</li><li><strong>Anomaly</strong>: ML-based (z-score, isolation forest)</li></ol>
+<p><strong>Evaluate</strong>:</p>
+<ul><li>Flink job per rule, on relevant key (robot_id / facility_id)</li><li>On firing: deduplicate (don't spam for same alert), notify</li></ul>
+<p><strong>Dedup</strong>:</p>
+<ul><li>Alert state machine: ACTIVE / RESOLVED</li><li>Re-firing within 5 min of ACTIVE → suppress</li><li>After RESOLVED, can re-fire</li></ul>
+<h4>Deep Dive 6: Multi-tenancy</h4>
+<p>1000 facilities (different customers), data must isolate:</p>
+<ul><li>Kafka topic partition by <code>tenant_id</code></li><li>TSDB schema: <code>metric, tenant_id, robot_id, timestamp, value</code></li><li>Query API: enforce tenant from auth token</li><li>Resource quota per tenant (ingestion rate, storage)</li></ul>
+<h4>Deep Dive 7: Edge Aggregation</h4>
+<p>If robots have low bandwidth (e.g., mobile / IoT):</p>
+<ul><li>Robot <strong>local pre-aggregates</strong> every 10s (instead of 10Hz raw)</li><li>Upload 1 row per 10s = 100× reduction</li><li>Trade-off: dashboard granularity reduced to 10s vs 100ms</li></ul>
+<p><strong>Edge compute</strong> (AWS Greengrass, Azure IoT Edge): run code on-device for filtering/aggregation。</p>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：how many robots, event rate, dashboard granularity, retention</td></tr><tr><td>5-10min</td><td>容量：100k events/sec, 8.6 TB/day raw, 7d hot + 5y cold</td></tr><tr><td>10-15min</td><td>API + protocol (MQTT vs HTTP)</td></tr><tr><td>15-25min</td><td>高层架构：MQTT → Kafka → Flink → TSDB + dashboard via WS</td></tr><tr><td>25-40min</td><td>Deep dives: TSDB choice / downsampling / dashboard WS / alerting / edge</td></tr><tr><td>40-45min</td><td>multi-tenancy / cost optimization</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>这是经典 <strong>IoT telemetry pipeline</strong>，4 个 stage：ingest → process → store → display.</p>
+<p><strong>架构</strong>：</p>
+<ol><li>Robots → <strong>MQTT</strong> broker (省连接 + 低开销) → ingestion layer (auth + enrich)</li><li><strong>Kafka</strong> (partition by facility_id) decouples ingest 跟 processing</li><li><strong>Flink</strong> stream processor:</li></ol>
+<ul><li>1-min aggregates per robot</li><li>10-s facility-level aggregates</li><li>Alert rule evaluation</li></ul>
+<ol><li>Storage layered:</li></ol>
+<ul><li>Redis: per-robot current state</li><li>InfluxDB / ClickHouse: 7 days raw</li><li>Downsample to 1-min retain 1 year</li><li>1-hour Parquet to S3 for 5 years</li></ul>
+<ol><li><strong>Dashboard</strong>: WebSocket subscribe + Redis pub/sub fan-out</li><li><strong>Alerting</strong>: Flink rule evaluator → PagerDuty</li></ol>
+<p><strong>Multi-tenancy</strong>: per-facility partitioning + tenant-aware queries.</p>
+<p><strong>Edge optimization</strong>: pre-aggregate on robot if bandwidth tight.</p>
+<p>Numbers: 10k robots × 10Hz = 100k events/sec, 8.6 TB/day raw, end-to-end &lt; 5s。</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "为什么 MQTT 不 HTTP?"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>MQTT 持久连接，避免每次 TCP/TLS handshake (~100ms savings/req)</li><li>Binary protocol (2-byte header) vs HTTP (hundreds of B header)</li><li>QoS levels for delivery guarantee</li><li>100k connections per broker (HTTP 重 in this density)</li></ul>
+<h4>Q2: "InfluxDB vs ClickHouse 选哪个？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li><strong>InfluxDB</strong>: simple ops, easy to start, line protocol natural fit</li><li><strong>ClickHouse</strong>: 10× faster analytics, but more complex ops + needs more expertise</li></ul>
+<p>Small to medium scale: InfluxDB. Large analytics (billion-row scans): ClickHouse.</p>
+<h4>Q3: "Dashboard 1 Hz 刷新，怎么实现？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>WebSocket to Dashboard Service</li><li>Dashboard Service subscribes Redis pub/sub channel <code>facility.{id}</code></li><li>Flink writes 1-Hz aggregated metric to Redis (<code>SET facility:{id}:cpu_avg value</code> + <code>PUBLISH facility.{id} value</code>)</li><li>Dashboard Service push to WebSocket</li></ul>
+<h4>Q4: "下载 24h 历史曲线，1M data points 怎么不卡？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Server-side downsample for query (24h × 100Hz = 8.6M points → reduce to 1440 × 60 = 86k points at 1-min granularity)</li><li>Client renders only visible viewport (virtual scrolling for table)</li><li>Lazy load older points on zoom</li></ul>
+<h4>Q5: "Alert 怎么避免 spam (一秒发 100 个 'CPU &gt; 80%' alert)？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Alert state machine (ACTIVE / RESOLVED)</li><li>Notify only on state transition (FIRING / RESOLVED)</li><li>Throttle: max 1 notification per 5 min for same alert</li><li>Grouping: aggregate similar alerts (10 robots overheating → 1 notification "10 robots in zone X overheated")</li></ul>
+<h4>Q6: "如果 robot 网络断了，event 丢吗？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Local buffer on robot (last 10 min)</li><li>Reconnect → flush buffer</li><li>MQTT QoS 1 (at-least-once)</li><li>Server dedup by <code>event_id</code> if seen</li><li>Mark "stale data" on dashboard if robot offline &gt; N minutes</li></ul>
+<h4>Q7: "1000 facilities，1 facility 突然 burst 100x events？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Per-tenant rate limit at ingestion layer</li><li>Kafka backpressure: producer slows down if topic lag &gt; X</li><li>Auto-scale Flink: parallelism scale with input rate</li><li>Cost alert: notify customer if burst exceeds plan tier</li></ul>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Use Postgres / generic DB</strong> for time-series → 1B points 查不动</li><li><strong>忽略 downsampling</strong> → 5 年 raw 几十 PB</li><li><strong>HTTP for ingestion</strong> → connection overhead at scale</li><li><strong>没考虑 multi-tenancy</strong> → data leak across customers</li><li><strong>Dashboard 拉所有 raw</strong> → 浏览器 OOM</li><li><strong>Alert no dedup</strong> → notification storm</li><li><strong>Single broker MQTT</strong> → bottleneck</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>MQTT + EMQX/VerneMQ</strong> at scale</li><li><strong>Flink for stream processing</strong></li><li><strong>Layered storage</strong> (Redis / TSDB / S3)</li><li><strong>Continuous downsampling</strong> with retention policies</li><li><strong>Redis pub/sub for dashboard fan-out</strong></li><li><strong>Edge aggregation</strong> for bandwidth-constrained robots</li><li><strong>Alert state machine</strong> with grouping</li><li><strong>Tenant isolation + quota</strong> for multi-tenant</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能说出 <strong>MQTT + Flink + InfluxDB + downsampling + WS dashboard</strong> 完整 stack 是 STAFF；只说 "events → DB → dashboard" 是 SENIOR。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">Pipeline 4 stages:
+  Ingest: MQTT → IoT Gateway → Kafka
+  Process: Flink (per-robot 1-min agg, facility 10s agg, alert rules)
+  Store:
+    Redis: current state per robot
+    InfluxDB/ClickHouse: 7d raw
+    Downsample 1-min → 1y
+    1-hour Parquet S3 → 5y
+  Display: Dashboard Service WebSocket + Redis pub/sub
+
+Storage retention:
+  Raw 100Hz: 7 days
+  1-min agg: 1 year
+  1-hour agg: 5 years
+  Cost ~$1/GB/year for cold, ~$30/GB for SSD
+
+Tech choices:
+  Ingestion: MQTT (EMQX/VerneMQ broker)
+  Queue: Kafka
+  Processing: Flink (better than Kafka Streams for windowing)
+  TSDB: InfluxDB (simple) / ClickHouse (analytics)
+  State: Redis Hash
+  Dashboard: WebSocket + Redis pub/sub
+
+Alerting:
+  Rule engine in Flink
+  State machine: ACTIVE/RESOLVED
+  Dedup + grouping
+  Output: PagerDuty / Slack / email
+
+数字:
+  10k robots × 10 Hz = 100k events/sec
+  100 B/event = 100 MB/sec = 8.6 TB/day
+  End-to-end latency &lt; 5 s
+  Dashboard 1 Hz refresh
+  1000 facilities multi-tenant</code></pre>
   </section>
 
   

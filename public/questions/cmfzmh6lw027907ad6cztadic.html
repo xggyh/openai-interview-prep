@@ -35,66 +35,243 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>file system for write-once media</strong>（CD-R / DVD-R / tape）：数据写后<strong>不可修改</strong>。例 archival storage、blockchain log、compliance "WORM" media。</p>
-<h3>特殊约束</h3>
-<ul><li><strong>Append-only</strong>：不能 in-place 修改</li><li><strong>Delete = mark</strong>: 物理删除不可能，只能 logical</li><li><strong>Block-level</strong>：写一旦完成 immutable</li></ul>
-<h3>解决思路</h3>
-<h4>1. Log-structured file system</h4>
-<p>整个 FS 是 append-only log。所有操作（create file, write block, rename）都 append events 到 log。</p>
-<pre class="language-plaintext"><code class="language-plaintext">[time 0] Create file "a.txt" inode=42
-[time 1] Write block 0 of inode 42: &lt;data&gt;
-[time 2] Write block 1 of inode 42: &lt;data&gt;
-[time 3] Rename inode 42 → "b.txt"
-[time 4] Delete inode 42  ← logical</code></pre>
-<p>读：replay events from beginning to compute current state。Or use checkpoint (snapshot of state at time T)。</p>
-<h4>2. In-memory index</h4>
-<p>构建时扫 log → 在内存维护 (path → block pointers)。Query 时 O(1) lookup。</p>
-<p>启动慢（扫 log），但 query 快。Checkpoint 减少 replay cost。</p>
-<h4>3. Block addressing</h4>
-<ul><li>物理 block address = sequential offset on media</li><li>Logical block = via inode table → points to physical</li><li>Allocation pointer：next free block。Monotonic increment。</li></ul>
-<h4>4. Versioning</h4>
-<p>天然 versioned —— 同 file 多次 write 不覆盖，只 append 新 version。每 version 一个 timestamp。</p>
-<p>读历史 version：scan log to that timestamp。</p>
-<h4>5. Space efficiency</h4>
-<p>Append-only 浪费空间（删除不 reclaim）。<strong>Compaction</strong>: 定期把 active state 写到新 media，老 media archive。</p>
-<p>或者<strong>generational</strong>: 每 N 天滚动新 media，老 media 只读。</p>
-<h4>6. Crash consistency</h4>
-<p>每写完一个 block sync flush。Replay log 重建状态。Atomicity 用 checksum + sequence number。</p>
-<h4>7. Compliance use cases</h4>
-<ul><li>Audit log</li><li>金融交易 record</li><li>Healthcare records</li><li>Legal hold</li></ul>
-<p>WORM 满足"不可篡改"合规要求（SEC Rule 17a-4 等）。</p>
-<h3>数据结构</h3>
-<pre class="language-python"><code class="language-python">class WORMFileSystem:
-    def __init__(self, media):
-        self.media = media          # append-only block device
-        self.write_pointer = 0
-        self.inode_table: dict[int, list[int]] = {}    # inode -&gt; block list
-        self.path_to_inode: dict[str, int] = {}
-        self.next_inode = 1
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>WORM (Write-Once Read-Many)</strong></td><td>数据写后<strong>不可修改 / 删除</strong></td><td>印刷在书上的字，不可改</td></tr><tr><td><strong>Immutability</strong></td><td>数据一旦写入永不变</td><td>雕刻在石碑上</td></tr><tr><td><strong>Append-only log</strong></td><td>只能在末尾添加，不能改</td><td>流水账</td></tr><tr><td><strong>Append-only file</strong></td><td>文件只追加，不 truncate</td><td>通讯录最后加新人</td></tr><tr><td><strong>Tape / LTO</strong></td><td>磁带存储，传统 archival 介质</td><td>老式磁带</td></tr><tr><td><strong>Object lock</strong></td><td>S3 / GCS 强制 WORM 的功能</td><td>"这箱货 7 年不许动"</td></tr><tr><td><strong>Compliance</strong></td><td>法律 / 法规要求的保存</td><td>法律规定保留</td></tr><tr><td><strong>Retention period</strong></td><td>数据必须保留的时长</td><td>"财务记录 7 年内不删"</td></tr><tr><td><strong>Legal hold</strong></td><td>法律调查期间的强制保留</td><td>暂时不许动</td></tr><tr><td><strong>Erasure coding</strong></td><td>用算法把数据 + 校验位分散，丢部分可恢复</td><td>"10 份原文 + 4 份校验"</td></tr><tr><td><strong>Checksum / hash</strong></td><td>数据完整性指纹</td><td>DNA 比对</td></tr><tr><td><strong>Cold storage</strong></td><td>不常用，便宜慢的存储</td><td>仓库 vs 桌面</td></tr><tr><td><strong>Audit trail</strong></td><td>所有访问 / 操作 immutable 记录</td><td>监控录像</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>File System for Write-Once Media</strong> = WORM 存储系统，数据写后<strong>绝对不可修改</strong>。</p>
+<p><strong>典型场景</strong>：</p>
+<ul><li><strong>金融 / 银行 transaction log</strong> —— SEC 17a-4 要求 7 年 immutable</li><li><strong>HIPAA medical records</strong> —— 患者数据保留 +20 年</li><li><strong>Blockchain</strong> —— 链上数据不可篡改</li><li><strong>Cryptocurrency exchange order book</strong> —— 监管要求</li><li><strong>GDPR audit log</strong> —— 数据访问可追溯</li><li><strong>Legal e-discovery archive</strong> —— legal hold</li></ul>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>AWS S3 Object Lock</strong> —— compliance mode (不可删) + governance mode (root 才能删)</li><li><strong>AWS Glacier Vault Lock</strong></li><li><strong>Azure Immutable Blob Storage</strong></li><li><strong>NetApp SnapLock</strong></li><li><strong>Centera (EMC)</strong></li><li>历史：CD-R, DVD-R, magneto-optical, LTO tape</li></ul>
+<p><strong>为什么这是 STAFF 题（前沿合规场景）</strong>：</p>
+<p>考的是 <strong>"如何保证 immutability"</strong> 这个分布式系统硬题：</p>
+<ol><li><strong>No-delete enforcement</strong> — 即使 admin / root 也不能删</li><li><strong>Long-term durability</strong> — 7 年 / 100 年存储</li><li><strong>Verification</strong> — 取出时能证明没改过</li><li><strong>Erasure coding</strong> for cost</li><li><strong>Cold tier retrieval</strong> — 几小时 vs 几秒</li><li><strong>Replication + integrity</strong> 协同</li></ol>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>Write(path, data, retention_until) -&gt; object_id</code></td><td>写入新对象</td></tr><tr><td><code>Read(object_id) -&gt; data</code></td><td>读</td></tr><tr><td><code>Delete(object_id)</code></td><td><strong>写入后</strong> 即使是 owner 也不能 delete 直到 retention 到期</td></tr><tr><td><code>ApplyLegalHold(object_id)</code></td><td>法律 hold，更难删</td></tr><tr><td><code>Verify(object_id) -&gt; {valid, checksum}</code></td><td>完整性校验</td></tr><tr><td><code>ListVersions(path)</code></td><td>同 path 历史版本（每次 write 是新 object）</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Durability</strong></td><td>11 个 9 (或更高，archive 通常 14 个 9)</td></tr><tr><td><strong>Retention</strong></td><td>7-100 年（合规）</td></tr><tr><td><strong>Immutability guarantee</strong></td><td>绝对 — root / OS bypass 都不允许</td></tr><tr><td><strong>Write throughput</strong></td><td>varies by use; for log: 100k events/s</td></tr><tr><td><strong>Read latency</strong></td><td>hot: ms; archive: minutes-hours</td></tr><tr><td><strong>Cost</strong></td><td>minimize for cold (10 PB scale)</td></tr><tr><td><strong>Verification</strong></td><td>&lt; 1s per object</td></tr></tbody></table>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>Immutability 是这道题灵魂</strong>。任何 design 不能依赖"约定不删"，必须是<strong>机制上无法删</strong>。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>金融 transaction log</strong>: 1 大行 1B txn/day × 1 KB = 1 TB/day = <strong>365 TB/year</strong></li><li>保留 7 年: <strong>2.5 PB</strong> per institution</li><li>100 institutions: <strong>250 PB total</strong></li><li>12 个 9 durability + 7-year retention → cold tier is necessary</li></ul>
+<hr />
+<h3>4. 关键设计：Immutability 机制</h3>
+<h4>4.1 Why "约定" 不够</h4>
+<p>Naive：API 不暴露 delete operation → 但 admin SSH 到机器可以 rm。<strong>Not enough for compliance</strong>。</p>
+<h4>4.2 Mechanical immutability strategies</h4>
+<p><strong>Strategy 1: Hardware WORM media</strong></p>
+<ul><li>CD-R / DVD-R: 物理只写一次 (commercial-grade)</li><li>LTO tape with WORM cartridges: 写后磁条物理 locked</li><li>缺点: 慢、不便</li></ul>
+<p><strong>Strategy 2: Object Lock with Compliance Mode (S3)</strong></p>
+<ul><li>Object 被 lock 后 <strong>even AWS account root cannot delete</strong> until retention expires</li><li>Implementation: enforce at storage system level — special bit in metadata + service refuses delete API</li><li>AWS 是公司层面 commit；客户信任 AWS won't bypass</li></ul>
+<p><strong>Strategy 3: Cryptographic chain</strong></p>
+<ul><li>Each object 包含 prev object hash → 形成 hash chain</li><li>Tamper with old object → 后续所有 hash 不对</li><li>配合 <strong>external anchor</strong>: periodic root hash published 到不可篡改外部系统 (blockchain / time stamp authority)</li><li>这是 blockchain 灵感</li></ul>
+<p><strong>Strategy 4: M-of-N consensus deletion</strong></p>
+<ul><li>删除 require N 个 trusted parties 同意（key sharding）</li><li>单 admin 不能删</li><li>实际：S3 governance mode 用 IAM 策略实现</li></ul>
+<p><strong>STAFF 推荐</strong>：combination</p>
+<ul><li>Service-level enforcement (refuses delete API)</li><li>Hash chain for tamper detection</li><li>M-of-N for governance mode if customer wants admin recovery path</li></ul>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌──────────────────────────────────────┐
+│  Client (write request)               │
+└──────────────────────────────────────┘
+              │ Write(data, retention)
+              ↓
+┌──────────────────────────────────────┐
+│  Ingestion / Validation Service      │
+│   - Compute SHA256 of data            │
+│   - Get prev object hash              │
+│   - Compute chained hash              │
+│   - Issue object_id                   │
+└──────────────────────────────────────┘
+              │
+              ↓
+┌──────────────────────────────────────┐
+│  Storage Layer (tiered)               │
+│   ├── Hot: 3x SSD (last 30 days)      │
+│   ├── Warm: 3x HDD (1 year)           │
+│   └── Cold: erasure-coded S3/Glacier  │
+└──────────────────────────────────────┘
+              │
+              ↓
+┌──────────────────────────────────────┐
+│  Metadata Index                       │
+│   - path → object_id chain            │
+│   - retention_until per object        │
+│   - hash chain links                  │
+└──────────────────────────────────────┘
+              │
+              ↓
+┌──────────────────────────────────────┐
+│  Background Services                  │
+│   - Verifier (周期 checksum scan)     │
+│   - Tier mover (hot → warm → cold)    │
+│   - Anchor service (publish roots)    │
+│   - GC for expired (only after retention)│
+└──────────────────────────────────────┘</code></pre>
+<h4>Step 1: Write path</h4>
+<pre class="language-python"><code class="language-python">def write(data, retention_until):
+    # 1. Compute data hash
+    data_hash = sha256(data)
+    
+    # 2. Get latest object's hash (from index)
+    prev = get_latest_object_id()
+    prev_hash = get_hash(prev)
+    
+    # 3. Compute chained hash
+    chain_hash = sha256(data_hash + prev_hash)
+    
+    # 4. Allocate new object_id (monotonic + UUID)
+    object_id = f"{timestamp}_{uuid4()}"
+    
+    # 5. Write to hot storage (3 replicas)
+    storage.write(object_id, data, chain_hash, retention_until)
+    
+    # 6. Update metadata
+    index.append(object_id, prev, chain_hash, retention_until)
+    
+    # 7. Async: anchor root
+    return object_id</code></pre>
+<h4>Step 2: Read path</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Client: Read(object_id)
+  → Metadata lookup → which tier? 
+  → If hot/warm: direct read 
+  → If cold: trigger restore (Glacier 3-5 hour) or restored cache
+  → Verify checksum on read
+  → Return data</code></pre>
+<h4>Step 3: Tier movement</h4>
+<p>Background job:</p>
+<ul><li>Object aged &gt; 30 days + not accessed in 7 days → move hot → warm</li><li>Object aged &gt; 1 year → move warm → cold (erasure coded S3 Glacier)</li><li>Object's <code>retention_until</code> reached → enable GC (still requires multi-party for compliance mode)</li></ul>
+<p><strong>Key</strong>: object_id never changes. Only physical location changes.</p>
+<h4>Step 4: Verifier</h4>
+<p>Daily background:</p>
+<ul><li>Scan random sample (1%) of objects</li><li>Read + verify chained hash</li><li>If mismatch detected → trigger investigation + alert</li></ul>
+<p>Anchor service:</p>
+<ul><li>Daily compute global root hash (hash of all today's chained hashes)</li><li>Publish to <strong>immutable external system</strong> (blockchain timestamp, or notarization API)</li><li>Provides "global checkpoint" — anyone can later verify "as of date X, system had this hash"</li></ul>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Erasure Coding for Cold Tier</h4>
+<p>10 PB scale, 3× replication = 30 PB → expensive。</p>
+<p><strong>(10+4) Reed-Solomon</strong>:</p>
+<ul><li>10 chunks original + 4 parity chunks</li><li>Survive any 4 lost chunks</li><li>Storage overhead: 1.4× (vs 3×) → save 53%</li><li>Read slower (need to decode if a chunk missing)</li></ul>
+<p>For archive (rarely read), this is great trade-off。</p>
+<h4>Deep Dive 2: Hash Chain Tampering Detection</h4>
+<p>Object N points to N-1 via hash:</p>
+<pre class="language-plaintext"><code class="language-plaintext">obj_0: data_0, chain_hash_0 = sha256(data_0_hash || genesis)
+obj_1: data_1, chain_hash_1 = sha256(data_1_hash || chain_hash_0)
+obj_2: data_2, chain_hash_2 = sha256(data_2_hash || chain_hash_1)
+...</code></pre>
+<p>If attacker modifies obj_1's data → data_1_hash changes → chain_hash_1 should change → but stored chain_hash_1 still old → mismatch → detected.</p>
+<p><strong>Verification cost</strong>: O(N) to verify whole chain. Better: <strong>Merkle tree</strong> — group N objects into tree, verify chain is O(log N)。</p>
+<h4>Deep Dive 3: External Anchoring</h4>
+<p>Even hash chain in your own system → if attacker compromises your system, they can rewrite chain.</p>
+<p><strong>Anchor to external trusted system</strong>:</p>
+<ol><li>Daily root hash → publish to <strong>Bitcoin / Ethereum</strong> transaction (small fee, immutable timestamp)</li><li>Or <strong>Google Trust Authority</strong> / <strong>DigiCert TSA</strong></li><li>Or <strong>Lightning Network / mass time stamping</strong></li></ol>
+<p>This gives <strong>cryptographic proof of pre-existence</strong> — "this hash existed on date X" verifiable independently。</p>
+<h4>Deep Dive 4: Retention Enforcement at Storage Level</h4>
+<p><strong>S3 Object Lock COMPLIANCE mode</strong>:</p>
+<ul><li>Object metadata includes <code>Retain-Until-Date</code></li><li>Internal API check on every DELETE / OVERWRITE / DELETE-MARKER</li><li>AWS internally enforces: cannot bypass even with root creds</li></ul>
+<p><strong>Our implementation</strong>:</p>
+<pre class="language-python"><code class="language-python">def delete(object_id):
+    obj = metadata.get(object_id)
+    if obj.retention_until &gt; now():
+        raise RetentionViolation
+    if has_legal_hold(object_id):
+        raise LegalHoldViolation
+    # All checks pass → physical delete
+    storage.delete(object_id)</code></pre>
+<p><strong>Key</strong>: this check is in the <strong>only</strong> code path that can issue physical delete commands。No back door.</p>
+<h4>Deep Dive 5: Legal Hold</h4>
+<p>Indefinite hold during legal investigation。</p>
+<ul><li>Set <code>legal_hold = true</code> on object → delete blocked even after retention expires</li><li>Multiple legal holds can coexist (different cases)</li><li>Only specific privileged role can remove hold</li><li>Removal audited</li></ul>
+<h4>Deep Dive 6: Disaster Recovery</h4>
+<p>7-year data — disasters guaranteed in that window。</p>
+<p><strong>Defense in depth</strong>:</p>
+<ol><li><strong>3+ replicas</strong> (or erasure coded with sufficient parity)</li><li><strong>Cross-region</strong> replication (different geographic disasters uncorrelated)</li><li><strong>Cross-provider</strong> (one copy in AWS, one in GCP for true独立)</li><li><strong>Cross-medium</strong> (one tape-based offline copy)</li><li><strong>Periodic integrity scan</strong> + repair from healthy replicas</li></ol>
+<h4>Deep Dive 7: Read Latency Tiers</h4>
+<table class="md-table"><thead><tr><th>Tier</th><th>Latency</th><th>Cost</th><th>Use case</th></tr></thead><tbody><tr><td>Hot (SSD)</td><td>1-10 ms</td><td>$0.10/GB/mo</td><td>last 30 days, fresh access</td></tr><tr><td>Warm (HDD)</td><td>10-100 ms</td><td>$0.02/GB/mo</td><td>1-year, occasional access</td></tr><tr><td>Cold (Glacier)</td><td>3-5 hours</td><td>$0.001/GB/mo</td><td>archive, rare retrieval</td></tr><tr><td>Deep archive (Glacier Deep Archive)</td><td>12-48 hours</td><td>$0.0004/GB/mo</td><td>compliance archive</td></tr></tbody></table>
+<p><strong>Tier transition automated</strong> based on access pattern + retention age。</p>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：compliance scope (SEC/HIPAA?), retention period, throughput</td></tr><tr><td>5-10min</td><td>容量：2.5 PB per inst × 100 inst = 250 PB</td></tr><tr><td>10-15min</td><td>Immutability mechanism (机制 vs 约定)</td></tr><tr><td>15-25min</td><td>高层架构：ingest → hash chain → tiered storage → metadata</td></tr><tr><td>25-40min</td><td>Deep dives: hash chain / anchoring / EC / retention enforcement / legal hold</td></tr><tr><td>40-45min</td><td>DR / cost optimization</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>WORM 存储核心是 <strong>immutability must be mechanical, not 'we promise'</strong>。</p>
+<p><strong>关键设计</strong>:</p>
+<ol><li><strong>API 层</strong>: 只有 <code>Write/Read/Verify</code>，无 modify/delete (until retention expires)</li><li><strong>Storage 层</strong>: S3 Object Lock COMPLIANCE mode — root 也不能 delete</li><li><strong>Hash chain</strong>: each object 链接前一个 hash → 改老 detect 链断</li><li><strong>External anchor</strong>: daily root hash to immutable system (e.g., blockchain timestamp / TSA)</li><li><strong>M-of-N for emergency</strong>: governance mode needs multiple key holders agree</li></ol>
+<p><strong>架构</strong>：</p>
+<ol><li>Write → ingestion compute SHA256 + chained hash + retention → store</li><li>Tiered: SSD (30d) → HDD (1y) → Glacier EC (long-term)</li><li>Metadata: path → object chain</li><li>Verifier: daily 1% sample check</li><li>Anchor: daily root → external timestamp service</li></ol>
+<p><strong>DR</strong>: 3+ replicas cross-region, optionally cross-provider/cross-medium。</p>
+<p>Numbers: 250 PB scale, 11+ 个 9 durability, 7-year+ retention。</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "S3 Object Lock 真的不能被 AWS root 删？"</h4>
+<p><strong>A</strong>：是 AWS commitment level enforcement。Code 层面 S3 API server 实现 strict check + audit。AWS doesn't have a "secret backdoor" delete API (would invalidate SEC certification)。If AWS root really wanted to delete: would require source code change + deploy + audit trail visible。<strong>信任 AWS engineering integrity</strong>。</p>
+<p>For higher security: cross-provider replication (also store in Azure / GCP)。</p>
+<h4>Q2: "Hash chain 攻击者重写所有 N 个 hash 也可以？"</h4>
+<p><strong>A</strong>：如果只有 your system → 可以。<strong>External anchor</strong> 防：daily root hash published 到 Bitcoin txn → attacker would have to also rewrite Bitcoin chain (computationally infeasible)。</p>
+<h4>Q3: "10 PB cold storage cost 多少？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Glacier Deep Archive: $0.00099/GB/mo → 10 PB × $0.00099 × 12 = <strong>$120k/year</strong></li><li>vs Glacier: $0.004/GB/mo → $480k/year</li><li>vs S3 Standard: $0.023/GB/mo → $2.8M/year</li></ul>
+<p>Right tier choice 10× cost。</p>
+<h4>Q4: "Retention 7 年到期后，怎么 GC？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Daily job scan objects with <code>retention_until &lt; now</code></li><li>如果 governance mode: 需要 M-of-N key holder approve delete batch</li><li>如果 compliance mode: auto-delete + log</li><li>物理 delete 不可逆，先 verify no legal hold + 关键 metadata kept (audit, hash chain entry)</li></ul>
+<h4>Q5: "Object 1 万亿条，metadata 怎么存？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>1T × 100 B metadata = 100 TB → sharded SQL / Spanner</li><li>按 path 前缀 / time bucket 分 shard</li><li>索引 by (path, object_id) for version listing</li><li>索引 by (retention_until) for GC sweep</li></ul>
+<h4>Q6: "Tape storage 还有用吗？"</h4>
+<p><strong>A</strong>：是。LTO-9 tape: $0.005/GB/mo physical (no cloud)，better for super-long retention。但运维麻烦，多数公司用 S3 Glacier Deep Archive 代替。Tape 主要 enterprise on-prem。</p>
+<h4>Q7: "GDPR 'right to be forgotten' 跟 WORM 冲突怎么办？"</h4>
+<p><strong>A</strong>：合规冲突。<strong>Resolve</strong>:</p>
+<ul><li>法规优先级: WORM (SEC) &gt; GDPR for financial systems</li><li>对其他系统：tokenize user data + scrub original after retention</li><li>Some systems: WORM data + scrub PII fields → archive de-identified version</li></ul>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>"我们 promise 不删"</strong> → admin 仍可 SSH 删，不合规</li><li><strong>没 hash chain</strong> → 个别 object 篡改无法 detect</li><li><strong>All hot SSD</strong> → 10 PB 几百万美元 / 年</li><li><strong>没考虑 legal hold</strong> → 法律调查时不能 freeze</li><li><strong>Anchor 不外部化</strong> → 全系统 compromise 仍 rewritable</li><li><strong>Retention enforcement 不机械</strong> → 依赖 IAM 策略不够</li><li><strong>没 tiered storage</strong> → cost 失控</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Mechanical immutability</strong> (S3 Object Lock COMPLIANCE)</li><li><strong>Hash chain + external anchor</strong> (blockchain / TSA)</li><li><strong>Erasure coding</strong> for cold tier (1.4× vs 3×)</li><li><strong>Tiered storage</strong> with auto-migration</li><li><strong>Legal hold</strong> model</li><li><strong>M-of-N governance</strong> for admin path</li><li><strong>Cross-provider replication</strong> (AWS + Azure)</li><li><strong>Daily verifier + repair</strong></li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲清 <strong>"mechanical not promised" + hash chain + external anchor</strong> 是 STAFF；只说 "store in S3 + don't delete" 是 SENIOR。</p></div>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心: Immutability must be mechanical
+  - S3 Object Lock COMPLIANCE mode
+  - Code path enforces retention check
+  - No back-door delete API
+  - M-of-N governance for emergency
 
-    def create(self, path):
-        inode = self.next_inode
-        self.next_inode += 1
-        self._append_event({"op": "create", "path": path, "inode": inode})
-        self.path_to_inode[path] = inode
-        self.inode_table[inode] = []
+Hash chain:
+  obj_N hash includes obj_{N-1} hash
+  Tamper old → break chain → detect
+  Merkle tree for O(log N) verification
 
-    def write(self, path, data):
-        inode = self.path_to_inode[path]
-        block_addr = self.write_pointer
-        self.media.write(block_addr, data)
-        self.write_pointer += len(data)
-        self.inode_table[inode].append(block_addr)
-        self._append_event({"op": "write", "inode": inode, "block": block_addr})
+External anchor:
+  Daily root hash → Bitcoin/TSA
+  Independent proof of pre-existence
 
-    def read(self, path):
-        inode = self.path_to_inode[path]
-        return b''.join(self.media.read(addr) for addr in self.inode_table[inode])</code></pre>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 把 LSM Tree 直接搬过来 —— LSM 假设可 mutate；WORM 不行； ❌ Delete 真删 —— media 不支持； ❌ 不 checkpoint → replay 长 log 启动慢； ❌ 不版本化 → 覆盖时丢历史； ❌ 不 atomic write → crash 时部分 block fail。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>WORM FS = <strong>append-only log + in-memory state + checkpoint</strong>。整体接近 event sourcing 或 git。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 search by content？" → 同时 build search index (也 WORM)；"如何 compress？" → compress 写入前；"读 archived media？" → multi-volume support，需 mount old media；"如何 verify integrity？" → SHA256 per block + Merkle tree on logs。</p></div>
+Tiered storage:
+  Hot SSD (30d, $0.10/GB/mo)
+  Warm HDD (1y, $0.02/GB/mo)
+  Cold Glacier EC (long-term, $0.001/GB/mo)
+  Deep archive ($0.0004/GB/mo)
+
+DR:
+  3+ replicas cross-region
+  Cross-provider (AWS+Azure+GCP)
+  Periodic verifier + repair
+
+Retention/Legal:
+  retention_until per object
+  legal_hold flag (overrides retention)
+  Auto-GC after retention + no holds
+
+数字:
+  2.5 PB per institution × 100 = 250 PB
+  11-14 个 9 durability
+  7-100 year retention
+  Verifier 1% daily scan</code></pre>
   </section>
 
   
