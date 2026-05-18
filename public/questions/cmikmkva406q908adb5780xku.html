@@ -35,63 +35,192 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Photo Search Application</strong>：用户上传 photo / type text → 搜索类似 photo。Pinterest 反向搜索 / Google Images / 个人 photo library。</p>
-<h3>解法</h3>
-<p><strong>向量索引 (ANN)</strong> 是核心。每 photo embed 为高维 vector，搜索 = nearest neighbor lookup。</p>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Photo upload                Text query
-       │                            │
-       ▼                            ▼
-  ┌──────────────┐         ┌──────────────┐
-  │ Image        │         │ Text → Image │  CLIP
-  │ Encoder      │         │ Encoder      │
-  │ (CLIP / DINO)│         └──────┬───────┘
-  └──────┬───────┘                │
-         │                        │
-         ▼                        ▼
-       Embedding (768-dim)     Same space
-         │                        │
-         └──────┬─────────────────┘
-                ▼
-         ┌──────────────┐
-         │ Vector Index │  Faiss / ScaNN / Vespa
-         │ (ANN search) │  100M+ embeddings
-         └──────┬───────┘
-                │
-                ▼
-         Top-K photo IDs → metadata → return URLs</div>
-<h3>核心组件</h3>
-<h4>1. Image encoder</h4>
-<p>CLIP ViT-L 或 DINOv2。每 photo → 768-dim normalized vector。</p>
-<h4>2. Vector index</h4>
-<p>100M+ vectors 不能 brute force search (cosine sim O(N))。<strong>ANN (Approximate Nearest Neighbor)</strong>:</p>
-<ul><li><strong>Faiss IVF</strong>：clusters + only search nearest clusters → O(√N)</li><li><strong>HNSW</strong>：graph-based，state-of-art</li><li><strong>ScaNN</strong>：Google 自家，accuracy 优</li></ul>
-<p>Trade-off：recall vs latency vs memory。</p>
-<h4>3. 文本到图片搜索 (CLIP)</h4>
-<p>CLIP 把 text 和 image embed 到同一空间。User type "red dog on beach" → text embed → 搜 image embedding。完全无需 image tags。</p>
-<h4>4. 反向图片搜索 (image-to-image)</h4>
-<p>User upload photo → image embed → ANN search。同框架。</p>
-<h4>5. Filter</h4>
-<p>ANN search + metadata filter（"jpegs only from 2024"）。两种方式：</p>
-<ul><li>Pre-filter：先按 metadata 缩 candidate，再 ANN（candidate 少时快）</li><li>Post-filter：ANN top-K 后 metadata filter（candidate 多时快）</li></ul>
-<p>Hybrid：metadata distribution decide。</p>
-<h4>6. Sharding</h4>
-<p>100M vectors / 256d × 4 bytes = 100 GB。Split 跨多 nodes：</p>
-<ul><li>按 vector hash 分 shard</li><li>Query 每 shard 都查 → merge top-K</li></ul>
-<h4>7. Indexing pipeline</h4>
-<p>新 photo upload → ML pipeline 算 embedding → write to vector index。</p>
-<p>ANN index 通常需要 batch rebuild（少量新增 OK，大量需要 reindex）。Hot 写入用 flat list，每天 incremental merge into ANN graph。</p>
-<h4>8. Caching</h4>
-<p>热门 query embeddings cache。同一 query 短时间内重复时返回 cached result。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Embedding</td><td>CLIP / DINO</td><td>Custom CNN：训练贵</td></tr><tr><td>ANN</td><td>HNSW / Faiss IVF</td><td>Brute force：O(N)</td></tr><tr><td>Search type</td><td>Vector + filter</td><td>Pure text tag：semantic 弱</td></tr><tr><td>Index</td><td>Static + incremental</td><td>Real-time：复杂</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>100M photos × 768 × 4 bytes = 300 GB embedding</li><li>Query QPS: 100k → ANN search ~5 ms each on optimized index</li><li>Encoding cost: GPU 100 photo/sec per A100</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Brute force search → TLE； ❌ Index 不 normalize vectors → cosine sim 不对（应 L2 normalize 后用 dot product）； ❌ 文本搜索单 keyword match → 错过 semantic；用 CLIP； ❌ 不 filter spam / NSFW → 搜出违法内容； ❌ 不版本化 embedding model → 切模型时无法 reindex。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>CLIP-style embedding</strong> 让 text &amp; image 同空间；(2) <strong>HNSW / Faiss ANN</strong> scale to 100M+；(3) <strong>Hybrid metadata filter</strong> for precision。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"视频搜索？" → 提关键帧 embed + 查；"特定物体 search？" → object detection + crop + embed；"face search？" → 专用 face model + per-user cluster (privacy)；"How handle adversarial images？" → robustness training + filter。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Image embedding</strong></td><td>图片 → 高维向量 (e.g., 512 维)</td><td>图片的"指纹"</td></tr><tr><td><strong>CNN (ResNet/EfficientNet)</strong></td><td>卷积神经网络，从像素学 visual feature</td><td>视觉系统</td></tr><tr><td><strong>CLIP</strong></td><td>OpenAI 模型，把 image 和 text embed 到同一空间</td><td>让"狗"文本和"狗"图片向量接近</td></tr><tr><td><strong>ANN (Approximate Nearest Neighbor)</strong></td><td>近似最近邻搜索，亿级向量秒级查</td><td>"找最像的"快速查</td></tr><tr><td><strong>FAISS / Milvus / Pinecone</strong></td><td>业界主流 vector DB</td><td>向量数据库品牌</td></tr><tr><td><strong>HNSW</strong></td><td>Hierarchical Navigable Small World，最常用 ANN 算法</td><td>图结构搜索</td></tr><tr><td><strong>Reverse image search</strong></td><td>上传图找类似图</td><td>Google 图片识图</td></tr><tr><td><strong>Text-to-image search</strong></td><td>文字描述找图</td><td>"夕阳海边" → 找到相关图</td></tr><tr><td><strong>OCR</strong></td><td>图中提取文字</td><td>看图认字</td></tr><tr><td><strong>Object detection</strong></td><td>检测图中物体并 bounding box</td><td>找出"猫在哪格"</td></tr><tr><td><strong>Semantic search</strong></td><td>按"含义"搜，非关键词</td><td>搜"快乐" 找到笑脸</td></tr><tr><td><strong>Multi-modal</strong></td><td>跨模态 (text + image) 检索</td><td>"用文字找图 / 用图找文字"</td></tr><tr><td><strong>Quantization (PQ)</strong></td><td>Product Quantization，向量压缩节省内存</td><td>把高清画变低分辨率指纹</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Photo Search Application</strong> = 用户上传 photo 或输入 text → 搜索匹配的 photos。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Google Photos</strong> —— 个人相册，"找海边照片"</li><li><strong>Google Images</strong> —— web 反向图搜索</li><li><strong>Pinterest visual search</strong> —— "更多类似的"</li><li><strong>Apple Photos</strong> —— device-local + iCloud 索引</li><li><strong>Bing visual search</strong> / <strong>Yandex</strong> —— web image</li><li><strong>eBay / Amazon visual product search</strong></li></ul>
+<p><strong>为什么这是 STAFF 题</strong>：</p>
+<p>考的是<strong>ML system + vector search at scale</strong>：</p>
+<ol><li><strong>Image embedding pipeline</strong>：用什么模型？ResNet vs CLIP？</li><li><strong>Vector index at billion scale</strong>：HNSW vs IVF？memory budget？</li><li><strong>Multi-modal search</strong>：text + image 同一索引怎么搞</li><li><strong>Personal vs global</strong>：个人相册 vs 全网索引模型不同</li><li><strong>Real-time vs offline indexing</strong></li></ol>
+<p>考 STAFF 关键：<strong>你懂 embedding pipeline + ANN index + multi-modal</strong>，不只是 elasticsearch on metadata。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>SearchByImage(image) -&gt; similar_images[]</code></td><td>反向图搜</td></tr><tr><td><code>SearchByText(query) -&gt; images[]</code></td><td>文字搜图</td></tr><tr><td><code>UploadImage(image, metadata) -&gt; image_id</code></td><td>索引新图</td></tr><tr><td><code>GetSimilar(image_id) -&gt; similar[]</code></td><td>"更多类似"</td></tr><tr><td><code>FilterByObject(query="dog")</code></td><td>物体过滤</td></tr><tr><td><code>OCRSearch("invoice 2024")</code></td><td>图中文字搜</td></tr></tbody></table>
+<p><strong>澄清要点</strong>：</p>
+<ul><li>Scope：personal album（10k photos）还是 web global（10B photos）？</li><li>是否需要 OCR / object detection？</li><li>Image vs video?</li><li>Privacy: device-local vs cloud?</li></ul>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>查询 latency</strong></td><td>p99 &lt; 500 ms</td></tr><tr><td><strong>Scale</strong></td><td>10B images (web) or 10k-1M per user (personal)</td></tr><tr><td><strong>Index latency</strong></td><td>new upload searchable in 5 min</td></tr><tr><td><strong>Recall@10</strong></td><td>&gt; 90% (top 10 中有 90% 真正相关)</td></tr><tr><td><strong>Storage</strong></td><td>image bytes + embeddings + index</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<h4>Personal Album (Google Photos)</h4>
+<ul><li>1B users × 5k photos avg = <strong>5T total images</strong></li><li>5 KB / image embedding (512 floats × 4 B + index overhead) = <strong>25 TB embeddings</strong></li><li>Image bytes: 1 MB avg × 5T = <strong>5 PB</strong></li><li>Index growth: 1B × 5 photos/day = <strong>5 GB embeddings/day</strong></li></ul>
+<h4>Web Global (Google Images)</h4>
+<ul><li><strong>10B images</strong> indexed</li><li>Embedding storage: 10B × 2 KB compressed = <strong>20 TB</strong></li><li>Image thumbnails: 10B × 10 KB = <strong>100 TB</strong></li></ul>
+<hr />
+<h3>4. 高层架构</h3>
+<h4>Step 1: Indexing pipeline</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Image source (upload / crawler)
+   ↓
+Image queue (Kafka)
+   ↓
+Feature extraction worker
+   ├── Embedding model (CLIP)
+   ├── Object detection (YOLO)
+   ├── OCR (Tesseract / Vision API)
+   └── Metadata extraction (EXIF: GPS, date, camera)
+   ↓
+Vector DB (FAISS / Milvus) + Metadata DB (Spanner/DynamoDB)
+   ↓
+Searchable</code></pre>
+<h4>Step 2: Query pipeline (text-to-image)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Text query → CLIP text encoder → text_vec [512]
+                                       ↓
+                              ANN search in vector DB
+                                       ↓
+                              top-1000 candidates
+                                       ↓
+                              re-rank (DNN with more features)
+                                       ↓
+                              top-100 results</code></pre>
+<h4>Step 3: Query pipeline (image-to-image)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Image upload → CLIP/ResNet vision encoder → image_vec [512]
+                                                  ↓
+                                          ANN search → ranked results</code></pre>
+<h4>Step 4: Storage</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Vector DB: FAISS IVF-PQ index, sharded by image_id
+Metadata: Spanner (image_id, owner, upload_time, GPS, objects, OCR text)
+Image bytes: S3 (cold), CDN edge (hot)</code></pre>
+<h4>Step 5: Personal vs Global separation</h4>
+<ul><li><strong>Personal album</strong>: per-user FAISS index (在 device 或 per-user server)</li><li><strong>Global web search</strong>: shared FAISS cluster with sharding by image_id</li></ul>
+<p>Personal 用户查询时只搜自己的 index → privacy + 准确度。</p>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: Embedding Model — CLIP vs ResNet</h4>
+<p><strong>ResNet 系列 (pre-2021)</strong>:</p>
+<ul><li>ImageNet 训练，1000 类别</li><li>拿 last conv layer 当 embedding (2048 dim)</li><li>强 visual feature，弱 semantic</li></ul>
+<p><strong>CLIP (2021+)</strong>:</p>
+<ul><li>Train on 400M image-text pairs</li><li>Image 和 text 同一 vector 空间</li><li>512 dim</li><li>Zero-shot：任意 text 都能查 image</li></ul>
+<p><strong>STAFF 答</strong>：default 用 CLIP，强 multi-modal。如果只做 visual similarity 用 ResNet/EfficientNet 更便宜（更小模型）。</p>
+<p><strong>Inference cost</strong>:</p>
+<ul><li>CLIP ViT-B/32: ~50ms / image on GPU</li><li>1M images/day → 1 GPU 处理够，10B all-history → batch 处理几周</li></ul>
+<h4>Deep Dive 2: ANN Index — HNSW vs IVF-PQ</h4>
+<table class="md-table"><thead><tr><th>算法</th><th>内存</th><th>速度</th><th>Recall</th></tr></thead><tbody><tr><td><strong>HNSW</strong></td><td>高 (~4× raw)</td><td>极快</td><td>95-99%</td></tr><tr><td><strong>IVF (FAISS)</strong></td><td>中</td><td>快</td><td>90-95%</td></tr><tr><td><strong>IVF-PQ</strong></td><td>低 (16× compress)</td><td>中</td><td>85-90%</td></tr><tr><td><strong>DiskANN / SPANN</strong></td><td>极低 (用 SSD)</td><td>中</td><td>90%</td></tr></tbody></table>
+<p><strong>10B images full embedding</strong>: 10B × 512 × 4 = <strong>20 TB</strong>。HNSW 4× = 80 TB → 几十台机器内存。</p>
+<p><strong>PQ 压缩</strong>: 10B × 32 B (PQ-compressed) = <strong>320 GB</strong> → 5 台机器 RAM。Recall ~90%。</p>
+<p><strong>STAFF 答</strong>: IVF-PQ for global scale (cost), HNSW for hot tier / per-user index (small).</p>
+<h4>Deep Dive 3: Indexing Sharding</h4>
+<p>10B vectors / 1B per shard → 10 shards.</p>
+<p><strong>Sharding by what</strong>:</p>
+<ul><li>Random shard ID → 查询时 scatter-gather 到全部 10 shard</li><li>Locality shard (e.g., by region) → 减少 inter-region 流量</li></ul>
+<p><strong>Query</strong>:</p>
+<ul><li>Send to all shards (scatter)</li><li>Each returns top-K</li><li>Merge top-K of top-K → final top-K</li><li>Latency = max(shard latency) + merge</li></ul>
+<h4>Deep Dive 4: Cold Start for New Image</h4>
+<p>New upload → searchable in 5 min:</p>
+<ol><li>Image stored → trigger embedding worker (Kafka)</li><li>CLIP infer 50ms on GPU</li><li>Insert to ANN index → "add new vector" 通常 &lt; 10ms</li><li><strong>Index rebuild</strong>: HNSW 支持 incremental add；IVF 需要定期 retrain</li></ol>
+<p><strong>Streaming index update</strong>:</p>
+<ul><li>Append to "delta" index (small, incremental)</li><li>定期 merge delta into main index</li><li>Query searches both, merge results</li></ul>
+<h4>Deep Dive 5: OCR + Object Detection</h4>
+<p>Many photos 有可读文字 (receipt, screenshot, sign):</p>
+<ul><li><strong>OCR</strong>: Tesseract / Google Vision API → text</li><li>Text 进 Elasticsearch (separate index)</li><li>Query: "invoice 2024" → text search by OCR + image search by embedding union</li></ul>
+<p><strong>Object detection</strong> (YOLO / DETR):</p>
+<ul><li>每图 detect 物体 → "dog, cat, person, car"</li><li>Object tags 写入 metadata DB</li><li>"show me dog photos" → filter by tag</li></ul>
+<h4>Deep Dive 6: Personalization</h4>
+<p><strong>Personal album</strong>:</p>
+<ul><li>Per-user FAISS index (small, ~5k photos)</li><li>Filters: by face (face recognition cluster) / by GPS / by date</li></ul>
+<p><strong>Face clustering</strong>:</p>
+<ul><li>FaceNet embedding per detected face</li><li>DBSCAN cluster faces in user's library</li><li>User labels cluster name "Alice"</li><li>"Alice 2023 birthday" → filter by face + date</li></ul>
+<h4>Deep Dive 7: Privacy</h4>
+<p><strong>Personal photos</strong>:</p>
+<ul><li>E2EE option: user's images encrypted with user key</li><li>Embeddings 在 device 上 compute (Apple Photos 这么做)</li><li>Index on device for privacy</li><li>Cloud sync 加密图片，不传 raw</li></ul>
+<p><strong>vs Web global search</strong>:</p>
+<ul><li>Crawler 只索引 public images</li><li>Honors <code>robots-noimageindex</code></li><li>Right-to-be-forgotten (GDPR)：删除原图 + 索引 + cache</li></ul>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：personal vs web global? text+image? OCR?</td></tr><tr><td>5-10min</td><td>容量：10B images, 20 TB embeddings, 5 PB images</td></tr><tr><td>10-20min</td><td>高层架构：indexing pipeline + query pipeline</td></tr><tr><td>20-35min</td><td>Deep dives: CLIP / IVF-PQ / sharding / OCR / face</td></tr><tr><td>35-45min</td><td>privacy / cold start / personalization</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>Photo search 关键是 <strong>embedding + vector search</strong>：图 → CLIP embed → ANN index → 查询。</p>
+<p><strong>架构</strong>：</p>
+<ol><li><strong>Indexing pipeline</strong>: Kafka → CLIP worker → write FAISS index + metadata DB</li><li><strong>Query pipeline</strong>:</li></ol>
+<ul><li>Text query: CLIP text encoder → ANN search → re-rank → top results</li><li>Image query: CLIP image encoder → 同上</li></ul>
+<ol><li><strong>Vector DB</strong>: IVF-PQ for cost (10B vectors → 320 GB compressed)，HNSW for hot/personal tier</li><li><strong>Additional</strong>: OCR for text-in-image, object detection for tags</li></ol>
+<p><strong>Personal vs Web</strong> 两套独立 index:</p>
+<ul><li>Personal: per-user FAISS, 在 device 或 per-user server</li><li>Web: 10B 共享 sharded</li></ul>
+<p><strong>Trade-offs</strong>:</p>
+<ul><li>CLIP &gt; ResNet for multi-modal (text+image 同空间)</li><li>IVF-PQ vs HNSW: cost vs recall</li><li>Index sharding: scatter-gather query</li><li>Real-time index: delta index + periodic merge</li></ul>
+<p>Numbers: 10B images, 20 TB compressed embeddings, p99 &lt; 500 ms.</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "10B images，怎么扛 ANN search 的内存？"</h4>
+<p><strong>A</strong>：<strong>Product Quantization (PQ)</strong>：512 维 float = 2KB → 32B (16x compress)，recall 90%。10B × 32B = 320 GB → 单 cluster (5 台 64GB 机器) 装下。</p>
+<p>进阶：<strong>SPANN / DiskANN</strong> 把大部分 vector 放 SSD，只 hot 部分在 RAM，1B image 单 machine 都行。</p>
+<h4>Q2: "Text query 跟 image 怎么映射到同一向量空间？"</h4>
+<p><strong>A</strong>：<strong>CLIP</strong> training 把 image 和 text 同时 embed 到 512 维：通过 contrastive loss 让"狗"文本和"狗"图片 cosine 接近。Query text → CLIP text encoder → 跟 image embeddings 算 cosine 找最近。</p>
+<h4>Q3: "user 上传新图，几秒后可搜，怎么实现？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li>Image → S3 → Kafka event</li><li>Worker pull → CLIP infer (50ms on GPU)</li><li>Embed insert to <strong>delta FAISS index</strong> (separate small index, fast write)</li><li>Query: search delta + main index, merge</li><li>Background: 每 6h merge delta → main</li></ol>
+<p>End-to-end 5 sec - 1 min。</p>
+<h4>Q4: "Recall 90% 不够准，怎么提升？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li>Two-stage: ANN 先取 top-1000，<strong>DNN re-rank top-100</strong> with more features</li><li>Multiple embeddings: 用 CLIP + ResNet + 自己 fine-tuned 模型，late fusion</li><li>User feedback loop: click data 训练 re-ranker</li><li>HNSW (高 recall) for top tier，IVF-PQ for cold tail</li></ol>
+<h4>Q5: "10B images 怎么 batch index 一遍？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>1 GPU 跑 CLIP，每张图 50ms → <strong>20 images/sec</strong></li><li>1000 GPU 并行 → 20k images/sec → 10B / 20k = 50万秒 = ~6 天</li><li>实际：分布式 dataflow (Spark + GPU executors)，6-10 天 batch index 完成</li></ul>
+<h4>Q6: "如果用户删除图片，怎么从 index 删除？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>HNSW 不支持 efficient delete (graph 结构) → mark tombstone, query 时 filter</li><li>IVF：rebuild inverted list 时跳过 tombstone</li><li>定期 (每周) full rebuild 整理 tombstones</li></ul>
+<p>GDPR 要求：tombstone + scheduled physical delete within 30 days.</p>
+<h4>Q7: "Multi-modal: text query 'sunset by beach with two people' 怎么处理？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>CLIP encode full sentence → 512 vec</li><li>ANN search 直接出结果</li><li>如果需要更精确：<strong>compositional retrieval</strong>：</li><li>切片 "sunset", "beach", "two people"</li><li>每段 CLIP encode</li><li>查多 vec 取交集 (re-rank by all match)</li></ul>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Elasticsearch on metadata only</strong> → semantic search 不 work</li><li><strong>不知道 vector DB</strong> → 答案在错误的轨道</li><li><strong>CLIP 当唯一方案</strong> → 不知道 ResNet 在 visual-only 任务更便宜</li><li><strong>Full embedding storage</strong> → 10B × 2KB = 20TB 太贵</li><li><strong>Sync indexing</strong> → upload 慢</li><li><strong>不分 personal / global</strong> → architecture confused</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>CLIP</strong> for multi-modal</li><li><strong>IVF-PQ</strong> for cost (10× memory save)</li><li><strong>HNSW</strong> for hot tier</li><li><strong>Delta + main index</strong> for real-time</li><li><strong>Two-stage retrieve + rerank</strong></li><li><strong>Face clustering</strong> for personal album</li><li><strong>OCR + object detection</strong> for keyword search</li><li><strong>DiskANN / SPANN</strong> 前沿</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲 CLIP + IVF-PQ + delta indexing + two-stage rerank 是 STAFF；只说 "vector DB" 是 SENIOR。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">Pipeline:
+  Image → CLIP/ResNet → embedding → FAISS index
+  Text  → CLIP text encoder → query vector
+
+Vector DB:
+  Personal (10k): HNSW (high recall, in-memory)
+  Web (10B): IVF-PQ (compressed, scattered shards)
+  Future: DiskANN / SPANN (SSD-based)
+
+Storage:
+  Raw images: S3 (5 PB for 5T images)
+  Embeddings: 20 TB compressed
+  Metadata + OCR text: Spanner / ES
+  Index: FAISS cluster
+
+Additional features:
+  OCR: Tesseract / Vision API → ES
+  Object detect: YOLO/DETR → metadata tags
+  Face: FaceNet + DBSCAN cluster
+
+Query path:
+  Text/Image → encode → ANN top-1000
+            → DNN rerank top-100
+            → filter (object tag / face / date / GPS)
+
+Real-time:
+  Delta FAISS index for new uploads
+  Periodic merge into main
+
+数字:
+  10B web images / 1B users × 5k personal photos
+  20 TB compressed embeddings
+  p99 &lt; 500 ms
+  Recall@10 &gt; 90%
+  Cold start: 5 min searchable</code></pre>
   </section>
 
   

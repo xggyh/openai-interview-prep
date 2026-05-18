@@ -35,56 +35,193 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Online Game Leaderboard</strong>：百万玩家实时 ranking，按 score 排序。支持：top-N global、around-me、按 friends / country 过滤。</p>
-<h3>解法核心</h3>
-<p><strong>Redis Sorted Set (ZSET)</strong> 是 leaderboard 标准方案：</p>
-<ul><li><code>ZADD lb score user_id</code> —— 写</li><li><code>ZREVRANGE lb 0 99 WITHSCORES</code> —— top 100</li><li><code>ZREVRANK lb user_id</code> —— 我的排名</li><li><code>ZREVRANGEBYSCORE lb +inf -inf</code> —— 范围查询</li></ul>
-<p>O(log N) per op，1M users 不到 1ms。</p>
-<h3>整体架构</h3>
-<div class="ascii-diagram">  Game Server
-       │ score update
-       ▼
-  ┌──────────────┐
-  │ Score Service│
-  └──────┬───────┘
-         │
-   ┌─────┼──────────────┐
-   ▼     ▼              ▼
-  Redis  Redis      Redis 
-  ZSET   ZSET       ZSET
-  Global Country    Friends
-  Lead.  Lead.      (per user)
-         │              │
-         ▼              ▼
-   ┌───────────┐
-   │ Postgres  │  source of truth, audit
-   └───────────┘</div>
-<h3>关键技术</h3>
-<h4>1. Multi-dimensional leaderboards</h4>
-<ul><li>Global: <code>lb:global</code></li><li>Per country: <code>lb:country:US</code>, <code>lb:country:JP</code></li><li>Per friend group: <code>lb:friends:{user_id}</code> —— pre-compute or compute on-the-fly with <code>ZINTERSTORE</code></li></ul>
-<h4>2. Time windows</h4>
-<ul><li>All-time: 永久 ZSET</li><li>Weekly: <code>lb:weekly:2026W19</code>, expire after 2 weeks</li><li>Daily: 同理</li></ul>
-<h4>3. 大数据量分片</h4>
-<p>1B 用户 → 单 Redis 装不下。<strong>Sharding by score range</strong>：</p>
-<ul><li>Shard 0: score [0, 100]</li><li>Shard 1: score [101, 1000]</li><li>...</li></ul>
-<p>Query top-N from highest shard down。但 <code>ZREVRANK</code> 跨 shard 需算 cumulative offset。</p>
-<p><strong>简化</strong>：top-100 global 只查最高 shard 就够。其他 query 退到 DB。</p>
-<h4>4. Write amplification</h4>
-<p>每 user 同时写 global + country + weekly + daily ZSET = 4 writes per update。OK，Redis pipeline 一次发出。</p>
-<h4>5. Around-me</h4>
-<p><code>ZREVRANGEBYRANK lb (my_rank - 10) (my_rank + 10)</code>。需先 ZREVRANK 取 rank。</p>
-<h4>6. Anti-cheat</h4>
-<p>新 score 写入前过 fraud check：</p>
-<ul><li>Rate limit per user (每秒不能 +1000 score)</li><li>ML model on suspicious patterns</li><li>Server-side validation of game events</li></ul>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Storage</td><td>Redis ZSET</td><td>DB ORDER BY：每查 O(N)</td></tr><tr><td>Sharding</td><td>Score range</td><td>Hash by user_id：rank query 难</td></tr><tr><td>Friends LB</td><td>ZINTERSTORE</td><td>全 DB join：慢</td></tr><tr><td>Time window</td><td>多 ZSET key + TTL</td><td>Single + filter：慢</td></tr><tr><td>Persistence</td><td>Redis AOF + Postgres backup</td><td>Pure Redis：crash 丢数据</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1M concurrent player × 1 update/min = 17k QPS write</li><li>Redis ZADD ~50k QPS per node → 1 node 撑得住</li><li>Top-100 query: O(log N) = ~20μs → CDN cache 5s 99% hit</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ DB ORDER BY 实时计算 —— TLE； ❌ 不分 time window —— 老玩家 dominate weekly； ❌ Friend leaderboard 实时 compute —— 慢；预算或周期 refresh； ❌ 没 anti-cheat —— 第一周 hack score 上去； ❌ Tie 处理（同 score）：用 secondary key (timestamp) 保稳定。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>Redis ZSET 是 leaderboard 经典且最优解。同 score tie-break 用 (-score, timestamp) tuple。多维度分多 ZSET 不要 over-engineer。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 percentile rank（"你超过 X% 玩家"）？" → <code>ZREVRANK / ZCARD</code>；"如何 historical "我去年这天排名"？" → daily snapshot to S3；"实时排行榜推送（rank 变化通知）？" → pub/sub on score update。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Leaderboard / Ranking</strong></td><td>按分数排序的列表</td><td>班级成绩榜</td></tr><tr><td><strong>Top-N global</strong></td><td>全游戏排名前 N</td><td>全国高考排名</td></tr><tr><td><strong>Around-me</strong></td><td>我前后 ±50 名是谁</td><td>"你在班里第 12 名，11/13/14 名是 X/Y/Z"</td></tr><tr><td><strong>Sorted Set (ZSET)</strong></td><td>Redis 的"按 score 排序的 set"，O(log N) 操作</td><td>自动排好的排行榜</td></tr><tr><td><strong>Skip List</strong></td><td>ZSET 底层实现，O(log N) 插入/查询/排名</td><td>多层索引的链表</td></tr><tr><td><strong>Percentile rank</strong></td><td>你超过百分之几玩家</td><td>"你比 85% 玩家强"</td></tr><tr><td><strong>Sharding by user / by score</strong></td><td>按用户分库 vs 按分数分库</td><td>按姓氏分 vs 按成绩分</td></tr><tr><td><strong>CDN edge caching</strong></td><td>静态排行榜缓存到全球边缘</td><td>全球便利店都备着今日热销榜</td></tr><tr><td><strong>Real-time vs near-real-time</strong></td><td>即时更新 vs 几秒延迟</td><td>直播比分 vs 5 分钟一次刷新</td></tr><tr><td><strong>Idempotency</strong></td><td>同操作重复执行结果不变</td><td>重新提交分数不会重复加</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Online Game Leaderboard</strong> = 百万玩家实时 ranking，按 score 排序，支持多种查询：</p>
+<ul><li><strong>Top-N global</strong>（前 100 名）</li><li><strong>Around-me</strong>（我前后 50 名）</li><li><strong>Filtered</strong>（按好友 / 国家 / 时段过滤）</li><li><strong>Score 更新实时反映</strong></li></ul>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Steam global leaderboard</strong> —— 跨游戏的全球榜</li><li><strong>PUBG / Fortnite seasonal rankings</strong> —— 赛季榜</li><li><strong>Strava</strong> —— 跑步 / 骑行排名</li><li><strong>Pokemon GO Battle League</strong> —— 实时段位</li><li><strong>LeetCode contest ranking</strong></li></ul>
+<p><strong>为什么这是 STAFF 题（虽然只 1 ppl 报告）</strong>：</p>
+<p>考的是<strong>Redis ZSET 玩到极致 + scale 到 1B 玩家</strong>。难点：</p>
+<ol><li><strong>Real-time updates</strong> at 100k+ score updates/sec</li><li><strong>Around-me query</strong> at p99 &lt; 50 ms</li><li><strong>Multiple filtered leaderboards</strong> (global / friends / country / weekly)</li><li><strong>Hot range</strong> — 大家都看 top 100，热点流量</li><li><strong>Score 异常</strong>（作弊）detection</li></ol>
+<p>考的是<strong>正确选数据结构 + 知道 Redis 极限在哪</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>UpdateScore(user_id, score, board_id)</code></td><td>更新玩家分数</td></tr><tr><td><code>GetTopN(board_id, n) -&gt; player[]</code></td><td>前 N</td></tr><tr><td><code>GetAroundMe(board_id, user_id, range) -&gt; player[]</code></td><td>我前后 ±range</td></tr><tr><td><code>GetRank(board_id, user_id) -&gt; rank</code></td><td>我第几名</td></tr><tr><td><code>GetByFriends(user_id, friend_list) -&gt; player[]</code></td><td>朋友间排名</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>更新延迟</strong></td><td>&lt; 100 ms (score 更新到榜单生效)</td></tr><tr><td><strong>查询 latency</strong></td><td>p99 &lt; 50 ms</td></tr><tr><td><strong>Scale</strong></td><td>1B players × 10 boards = 10B player-board entries</td></tr><tr><td><strong>Throughput</strong></td><td>100k score updates/sec sustained, 500k peak</td></tr><tr><td><strong>Read</strong></td><td>1M reads/sec (top-N / around-me)</td></tr><tr><td><strong>Hot path</strong></td><td>90% read 在 top 100 / top 1000</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>Players</strong>: 1B</li><li><strong>Boards</strong>: 10 (global / weekly / friends / country × 5)</li><li><strong>Total entries</strong>: 10B (player + board + score)</li><li><strong>Each entry</strong>: 50 B (user_id 8 + score 8 + meta 30) → <strong>500 GB</strong> total</li><li><strong>Memory feasibility</strong>: 500 GB ÷ 256 GB/node = 2 nodes → 单 Redis cluster 能装！但要分 shard。</li></ul>
+<p><strong>Read QPS</strong>: 1M, <strong>mostly top-100</strong> → CDN edge cache 命中 ≥ 95% → real backend QPS ~50k <strong>Write QPS</strong>: 100k sustained, 500k peak</p>
+<hr />
+<h3>4. 关键设计 — 用 Redis ZSET</h3>
+<h4>4.1 Why ZSET</h4>
+<p>Redis ZSET 完美匹配 leaderboard 需求：</p>
+<table class="md-table"><thead><tr><th>操作</th><th>Redis 命令</th><th>复杂度</th></tr></thead><tbody><tr><td>更新分数</td><td><code>ZADD board user_id score</code></td><td>O(log N)</td></tr><tr><td>取 top-N</td><td><code>ZREVRANGE board 0 N-1</code></td><td>O(log N + N)</td></tr><tr><td>取 around-me</td><td><code>ZREVRANK + ZREVRANGE</code></td><td>O(log N + range)</td></tr><tr><td>取 rank</td><td><code>ZREVRANK board user_id</code></td><td>O(log N)</td></tr><tr><td>移除</td><td><code>ZREM board user_id</code></td><td>O(log N)</td></tr></tbody></table>
+<p><strong>底层是 skip list + hash table</strong>，所有操作 sub-millisecond。</p>
+<h4>4.2 Single Redis 限制</h4>
+<ul><li>单 Redis instance 内存 ~256 GB → 装 5B entries</li><li>单 Redis CPU ~100k QPS → 不够 peak</li></ul>
+<p>→ <strong>Sharding</strong></p>
+<hr />
+<h3>5. 高层架构</h3>
+<h4>Step 1: 单 Redis 单 board</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Client → API → Redis ZSET (one board)</code></pre>
+<p>够用如果 board 小（&lt; 10M entries 都 OK）。</p>
+<h4>Step 2: Multiple boards</h4>
+<p>每个 board 是独立 ZSET：</p>
+<pre class="language-plaintext"><code class="language-plaintext">ZADD global_2026 user_id score
+ZADD weekly_2026_W19 user_id score
+ZADD friends_user_42 user_id score (each user has own friend board)</code></pre>
+<h4>Step 3: Sharding 大 board</h4>
+<p><strong>1B players in 1 global board</strong> → 单 Redis 装不下。<strong>Sharding by score range</strong>：</p>
+<pre class="language-plaintext"><code class="language-plaintext">shard_0: rank 1 - 100k       (low scores)
+shard_1: rank 100k - 1M
+shard_2: rank 1M - 10M
+...
+shard_N: rank 100M - 1B      (top scores)</code></pre>
+<p><strong>Read top-N</strong>: 直接 <code>shard_N</code> （最高分 shard） <code>ZREVRANGE 0 N</code> <strong>Read around-me</strong>: 先 <code>ZSCORE</code> 拿 score → 知道在哪个 shard → ZREVRANGE around <strong>Write</strong>: 知道当前 user 的 shard，update 时如果 score 越过 shard 边界 → 移动到对应 shard</p>
+<p><strong>Trade-off</strong>: top-N 极快（hot shard），but score 边界附近的 user 频繁迁移。</p>
+<h4>Step 4: 缓存 hot path</h4>
+<ul><li>Top 100 是 99% 查询打中的范围</li><li>直接 CDN edge cache，TTL = 10 s</li><li>后端实际 read 减少 95%</li></ul>
+<h4>Step 5: Write path</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Client → API → Kafka (score update event)
+                ↓
+          Score Processor (cluster)
+                ↓
+          Redis ZADD (with optimistic locking)
+                ↓
+          Cache invalidate (Top-100 TTL refresh)</code></pre>
+<p><strong>Why Kafka</strong>：peak 500k QPS 直接打 Redis 会过载，Kafka 削峰。</p>
+<h4>Step 6: Multi-board update fan-out</h4>
+<p>User 玩一场 → 更新 multiple boards (global, weekly, friends, country):</p>
+<pre class="language-plaintext"><code class="language-plaintext">Score event → Score Processor
+  → ZADD global
+  → ZADD weekly_current_week
+  → ZADD friends boards of all friends
+  → ZADD country_XX</code></pre>
+<p><strong>Friends fan-out</strong>：如果用户 1000 个朋友，每场比赛要写 1000 个 ZADD → 写放大严重。<strong>Pull model</strong>：friends leaderboard 用 query time aggregation（不写每个 friend 的 board）。</p>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Around-Me Query</h4>
+<p><strong>Naive</strong>: <code>ZREVRANK(user) → ZREVRANGE(rank - range, rank + range)</code> = 2 个操作。</p>
+<p><strong>优化</strong>:</p>
+<ul><li>单次 <code>ZRANGEBYLEX</code> if score has unique tie-breaker</li><li>客户端 batch query 减少 round trip</li><li>Cache "user → rank" with TTL 1 sec (rank 变化不快)</li></ul>
+<h4>Deep Dive 2: Friends Leaderboard</h4>
+<p><strong>写时 fan-out (1000 friend boards)</strong>：写放大 1000×，500k × 1000 = 5亿 QPS 不可行。</p>
+<p><strong>读时 aggregation</strong>：</p>
+<pre class="language-python"><code class="language-python">def friends_leaderboard(user, friend_list):
+    scores = ZMSCORE("global", friend_list)  # batch 拿 friend 们的 score
+    return sorted(zip(friend_list, scores), key=lambda x: -x[1])</code></pre>
+<p>如果 friend list &lt; 1000，单次 Redis call 完成，&lt; 10 ms。</p>
+<h4>Deep Dive 3: Sharding by Score</h4>
+<p><strong>Score 边界附近 user 频繁迁移</strong>：用户 score 在 99999 → 100001（shard 边界），如何避免抖动？</p>
+<p><strong>Solution</strong>:</p>
+<ol><li><strong>Overlap shards</strong>：shard_i 包括 score 90000-110000，shard_i+1 包括 100000-200000 → 写双份，读时只读"主 shard"</li><li><strong>Hysteresis</strong>：score 上涨到 100100 才升 shard，跌回 99900 才降 shard → 防 churn</li><li><strong>Periodic rebalance</strong>：每天 batch 跑一次正确分 shard，不实时迁移</li></ol>
+<h4>Deep Dive 4: 实时性 trade-off</h4>
+<p><strong>Score 更新 → 榜单可见</strong>多久？</p>
+<table class="md-table"><thead><tr><th>方案</th><th>延迟</th><th>复杂度</th></tr></thead><tbody><tr><td>同步写 ZSET</td><td>&lt; 10 ms</td><td>简单，但 peak 写量大时 Redis 过载</td></tr><tr><td>Kafka 缓冲 + worker 处理</td><td>50-500 ms</td><td>削峰，可扩展</td></tr><tr><td>Batch every 10s</td><td>10s</td><td>极简，但实时性差</td></tr></tbody></table>
+<p><strong>STAFF 答</strong>：Kafka 缓冲，p99 &lt; 100 ms 用户感知不到。</p>
+<h4>Deep Dive 5: Anti-Cheat</h4>
+<p><strong>典型 cheat</strong>：发 fake 高分 → 直接占榜首。</p>
+<p><strong>Defense layers</strong>:</p>
+<ol><li><strong>Server-side validation</strong>：score 必须 server 计算（不要信 client）</li><li><strong>Sanity check</strong>：单次比赛分数有 max (e.g., 不超过 100000)</li><li><strong>Rate limit</strong>：单 user score update / minute 有 cap</li><li><strong>Anomaly detection</strong>：score 突然 10× 增长 → flag for review</li><li><strong>Shadowban</strong>：被检测 cheater 写入隔离 board（cheater 看到自己排名，但全榜不显示）</li></ol>
+<h4>Deep Dive 6: Seasonal / Weekly Boards</h4>
+<p><strong>Weekly board</strong>: 7 天 reset 一次。</p>
+<p>实现:</p>
+<ul><li>ZSET key 包含 week ID: <code>weekly_2026_W19</code></li><li>写时同时写 current week</li><li>Sunday midnight: 创建新 key <code>weekly_2026_W20</code></li><li>老 key 保留 30 天用于历史查询，之后删除</li></ul>
+<p><strong>Pre-creation</strong>: 提前创建下周 key 防 midnight spike。</p>
+<h4>Deep Dive 7: Pagination</h4>
+<p>Top-100 → Top-1000 → ... 用户翻页：</p>
+<pre class="language-plaintext"><code class="language-plaintext">Page 1: ZREVRANGE 0 99
+Page 2: ZREVRANGE 100 199
+...</code></pre>
+<p><strong>问题</strong>：score 变化时翻页可能漏 / 重。</p>
+<p><strong>Solution</strong>:</p>
+<ul><li>用 <code>score + user_id</code> as cursor (not offset)</li><li>Page 2: <code>ZREVRANGEBYSCORE &lt; cursor LIMIT 100</code></li><li>这种是 stable pagination，新分数加入不影响已加载</li></ul>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：board 数量、用户量、real-time 要求</td></tr><tr><td>5-10min</td><td>容量：1B players × 10 boards = 500 GB, 100k write QPS</td></tr><tr><td>10-15min</td><td>数据结构选择 Redis ZSET，复杂度分析</td></tr><tr><td>15-25min</td><td>高层架构：单 ZSET → 多 board → sharding → Kafka 削峰</td></tr><tr><td>25-40min</td><td>Deep dives: friends leaderboard / around-me / sharding boundary / anti-cheat</td></tr><tr><td>40-45min</td><td>seasonal reset / pagination / monitoring</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>这道题核心选择是数据结构 —— <strong>Redis ZSET (sorted set, skip list 实现)</strong> 几乎是完美匹配：</p>
+<ul><li>O(log N) 更新分数</li><li>O(log N + N) top-N</li><li>O(log N) rank lookup</li></ul>
+<p><strong>架构</strong>：</p>
+<ol><li>Score update 走 Kafka 削峰（peak 500k QPS）</li><li>Worker 写 Redis ZSET (<code>ZADD board user score</code>)</li><li><strong>Top-N 缓存在 CDN edge</strong>, TTL 10s, 命中率 95%+</li><li>多 board 都是独立 ZSET (global / weekly / country / friends)</li></ol>
+<p><strong>关键 trade-off</strong>：</p>
+<ul><li>1B player 单 ZSET 装不下 → <strong>sharding by score range</strong> (shard 边界用 hysteresis 防 churn)</li><li>Friends leaderboard 1000 friend 写放大 → <strong>pull model</strong>: query 时 <code>ZMSCORE</code> batch</li><li>Real-time 要求 &lt; 100 ms → Kafka + 立即 process</li></ul>
+<p><strong>Anti-cheat</strong>：server-side score validation + rate limit + anomaly detect + shadowban。</p>
+<p>数字: 1B players × 10 boards = 500 GB, 100k write QPS sustained.</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "Around-me 需要 ±50, 怎么实现？"</h4>
+<p><strong>A</strong>：<code>rank = ZREVRANK(user)</code> → <code>ZREVRANGE rank-50 rank+50</code>。两个操作，&lt; 5 ms。如果 rank 频繁查，cache user→rank with TTL 1s。</p>
+<h4>Q2: "1000 friends, 每场比赛都要更新这 1000 个 friend 的 friends board？"</h4>
+<p><strong>A</strong>：写放大太大。改 <strong>pull model</strong>：friends board 不主动维护，query 时用 <code>ZMSCORE global, friend_list</code> batch 拿分数 + sort，&lt; 10 ms 完成。</p>
+<h4>Q3: "Top-100 是全 server 都在查，热点严重，Redis 怎么扛？"</h4>
+<p><strong>A</strong>：三层兜底：</p>
+<ol><li><strong>Local cache</strong> in API server (1s TTL)</li><li><strong>CDN edge</strong> cache global top-100 (10s TTL)</li><li><strong>Read replica</strong> of Redis: top-100 read 打到 5 个 replica 分摊</li></ol>
+<p>90% 流量被 CDN 兜住。</p>
+<h4>Q4: "Sharding by score 时用户 score 跳变 shard，怎么办？"</h4>
+<p><strong>A</strong>：3 个机制：</p>
+<ol><li><strong>Hysteresis</strong>: 上涨进新 shard 100100 阈值，下降出去 99900 阈值，防 churn</li><li><strong>Overlap range</strong>: 边界 shard 略有重叠，写双份</li><li><strong>Periodic clean-up</strong>: 后台扫描 misplaced entries，迁回正确 shard</li></ol>
+<h4>Q5: "Score 更新 throughput 突然 5x，Redis 扛不住怎么办？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Kafka 削峰</strong>：write side 永远入 Kafka，不直接打 Redis</li><li><strong>Scale out Redis shards</strong>：consistent hashing 加机器</li><li><strong>Batch writes</strong>：worker 每 100ms flush 一批 ZADD (Redis pipeline)，吞吐 5-10×</li></ol>
+<h4>Q6: "Weekly board 怎么 reset？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Key 用 week ID: <code>weekly_2026_W19</code></li><li>周日 midnight 后写入 <code>weekly_2026_W20</code></li><li>老 key 不删，保留 30 天历史</li><li>提前 1 天 pre-create 新 key 防 midnight spike</li></ul>
+<h4>Q7: "用户 score 是 1000.500000，怎么 break tie？"</h4>
+<p><strong>A</strong>：ZSET score 是 double，相同 score 内按 lex order of member (user_id)。可以用 <code>score = real_score * 1e6 + (max_user_id - user_id)</code>，把"先达成 score 者排前"编进 score。</p>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>不知道 ZSET 是关键</strong> → 用 SQL ORDER BY 之类，O(N log N) per query</li><li><strong>Friends fan-out 写时</strong> → 写放大 1000×</li><li><strong>没有 anti-cheat</strong> → score 可伪造</li><li><strong>Top-100 不 cache</strong> → Redis 顶不住</li><li><strong>Sharding by user_id 而非 by score</strong> → top-N 要 scatter-gather 慢</li><li><strong>Weekly reset 无 pre-create</strong> → 0 点 spike</li><li><strong>没说 server-side score 计算</strong> → 暴露不懂安全</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Skip list 复杂度 O(log N)</strong> 主动提</li><li><strong>Sharding by score</strong> + hysteresis</li><li><strong>Pull model</strong> for friends leaderboard</li><li><strong>Stable pagination</strong> via cursor</li><li><strong>Anti-cheat layered defense</strong></li><li><strong>ZMSCORE batch</strong> 减少 round trip</li><li><strong>CDN edge cache for top-100</strong></li><li><strong>Shadowban for detected cheaters</strong></li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：SENIOR 答 ZSET；STAFF 答 ZSET + sharding by score + pull for friends + multi-layer cache + anti-cheat 完整 stack。</p></div>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心: Redis ZSET (skip list)
+  ZADD board user_id score          O(log N)
+  ZREVRANGE board 0 N-1             O(log N + N)
+  ZREVRANK board user_id            O(log N)
+  ZMSCORE board user_list           batch
+
+架构:
+  Client → API → Kafka → Score Processor → Redis ZSET
+                                        ↘ Cache invalidate
+
+Sharding:
+  by score range (with hysteresis)
+  not by user (会 scatter-gather)
+
+Cache:
+  Top-100 → CDN edge (10s TTL, 95% hit)
+  user→rank → API server local (1s TTL)
+
+Friends leaderboard:
+  PULL model (no fan-out write)
+  ZMSCORE batch when queried
+
+Weekly reset:
+  Key includes week_id
+  Pre-create day before midnight
+
+Anti-cheat:
+  Server-side score
+  Rate limit / minute
+  Anomaly detect (10× spike)
+  Shadowban
+
+数字:
+  1B players × 10 boards = 500 GB
+  100k writes/sec sustained, 500k peak
+  1M reads/sec, 95% from CDN cache
+  p99 &lt; 50 ms</code></pre>
   </section>
 
   

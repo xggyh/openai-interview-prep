@@ -35,74 +35,223 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Top-K System</strong>：实时从数据流中找出 top K items（按 count / score）。Twitter trending tags、search query top suggestions、e-commerce top products。</p>
-<p>参考类似题：[[cm7honmgk0278imqn03o95rtg]] (Trending Hashtags)。这里更通用的 framework。</p>
-<h3>核心算法</h3>
-<h4>1. Exact top-K</h4>
-<p>适合数据量小（&lt; 1M items / window）：</p>
-<ul><li>HashMap counter + min-heap of size K</li><li>Each event: counter[item]++; if among top-K push heap</li></ul>
-<h4>2. Approximate top-K — Count-Min Sketch + Heavy Hitters</h4>
-<p>适合 high cardinality（10M+ items）：</p>
-<pre class="language-python"><code class="language-python">class HeavyHitters:
-    def __init__(self, k, cms_width=10000, cms_depth=5):
-        self.cms = CountMinSketch(cms_width, cms_depth)
-        self.heap = []      # min-heap of (estimated_count, item)
-        self.k = k
-        self.in_heap = set()
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Top-K</strong></td><td>找前 K 个最热 item</td><td>排行榜 Top-10</td></tr><tr><td><strong>Stream</strong></td><td>持续来的数据流（vs batch 一次性）</td><td>不断流的水 vs 一桶水</td></tr><tr><td><strong>Min-Heap</strong></td><td>维护"最小值在堆顶"的数据结构，O(log K) 操作</td><td>排排坐，最小的在前</td></tr><tr><td><strong>Count-Min Sketch (CMS)</strong></td><td>用概率数据结构估计 counter，内存极省</td><td>漏勺 — 大颗粒精准、小可能漏</td></tr><tr><td><strong>HyperLogLog</strong></td><td>估"distinct count"的 sketch</td><td>估"人群里有几种 dress"</td></tr><tr><td><strong>Heavy hitter</strong></td><td>出现次数远超均值的元素</td><td>一群人里最高的几个</td></tr><tr><td><strong>Sliding window</strong></td><td>时间窗口"滑动"，老数据过期</td><td>一辆缓行的车 5 分钟视野</td></tr><tr><td><strong>Tumbling window</strong></td><td>时间窗口"接力"，互不重叠</td><td>钟表分针一格一格走</td></tr><tr><td><strong>Misra-Gries</strong></td><td>算法，O(K) 内存找候选 heavy hitter</td><td>选举筹码法</td></tr><tr><td><strong>Space-Saving</strong></td><td>类似 Misra-Gries 的 O(K) 算法，更精确</td><td>改进版筹码法</td></tr><tr><td><strong>Flink / Kafka Streams</strong></td><td>业界主流流处理框架</td><td>流水线运营商</td></tr><tr><td><strong>Sketch merging</strong></td><td>多个 shard 的 sketch 合并得 global</td><td>多分公司销售榜合一份</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Top-K System</strong> = 从持续 event 流中<strong>实时找 top K items by count</strong>。Generic framework，可应用：</p>
+<ul><li>Trending hashtags (Twitter)</li><li>Top search queries (Google Suggest)</li><li>Top products (Amazon best sellers)</li><li>Top players (esports leaderboard - but那个是 ZSET 题)</li><li>DDoS detection (IP top requesters)</li><li>Spam: top spammers / phishing URLs</li></ul>
+<p><strong>为什么这是 STAFF 题（虽然只 1 ppl 报告）</strong>：</p>
+<p>考的是<strong>stream processing + 概率数据结构 + sharding</strong>：</p>
+<ol><li><strong>海量流量</strong> (亿级 events/sec) → 不能 naive 计数</li><li><strong>多时间窗口</strong> (1 min / 1 hour / 1 day) 同时维护</li><li><strong>Heavy hitter 算法</strong> — Count-Min Sketch / Space-Saving</li><li><strong>跨 shard 合并</strong> — 分布式 Top-K 的难点</li><li><strong>精确度 vs 内存</strong> trade-off</li></ol>
+<p>考 STAFF 关键：<strong>知道 sketch 算法 + sliding window + multi-time-window</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>Record(item, count=1)</code></td><td>记录一次 event</td></tr><tr><td><code>GetTopK(window, K) -&gt; [(item, count)]</code></td><td>查询 top-K</td></tr><tr><td><code>GetCount(item, window) -&gt; count</code></td><td>单 item 计数估计</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Event throughput</strong></td><td>1M events/sec sustained</td></tr><tr><td><strong>Query latency</strong></td><td>p99 &lt; 100 ms</td></tr><tr><td><strong>Memory</strong></td><td>O(K log N) per shard，不能 O(N)</td></tr><tr><td><strong>Accuracy</strong></td><td>top-K precision ≥ 95%</td></tr><tr><td><strong>Windows</strong></td><td>1 min, 5 min, 1 hour, 1 day</td></tr><tr><td><strong>Update latency</strong></td><td>&lt; 5 s (event → top-K updated)</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>Events</strong>: 1M /s × 86400 = 86B events/day</li><li><strong>Distinct items</strong>: 10M (e.g., distinct search queries / hashtags)</li><li><strong>Naive count</strong>: 10M items × 100 B = 1 GB total per window — actually doable for in-memory</li><li><strong>Multi-window</strong>: 4 windows × 1 GB = 4 GB — fine</li></ul>
+<p>But:</p>
+<ul><li>1M events/sec write → 单机扛不住</li><li>多 shard → 每 shard local top-K 然后 merge → 算法挑战</li></ul>
+<hr />
+<h3>4. 关键设计：算法选择</h3>
+<h4>4.1 Exact counting (naive)</h4>
+<pre class="language-python"><code class="language-python">counts = defaultdict(int)
+def record(item): counts[item] += 1
+def top_k(): return heapq.nlargest(K, counts.items(), key=lambda x: x[1])</code></pre>
+<p><strong>问题</strong>: distinct items 1B+ 时内存爆，且 top_k 是 O(N log K)。</p>
+<h4>4.2 Min-Heap of size K + HashMap counter</h4>
+<pre class="language-plaintext"><code class="language-plaintext">HashMap: item → count (full counter)
+MinHeap: top-K 候选 (size K, 堆顶最小)
 
-    def add(self, item):
-        self.cms.add(item)
-        est = self.cms.estimate(item)
-        if item in self.in_heap:
-            # rebuild heap entry for this item
-            # 复杂度优化：lazy delete
-            heapq.heappush(self.heap, (est, item))
-        elif len(self.heap) &lt; self.k:
-            heapq.heappush(self.heap, (est, item))
-            self.in_heap.add(item)
-        elif est &gt; self.heap[0][0]:
-            _, evicted = heapq.heapreplace(self.heap, (est, item))
-            self.in_heap.discard(evicted)
-            self.in_heap.add(item)</code></pre>
-<h4>3. Approximate — Misra-Gries</h4>
-<p>固定 K+1 counters。新 item：if 已有 ++；else if 有 counter = 0 替换；else 所有 counter -1。</p>
-<p>guarantee：true frequency &gt; total/K 的 item 一定被找到。简单且 O(K) memory。</p>
-<h3>整体架构（分布式）</h3>
-<div class="ascii-diagram">   Event stream (Kafka)
-         │
-         ▼
-   ┌──────────────────┐
-   │ Partition (by    │  shuffle by item hash
-   │ item hash)       │
-   └──────┬───────────┘
-          │
-          ▼
-   ┌──────────────────┐
-   │ Local top-K per  │  每 worker 维护 local CMS + heap
-   │ worker (Flink)   │
-   └──────┬───────────┘
-          │ 每 N 秒 emit local top-K
-          ▼
-   ┌──────────────────┐
-   │ Global aggregator│  union top-K from all workers
-   │ → final top-K    │
-   └──────┬───────────┘
-          ▼
-   ┌──────────────────┐
-   │ Redis top-K cache│
-   └──────────────────┘</div>
-<h4>关键：分而合并的近似性</h4>
-<p>不能保证 global exact top-K，但 union of local top-K + scoring 在实践上误差极小（top-K 都是 high-frequency item，分到各 shard 仍会是 local top）。</p>
-<h3>Sliding window</h3>
-<p>如果要"最近 5 分钟 top-K"而非"all-time"：每分钟一个 sub-window CMS + heap，5 个 sub-window union 计算。</p>
-<p>老 sub-window expire 自然滑动。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Exact vs approx</td><td>Approx for high cardinality</td><td>Exact：内存爆</td></tr><tr><td>Algo</td><td>CMS + heavy hitters</td><td>Sort all every interval：O(N log N)</td></tr><tr><td>Partition</td><td>by item hash</td><td>by random：top-K shuffle 不准</td></tr><tr><td>Window</td><td>sliding</td><td>tumbling：bursty 不平滑</td></tr></tbody></table>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 朴素 HashMap counter for 10M cardinality —— OOM； ❌ CMS 不加 heavy hitters → 没法快速 enumerate top-K； ❌ 全 global single counter —— 写热点； ❌ Sliding window 不 expire 老数据 —— count 累计成 all-time； ❌ Approx error 不告知用户 —— UI 不应表达"准确"。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>Top-K 高基数 = <strong>CMS + heavy hitters + sliding window</strong>。LC 风格的 top-K 题（Top K Frequent Elements）是 in-memory exact 版；分布式 streaming 版用 approximate。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Personalized top-K per user？" → per-user counter（如果 user 多就分布式）；"Top-K with decay (新事件权重高)？" → exponential decay 在 CMS 上；"Top-K with constraints (category)？" → 加 filter 维度 sharding。</p></div>
+on record(item):
+    counts[item] += 1
+    if item in heap:
+        heap.update(item, counts[item])
+    elif counts[item] &gt; heap.peek().count:
+        heap.replace_top(item, counts[item])</code></pre>
+<p><strong>问题</strong>：仍 O(N) 内存 (HashMap). 1B distinct items 时不行。</p>
+<h4>4.3 Count-Min Sketch (probabilistic)</h4>
+<p>固定大小的 2D 数组 <code>counts[d][w]</code>, d row × w columns，加 d 个 hash 函数。</p>
+<pre class="language-python"><code class="language-python">def record(item):
+    for i in range(d):
+        h = hash_i(item) % w
+        counts[i][h] += 1
+
+def estimate_count(item):
+    return min(counts[i][hash_i(item) % w] for i in range(d))</code></pre>
+<p><strong>Memory</strong>: 4 rows × 100k cols × 4 B = <strong>1.6 MB</strong> for any number of items.</p>
+<p><strong>Error</strong>: counts &gt; true count by some additive ε, with prob 1-δ。<code>w = e/ε, d = ln(1/δ)</code>.</p>
+<p><strong>Limit</strong>: CMS 不直接给 top-K — only 估 single item count. 配合 heap：</p>
+<pre class="language-plaintext"><code class="language-plaintext">CMS for counting + Min-Heap for tracking top-K candidates</code></pre>
+<h4>4.4 Space-Saving Algorithm (O(K) memory, deterministic)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">counters = {item: count} of size K (fixed)
+
+on record(item):
+    if item in counters:
+        counters[item] += 1
+    elif len(counters) &lt; K:
+        counters[item] = 1
+    else:
+        # Evict the minimum
+        min_item = argmin(counters)
+        del counters[min_item]
+        counters[item] = counters[min_item] + 1  # inherit count!</code></pre>
+<p><strong>Guarantees</strong>:</p>
+<ul><li>Any item with true count &gt; N/K is <strong>guaranteed</strong> in counters</li><li>Counter overestimates by at most N/K</li></ul>
+<p><strong>内存</strong>：K items × 100 B = 100 KB for K=1000.</p>
+<p><strong>This is the cleanest "fixed memory top-K"</strong>。</p>
+<h4>4.5 推荐组合</h4>
+<ul><li><strong>Per-shard</strong>: Space-Saving (K' &gt; K, e.g., K' = 10×K)</li><li><strong>Sketch for exact-ish count</strong>: Count-Min in parallel for "did user X care about exact count?"</li><li><strong>Global merge</strong>: union per-shard counters, recompute top-K</li></ul>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">   Event source (Kafka, 1M events/s)
+         ↓ partition by hash(item) % N
+   ┌────────────────────────────────┐
+   │  Shard 0..N (Flink/Spark)      │
+   │  - Space-Saving per window     │
+   │  - Tumbling windows (1m/5m/1h) │
+   │  - Emit candidates per window  │
+   └────────────────────────────────┘
+         ↓
+   ┌────────────────────────────────┐
+   │  Aggregator (single shard /     │
+   │   per region)                   │
+   │  - Merge shards' candidates     │
+   │  - Compute global top-K         │
+   └────────────────────────────────┘
+         ↓
+   ┌────────────────────────────────┐
+   │  Redis ZSET / DynamoDB           │
+   │  - Query API serves top-K        │
+   └────────────────────────────────┘</code></pre>
+<h4>Step 1: Partitioning by item</h4>
+<p>Events 按 <code>hash(item) % N</code> 分到 N 个 shard. 同 item 永远进同 shard → 单 shard 看到 item 的所有 count.</p>
+<h4>Step 2: Per-shard top-K computation</h4>
+<p>Each shard runs Space-Saving alg with <code>K' = 10 * K</code>：保留 candidate top-10K (因为 global top-K 不一定是每个 shard 的 top-K)。</p>
+<h4>Step 3: Aggregation</h4>
+<p>Aggregator 收 N shards 的 candidates → merge counts (sum across shards) → sort → global top-K。</p>
+<h4>Step 4: Multi-window</h4>
+<p>每个 window (1m / 5m / 1h / 1d) 独立维护 Space-Saving counter。</p>
+<p><strong>Implementation</strong>:</p>
+<ul><li>Tumbling windows: 每 1 min 启动新 counter，老 counter 结算后丢弃</li><li>Sliding 1 hour: 60 个 1-min sub-window，sum 60 个的 counter → 1h top-K</li><li>1 day: 24 个 1-hour，sum</li></ul>
+<h4>Step 5: Real-time query</h4>
+<p>API 查 top-K 时直接读 Redis (aggregator 周期性 publish)。</p>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Count-Min Sketch 数学</h4>
+<p><strong>Error bound</strong>:</p>
+<ul><li>For count of item x: <code>true_count ≤ estimate ≤ true_count + ε × N</code> with prob 1-δ</li><li>通常 ε = 0.01% (估算误差 &lt; 0.01% of stream)</li><li>δ = 0.01% (failure rate)</li><li>Memory = 4 rows × 1M cells × 4 B = 16 MB</li></ul>
+<p><strong>Heavy hitter</strong>: item with <code>true_count &gt; φN</code> (φ = e.g., 1%). CMS guarantees these are detected.</p>
+<h4>Deep Dive 2: Sliding Window 实现</h4>
+<p><strong>Naive (deque of events, size = window)</strong>:</p>
+<ul><li>O(window size) memory</li><li>O(1) add, O(1) eviction</li><li>但 window size 1 hour × 1M events/sec = 3.6B events → 内存爆</li></ul>
+<p><strong>Tumbling sub-windows + merge</strong>:</p>
+<ul><li>60 个 1-min sub-windows, 每个有自己 Space-Saving counter</li><li>Query 1-hour top-K: merge 60 个 counters</li></ul>
+<p><strong>Exponential decay (alternative)</strong>:</p>
+<ul><li>Each event 加权 <code>e^(-λ × age)</code></li><li>不需要 evict, 旧数据自然衰减</li><li>但累积浮点误差</li></ul>
+<h4>Deep Dive 3: Shard Merging</h4>
+<p><strong>Challenge</strong>: Space-Saving per shard 给 K' candidates，merge 时 item 可能在多 shard 都是 top-K' 也可能某个 shard 不在 top-K'.</p>
+<p><strong>Solution</strong>:</p>
+<ul><li>Per shard 维护 K' = 10×K candidates</li><li>Aggregator collect all shards' K' lists</li><li>For each unique item, sum counts across shards</li><li>Sort &amp; take top-K</li></ul>
+<p><strong>Edge case</strong>: item 在 shard A 排第 11, 在 shard B 排第 1，global merge 后可能进 top-K. K' = 10×K guard against this (shard A 的 K' = 100, 排第 11 进了，不会丢)。</p>
+<h4>Deep Dive 4: Skew (Hot Item)</h4>
+<p><strong>Single item 占 50% 流量</strong> (e.g., #BlackFriday) → 该 shard 流量 50× others → backpressure。</p>
+<p><strong>Solution</strong>:</p>
+<ul><li><strong>Salt the hash</strong>: hot items 自动 random-salt 分到 multiple shards</li><li>Aggregator 合并 salt suffix</li><li>Trade-off: 额外 metadata, but 流量均衡</li></ul>
+<p><strong>或</strong> dedicated "celebrity" path: top items 不走 shard，直接进 single global atomic counter（Redis INCR）。</p>
+<h4>Deep Dive 5: Approximate vs Exact</h4>
+<p><strong>业务要 Exact</strong>?</p>
+<ul><li>通常不需要—"哪 100 个是热门"对 K=100 来说 ±5 个误差用户无感</li><li>如果真要 exact: 用 spanner / distributed atomic counter，代价高 10×</li></ul>
+<p><strong>Approximate works because</strong>:</p>
+<ul><li>Top-K precision (in top-K 中真正 top-K 比例) &gt; 95% 用户感知不出</li><li>Exact count off by 0.1% in 1M events 也不可见</li></ul>
+<h4>Deep Dive 6: Memory Budget at Scale</h4>
+<p>10M distinct items × 100 B = 1 GB exact in memory — actually feasible!</p>
+<p>When <strong>Sketch matters</strong>:</p>
+<ul><li>1B+ distinct items (IP addresses, user IDs, URLs)</li><li>Need 100+ windows (long history at multiple granularities)</li><li>Memory budget tight (mobile / edge)</li></ul>
+<p>For most web-scale Top-K: exact in-memory works at single shard 10M items × 100 B = 1 GB.</p>
+<h4>Deep Dive 7: Query Path Caching</h4>
+<p>Top-K query 100k QPS → cache aggregated result in Redis with TTL 10s。Recompute from raw counters every 10s。</p>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：what's the item? how many distinct? how many windows?</td></tr><tr><td>5-10min</td><td>容量：1M events/s, 10M distinct items, K=100</td></tr><tr><td>10-15min</td><td>算法选择：min-heap vs CMS vs Space-Saving，trade-off</td></tr><tr><td>15-25min</td><td>高层架构：partition by item → shard → aggregator → cache</td></tr><tr><td>25-40min</td><td>Deep dives: sliding window / shard merge / skew / exact vs approx</td></tr><tr><td>40-45min</td><td>multi-region / hot path</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>Top-K 框架 generic 适用 trending hashtags / top queries / spam IPs 等。核心是 <strong>stream processing + sketch + sliding window</strong>。</p>
+<p><strong>算法选择</strong>：</p>
+<ul><li>Naive HashMap + min-heap: O(distinct items) memory, 1M+ distinct 不行</li><li><strong>Space-Saving algorithm</strong>: O(K) memory deterministic，是 fixed memory 经典方案</li><li>Count-Min Sketch: 估单 item count，O(log 1/δ × 1/ε) memory，配合 heap 找 top-K</li></ul>
+<p><strong>架构</strong>：</p>
+<ol><li>Kafka partition by hash(item) 分 N shard</li><li>Each shard 用 Flink/Spark Streaming 跑 Space-Saving (K'=10K)</li><li>Aggregator merge shards' candidates → global top-K</li><li>Redis cache top-K result, 10s TTL</li></ol>
+<p><strong>Multi-window</strong>:</p>
+<ul><li>Tumbling sub-windows (1min granularity)</li><li>Sliding window = sum of N sub-windows</li></ul>
+<p><strong>Skew</strong>:</p>
+<ul><li>Hot items salt-hash to distribute load</li><li>Or dedicated celebrity path</li></ul>
+<p>Numbers: 1M events/s, 10M distinct items, K=100, p99 &lt; 100ms.</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "Space-Saving 跟 Count-Min Sketch 哪个适合？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li><strong>Space-Saving</strong>: O(K) memory, deterministic — best for "fixed K top elements"</li><li><strong>CMS</strong>: O(log 1/δ / ε) memory, probabilistic — best for "what's the count of ANY item"</li><li><strong>Combination</strong>: SS for top-K candidates + CMS for accurate count estimate</li></ul>
+<h4>Q2: "Heavy hitter 在 shard A 排第 100，shard B 排第 1，merge 后会丢吗？"</h4>
+<p><strong>A</strong>：会，如果 shard 只 keep top-K=10. 解法是每 shard 保留 K' = 10×K 候选，足够覆盖 cross-shard 排名变化。</p>
+<h4>Q3: "1 hour window 怎么 sliding？"</h4>
+<p><strong>A</strong>：60 个 1-min tumbling sub-windows，aggregator 维护 sliding sum: 每分钟 evict 最老 sub-window + add new。Counter merge 是关键 (Space-Saving 可 merge：counts 相加 + 取 top-K)。</p>
+<h4>Q4: "如果某个事件突然爆量 (10×)，怎么处理？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Backpressure</strong>: Kafka 缓冲 spike</li><li><strong>Detect via heap top</strong>: 单 item 占 partition 流量 50%+ → fire alert</li><li><strong>Salt hot item</strong>: 自动 split to multiple shards</li><li><strong>Pre-aggregate at producer</strong>: client 本地 batch 10s reduce 流量</li></ol>
+<h4>Q5: "实时怎么定义？ 5s 还是 5min？"</h4>
+<p><strong>A</strong>：tunable. 通常：</p>
+<ul><li>5s for breaking news / DDoS</li><li>1 min for trending hashtags</li><li>1 hour for "top of the day"</li></ul>
+<p>Trade-off: smaller granularity = more memory + compute, more accurate "right now"。</p>
+<h4>Q6: "Multi-region 全球 top-K 怎么算？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Per region 维护本地 top-K (Space-Saving)</li><li>每 1 min 各 region 把 K' candidates push 到 global aggregator</li><li>Global aggregator merge → global top-K</li><li>Trade-off: 1 min lag for global (vs in-region real-time)</li></ul>
+<h4>Q7: "Item 是用户 IP 找 DDoS attacker？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Distinct IPs 可达 100M → 必须 sketch</li><li>Use CMS for IP counts + SS for top</li><li>Threshold trigger: IP &gt; 100 req/s → flag for rate limit</li><li>Sliding 1-min window for short bursts</li></ul>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>HashMap counter for all items</strong> → 10M+ items 时内存爆</li><li><strong>不知道 Space-Saving / CMS</strong> → answer 是 heuristic</li><li><strong>Per shard K = K</strong> → merge 时丢 cross-shard heavy hitters</li><li><strong>不区分 sliding vs tumbling</strong> → 概念混淆</li><li><strong>没考虑 skew</strong> → 单 shard 过载</li><li><strong>Real-time = 0 latency</strong> → 不现实，应说 5s/1min</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Space-Saving algorithm</strong> 算出来 K=1000 时 100 KB memory</li><li><strong>CMS error bound</strong> math (ε, δ)</li><li><strong>K' = 10×K</strong> for cross-shard correctness</li><li><strong>Salt hot item</strong> 防 shard 过载</li><li><strong>Tumbling sub-windows + merge</strong> 实现 sliding window</li><li><strong>Multi-granularity windows</strong> (1m/5m/1h/1d)</li><li><strong>Flink / Kafka Streams</strong> 提一嘴 implementation</li><li><strong>HLL for distinct count</strong> if asked</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能写出 Space-Saving 伪代码 + 解释 O(K) 内存 deterministic 是 STAFF；只说"min-heap" 是 SENIOR。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">算法选择:
+  Exact (small distinct &lt; 10M): HashMap + min-heap
+  Fixed K memory: Space-Saving (deterministic, O(K))
+  Approx count any item: Count-Min Sketch
+  Hybrid: SS + CMS in parallel
+
+Sharding:
+  partition by hash(item)
+  per-shard K' = 10*K candidates
+  Aggregator merge → global top-K
+
+Multi-window:
+  1-min tumbling sub-windows
+  Sliding 1h = sum of 60 sub-windows
+  Per window: independent Space-Saving counter
+
+Skew handling:
+  Salt hot items (multi-shard)
+  Or celebrity path (Redis INCR direct)
+
+Memory:
+  Space-Saving K=1000 → 100 KB
+  CMS 1M cells × 4 rows → 16 MB
+  Exact 10M items × 100B → 1 GB (feasible!)
+
+数字:
+  1M events/s, 10M distinct, K=100
+  4 windows (1m/5m/1h/1d)
+  p99 &lt; 100ms query
+  Update lag: 5s
+  precision@K &gt; 95%</code></pre>
   </section>
 
   

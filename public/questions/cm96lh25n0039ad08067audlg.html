@@ -35,77 +35,225 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>News Aggregator System</strong> (Google News / Apple News / Flipboard)：从全球新闻源抓取 → 去重 → 聚类同事件 → 个性化推荐 → 实时分发。</p>
-<h3>需求</h3>
-<ul><li>100k+ 新闻源</li><li>1M+ articles/day</li><li>1B users</li><li>5-15 min freshness</li><li>个性化首页</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   News sources (RSS / Sitemap / API)
-       │
-       ▼
-  ┌──────────────┐
-  │ Crawler/     │  poll sources every 5 min
-  │ RSS Reader   │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Article          │  extract title / body / image / authoring
-  │ Extractor        │  newspaper3k / readability
-  └──────┬───────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Dedup + Cluster  │  same-event articles grouped
-  │ (embedding)      │
-  └──────┬───────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ ML Tagging       │  topic / sentiment / quality score
-  └──────┬───────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Personalization  │  per-user feed ranking
-  │ + Feed Service   │
-  └──────────────────┘
-         │
-         ▼
-   User app</div>
-<h3>核心组件</h3>
-<h4>1. Crawler</h4>
-<p>每 source 一个 RSS feed 或 sitemap.xml。Polling 5-15 分钟（敏感时间 push subscription —— PubSubHubbub / WebSub）。</p>
-<p>Crawl politeness：per-host rate limit (参考 [[cm80gligm049vtvyjklc6gxdw]])。</p>
-<h4>2. Article extraction</h4>
-<p>Raw HTML → 主文本：</p>
-<ul><li>Readability algorithm（Mozilla 开源）</li><li>提取 title / body / publish_date / author / images</li><li>失败 fallback 到 OG tags</li></ul>
-<h4>3. 去重 + 事件聚类</h4>
-<p>同事件不同 source 大量报道（"OpenAI launches GPT-5" 1000 个 article）。<strong>聚类</strong>：</p>
-<ul><li>计算 article embedding (sentence-BERT 384-dim)</li><li>实时聚类：新 article 找 cosine sim &gt; 0.8 的已有 cluster</li><li>没命中 → new cluster (= new event)</li></ul>
-<p>每 cluster 是一"event"，UI 显示 representative article + "200 sources reporting"。</p>
-<h4>4. ML tagging</h4>
-<p>每 article 过 pipeline：</p>
-<ul><li>Category classifier (tech / sports / politics / ...)</li><li>Sentiment (positive / negative / neutral)</li><li>Quality score (clickbait detect, factual signal)</li><li>Entity extraction (people / orgs / locations)</li></ul>
-<p>存到 ES + 向量 store。</p>
-<h4>5. Personalization</h4>
-<p>User profile：</p>
-<ul><li>Explicit interests (user picked)</li><li>Implicit (click / read time / dwell)</li><li>Embedding average of past clicks</li></ul>
-<p>Feed = candidate generation + ranking：</p>
-<ol><li><strong>Candidates</strong>：recent (&lt; 24h) articles + user's followed sources + topic match</li><li><strong>Ranking</strong>：DNN takes (article features, user features) → click probability</li><li><strong>Diversity reranking</strong>：不重复同 cluster</li></ol>
-<h4>6. Real-time</h4>
-<p>新 article 进系统 5-15 min 后在 feed 出现。Push notification for breaking news:</p>
-<ul><li>Editor's pick (高 quality + trending event)</li><li>或用户配置 alert keyword</li></ul>
-<h4>7. Source quality</h4>
-<p>每 source 有 reputation score。Low-quality / fake news source → 降权 / blacklist。Editorial review for grey area。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Source ingestion</td><td>RSS / Sitemap / API</td><td>Generic crawl：noisy</td></tr><tr><td>Cluster</td><td>Embedding</td><td>TF-IDF：semantic 弱</td></tr><tr><td>Personalization</td><td>DNN + collab filtering</td><td>Rule-based：static</td></tr><tr><td>Push</td><td>Selective alert</td><td>Every article：spam</td></tr><tr><td>Quality</td><td>Editorial + ML</td><td>None：fake news</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1M articles/day × 50KB = 50 GB/day text + 0.5 GB embeddings</li><li>Search QPS: 1B users × 5 feed queries/day = 60k QPS → ES + CDN cache hot feeds</li><li>ML pipeline: 1M articles/day = 12 articles/sec → trivial</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 抓不 dedup → user 看 100 篇同 event； ❌ 不 cluster events → ranking 把同事件多篇都推； ❌ 不做 quality control → fake news boost； ❌ Hot story 全 user 都看到 → echo chamber，加 diversity reranking； ❌ Push notification too aggressive → uninstall。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Embedding-based event clustering</strong> 处理同事件多 source；(2) <strong>Multi-stage candidate + ranking + diversity</strong>；(3) <strong>Source quality + editorial layer</strong> 防 fake news。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何处理 paywall articles？" → metadata + snippet only；"多语言？" → per-language pipeline + cross-language event linking；"Local news？" → geo-tag + user location；"如何 detect propaganda / state media？" → source labeling + ML credibility model。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Web crawler</strong></td><td>自动抓网页的程序</td><td>派去全网"剪报"的实习生</td></tr><tr><td><strong>RSS / Atom feed</strong></td><td>新闻站点提供的"机器可读"摘要源</td><td>报社直接给摘要</td></tr><tr><td><strong>Dedup</strong></td><td>多个源报道同一新闻，合并成一条</td><td>把 5 份不同报纸的同一篇报道合一份</td></tr><tr><td><strong>Clustering / Event grouping</strong></td><td>把同一事件的多篇文章聚成一个 cluster</td><td>把所有写"苹果发布会"的文章合一组</td></tr><tr><td><strong>Embedding</strong></td><td>文本 → 高维向量，相似文本向量近</td><td>把文章变成"指纹"</td></tr><tr><td><strong>MinHash / SimHash</strong></td><td>近似 dedup 的 hash 算法</td><td>给文章按内容相似度打指纹</td></tr><tr><td><strong>TF-IDF</strong></td><td>老式文本相似度算法</td><td>老式"找重点词"打分</td></tr><tr><td><strong>Personalization</strong></td><td>基于用户兴趣排序推荐</td><td>个性化报纸</td></tr><tr><td><strong>Collaborative filtering</strong></td><td>用户行为相似的推荐</td><td>"看这条的人也看了 X"</td></tr><tr><td><strong>Content-based filtering</strong></td><td>内容标签匹配用户兴趣</td><td>喜欢科技 → 推科技新闻</td></tr><tr><td><strong>CDN</strong></td><td>内容全球分发</td><td>在每个城市都开报亭</td></tr><tr><td><strong>Trending / Top stories</strong></td><td>热点新闻列表</td><td>报纸头版</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>News Aggregator</strong> = 抓取全球新闻源 → 去重 → 聚类同事件 → 个性化推荐 → 实时分发。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Google News</strong> —— 1.5B users，跨语言/区域</li><li><strong>Apple News</strong> —— iOS 集成</li><li><strong>Flipboard</strong> —— magazine UX</li><li><strong>SmartNews</strong> —— 日本起家</li><li><strong>TopBuzz / 今日头条</strong> —— 推荐算法标杆</li><li><strong>Yahoo News</strong></li></ul>
+<p><strong>为什么这是 STAFF 题（1 ppl 报告但概念硬核）</strong>：</p>
+<p>考的是 4 个独立子系统的协调：</p>
+<ol><li><strong>Crawling at scale</strong> —— 10k+ news sources, 多语言</li><li><strong>Deduplication + clustering</strong> —— 不要 5 篇同一新闻</li><li><strong>Personalization</strong> —— 1B users 个性化首页</li><li><strong>Real-time delivery</strong> —— 突发新闻 5 分钟内推达</li></ol>
+<p>考 STAFF 关键：<strong>不是 simple feed system，而是"四个子系统 + ML pipeline + multi-region 分发"的全栈</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>GetFeed(user_id, category?, page) -&gt; articles[]</code></td><td>个性化首页</td></tr><tr><td><code>GetTrending(region?, category?) -&gt; articles[]</code></td><td>当下热门</td></tr><tr><td><code>GetArticle(article_id) -&gt; details</code></td><td>文章详情</td></tr><tr><td><code>MarkRead / Like / Save</code></td><td>用户行为</td></tr><tr><td><code>Subscribe(category / source)</code></td><td>订阅</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Freshness</strong></td><td>突发新闻 &lt; 5 min 全球可见</td></tr><tr><td><strong>Personalization</strong></td><td>feed 加载 p99 &lt; 500 ms</td></tr><tr><td><strong>Scale</strong></td><td>1B users, 1M articles/day, 100 languages</td></tr><tr><td><strong>Dedup precision</strong></td><td>同新闻被合并率 &gt; 95%</td></tr><tr><td><strong>Availability</strong></td><td>99.99% read</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>Sources</strong>: 10k news sites + 100k blogs + RSS = 1M crawl targets</li><li><strong>Articles/day</strong>: 1M new (after dedup → 100k unique events)</li><li><strong>Storage</strong>: 1M × 5KB = 5GB/day → 2TB/year text + 10TB/year images</li><li><strong>Users</strong>: 1B MAU × 50% DAU = 500M DAU</li><li><strong>Feed reads</strong>: 500M × 10 reads/day = 5B/day = <strong>60k QPS sustained, 200k peak</strong></li><li><strong>Crawl rate</strong>: 1M sources × 1 visit/hour = 280/sec sustained</li></ul>
+<hr />
+<h3>4. 高层架构</h3>
+<h4>Step 1: Crawler</h4>
+<pre class="language-plaintext"><code class="language-plaintext">URL Frontier (Kafka) → Worker Pool → Page Fetcher → HTML Parser
+                                                          ↓
+                                              Raw Article Store (S3)
+                                                          ↓
+                                                  Article Queue (Kafka)</code></pre>
+<p><strong>Polite crawling</strong>:</p>
+<ul><li>robots.txt 解析</li><li>Per-domain rate limit (1 req/s per source)</li><li>User-Agent 标识</li><li>304 Not Modified caching</li></ul>
+<p><strong>Distributed scheduling</strong>: URL frontier 用 priority queue (新闻源每 5 分钟 revisit, 长尾博客每天一次)。</p>
+<h4>Step 2: Content Extraction</h4>
+<p>HTML → clean article text + metadata：</p>
+<ul><li><strong>Boilerplate removal</strong>：删 nav / ads (use libraries like Readability / Goose3)</li><li><strong>Metadata</strong>: title, author, publish_time, language</li><li><strong>Image extraction</strong>: og:image / first inline image</li><li><strong>Language detection</strong>: fastText</li></ul>
+<h4>Step 3: Dedup + Clustering</h4>
+<p><strong>Layer 1: Exact dedup (URL canonicalization)</strong></p>
+<ul><li>Normalize URL (remove utm params, sort query string)</li><li>Hash → check Bloom filter</li></ul>
+<p><strong>Layer 2: Near-dup (SimHash / MinHash)</strong></p>
+<ul><li>Compute SimHash of article body</li><li>Hamming distance &lt; 3 → considered dup</li></ul>
+<p><strong>Layer 3: Semantic clustering (Event grouping)</strong></p>
+<ul><li>Embedding via sentence-BERT</li><li>HDBSCAN / agglomerative cluster</li><li>"Same event" = articles in same cluster within 24h window</li></ul>
+<pre class="language-plaintext"><code class="language-plaintext">"Apple Vision Pro 发布" cluster:
+  - Apple official article
+  - TechCrunch article
+  - Verge article
+  - 5 ja translations
+  → 1 cluster, show as 1 entry with "20 sources"</code></pre>
+<h4>Step 4: Storage Schema</h4>
+<pre class="language-plaintext"><code class="language-plaintext">article (raw):
+  article_id, url, title, body, lang, publish_time, source_id, cluster_id?
+
+cluster:
+  cluster_id, topic, lang, primary_article_id, num_sources, score, created_at
+
+user_feed (per user, sharded):
+  user_id, article_or_cluster_id, score, position, served_at</code></pre>
+<h4>Step 5: Personalization Pipeline</h4>
+<pre class="language-plaintext"><code class="language-plaintext">User profile (interests, history) ↘
+                                    Recommendation Service
+Article catalog (with embeddings) ↗         ↓
+                                    Ranked feed (cached)</code></pre>
+<p><strong>Two-tower model</strong>:</p>
+<ul><li>User tower: embed user from history (read articles, dwell time, likes)</li><li>Item tower: embed article from text + metadata</li><li>Score = cosine similarity</li></ul>
+<p><strong>Retrieval</strong>: top-1000 candidates via ANN (FAISS) → ranking model (DNN with features) → top-N feed。</p>
+<h4>Step 6: Real-time Delivery</h4>
+<p><strong>Breaking news flow</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">Crawler finds breaking story
+  → Dedup check (within last 1 hour)
+  → If new + high "newsworthiness" score:
+      → fan-out to user feeds (push notifications + insert at top)
+      → CDN cache invalidate</code></pre>
+<p><strong>Newsworthiness signal</strong>:</p>
+<ul><li>Velocity: how many sources publish in 5 min</li><li>Editor curation (manually flag)</li><li>ML model (text + meta) classifies "breaking"</li></ul>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: Dedup Pipeline (SimHash)</h4>
+<pre class="language-python"><code class="language-python">def simhash(text):
+    tokens = tokenize(text)
+    weights = tfidf(tokens)
+    vec = [0] * 64
+    for tok, w in zip(tokens, weights):
+        h = hash64(tok)
+        for i in range(64):
+            vec[i] += w if (h &gt;&gt; i) &amp; 1 else -w
+    return sum((vec[i] &gt; 0) &lt;&lt; i for i in range(64))
+
+def is_dup(h1, h2, threshold=3):
+    return popcount(h1 ^ h2) &lt;= threshold</code></pre>
+<p><strong>Storage</strong>: 1M articles × 8B SimHash = 8 MB → 全 in memory，scan O(N) per query 也快。</p>
+<p><strong>Optimization</strong>: split 64-bit hash into 4 chunks of 16-bit each → index by chunk → only compare articles sharing ≥1 chunk → 10× speedup.</p>
+<h4>Deep Dive 2: Clustering — Event Grouping</h4>
+<p><strong>Online clustering</strong> (新文章来了实时归簇):</p>
+<pre class="language-python"><code class="language-python">def assign_cluster(article, recent_clusters):
+    emb = embed(article)
+    best_cluster, best_sim = None, 0
+    for c in recent_clusters:  # within last 24h
+        sim = cosine(emb, c.centroid)
+        if sim &gt; 0.85 and sim &gt; best_sim:
+            best_cluster, best_sim = c, sim
+    if best_cluster:
+        best_cluster.add(article)
+        best_cluster.centroid = update(best_cluster)  # incremental mean
+    else:
+        new_cluster(article)</code></pre>
+<p><strong>Recent clusters store</strong>: Redis hash, keyed by language + topic prefix。</p>
+<p><strong>Batch reclustering</strong>: 每天跑一次 HDBSCAN 整理（online algo 漂移）。</p>
+<h4>Deep Dive 3: Personalization Two-Tower</h4>
+<pre class="language-plaintext"><code class="language-plaintext">                ┌─────────────────┐
+User behaviors → │ User Tower (DNN)│ → user_vec [128]
+                └─────────────────┘
+                                          ↘
+                                            cosine sim → score
+                                          ↗
+                ┌─────────────────┐
+Article text → │ Item Tower (BERT)│ → item_vec [128]
+                └─────────────────┘</code></pre>
+<p><strong>Training</strong>: pairs of (user, positive article, negative article) with sampled negatives, hinge loss.</p>
+<p><strong>Inference</strong>:</p>
+<ul><li>User vec computed offline (every 1h)</li><li>Item vec computed at ingest (once per article)</li><li>Retrieve top-1000 via FAISS ANN</li><li>Re-rank top-100 with deeper DNN (more features)</li></ul>
+<h4>Deep Dive 4: Real-time Index</h4>
+<p>Articles 每分钟新增 ~700。<strong>Index 选择</strong>：</p>
+<ul><li><strong>Elasticsearch</strong> for keyword + facet search</li><li><strong>FAISS / Milvus</strong> for embedding ANN (article → similar articles, user → matching articles)</li><li><strong>Redis</strong> for hot store of last 24h articles by cluster</li></ul>
+<p><strong>Refresh latency</strong>: write to ES + FAISS in same transaction (eventual consistent), refresh &lt; 1 min。</p>
+<h4>Deep Dive 5: Multi-language</h4>
+<p>100 languages，怎么处理？</p>
+<p><strong>Storage</strong>: 每篇文章带 lang field</p>
+<p><strong>Personalization</strong>:</p>
+<ul><li>User profile 包含 language preferences</li><li>Filter retrieval by lang at FAISS query time</li></ul>
+<p><strong>Translation</strong>:</p>
+<ul><li>对 trending events，translate top article to user's lang on-demand (cache)</li><li>小语种 fallback to English version</li></ul>
+<p><strong>Cross-lingual clustering</strong>: same event 多语言 cluster - 用 multilingual embedding (LaBSE)。</p>
+<h4>Deep Dive 6: Content Moderation</h4>
+<p><strong>Filter</strong>:</p>
+<ul><li>Spam / clickbait classifier (text + meta)</li><li>Misinformation flag (cross-reference with fact-check DB)</li><li>NSFW image filter</li><li>Geo-restricted content (some country bans certain topics)</li></ul>
+<p><strong>Trust score per source</strong>: 长期表现好的源加分，违规多的降权 / 移除。</p>
+<h4>Deep Dive 7: Caching Strategy</h4>
+<p><strong>3 tiers</strong>:</p>
+<ol><li><strong>CDN edge</strong>: top trending in region (cache 30s)</li><li><strong>Redis hot store</strong>: per-cluster current best article (cache 5 min)</li><li><strong>Personalized feed cache</strong>: per-user feed (precompute every hour, cache 1h)</li></ol>
+<p><strong>Cache invalidate</strong> on breaking news: targeted invalidate by region + category。</p>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：sources? languages? real-time?</td></tr><tr><td>5-10min</td><td>容量：1M crawls/day, 1B users, 60k QPS sustained</td></tr><tr><td>10-20min</td><td>高层架构：Crawler → Extraction → Dedup → Cluster → Personalization → Delivery</td></tr><tr><td>20-35min</td><td>Deep dives: SimHash / clustering / two-tower / index</td></tr><tr><td>35-45min</td><td>multi-language / moderation / breaking news / cache</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>News aggregator 实际是 4 个独立 pipeline 串起来：(1) crawl, (2) extract+dedup+cluster, (3) personalize, (4) deliver.</p>
+<p><strong>架构</strong>：</p>
+<ol><li><strong>Crawler</strong>: URL frontier 队列，10k news + 100k blogs，per-domain rate limit</li><li><strong>Extraction</strong>: HTML → clean text + metadata (Readability lib)</li><li><strong>Dedup</strong>: 3 层 — exact URL → SimHash near-dup → semantic clustering via embedding + HDBSCAN</li><li><strong>Personalization</strong>: two-tower DNN (user + item embed)，FAISS retrieve top-1000 → DNN rerank top-100</li><li><strong>Real-time</strong>: breaking news pipeline (newsworthiness ML + fan-out)</li></ol>
+<p><strong>Storage</strong>:</p>
+<ul><li>Raw articles: S3 (cheap)</li><li>Hot last-24h: Redis (per-cluster)</li><li>Search: Elasticsearch</li><li>ANN: FAISS / Milvus</li><li>User feed: precomputed, cached per user</li></ul>
+<p><strong>Multi-language</strong>: lang filter at retrieval + cross-lingual clustering (LaBSE embedding)</p>
+<p><strong>Numbers</strong>: 1B users, 1M articles/day → 100k unique events, 60k QPS sustained feed read, 200k peak.</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "Crawler 怎么不 DDOS 新闻站点？"</h4>
+<p><strong>A</strong>：3 层 politeness：</p>
+<ol><li>Honor <code>robots.txt</code> (Crawl-delay directive)</li><li>Per-domain rate limit (e.g., 1 req/s, 5s back-off on 429/503)</li><li>Smart scheduling: 新闻站点每 5 min 一次，长尾博客每天</li></ol>
+<h4>Q2: "同一新闻 5 篇文章 怎么去重？"</h4>
+<p><strong>A</strong>：3 层：</p>
+<ol><li>URL canonical → Bloom filter exact dedup</li><li>SimHash hamming distance &lt; 3 → near-dup</li><li>Embedding cluster (cosine &gt; 0.85, within 24h) → "same event"</li></ol>
+<p>最终 user 看到的是 cluster，不是单篇文章。</p>
+<h4>Q3: "Breaking news 5 min 内到 user feed 怎么做到？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Crawler 每 30s scan high-priority sources</li><li>ML classifier 5s 内判 newsworthiness</li><li>通过 Kafka → push 服务 fan-out（仅订阅相关 category 的 user）</li><li>CDN invalidate breaking story 区域 cache</li></ul>
+<p>End-to-end 通常 2-3 min。</p>
+<h4>Q4: "1B users，怎么 precompute personalized feed？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>不是真 precompute 1B 个完整 feed（不可能存）</li><li>Precompute per user: user_vec (128 dim) — 每小时 batch</li><li>Inference time: FAISS retrieve top-1000 + DNN rerank top-100 → &lt; 100 ms</li><li>Cache feed in Redis 1h，passive refresh on user activity</li></ul>
+<h4>Q5: "Personalization model 怎么训练？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Negative sampling from impressions（show but not click）</li><li>Positive: click + dwell &gt; 30s</li><li>Hinge loss / triplet loss on (user, pos, neg)</li><li>Daily retrain on yesterday's data</li><li>A/B test 新模型 5% traffic</li></ul>
+<h4>Q6: "如果某新闻被 fact-check 标 fake，怎么 retroactively 下架？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Fact-check DB 推 webhook to news service</li><li>Article 标 <code>flagged=true</code> (soft delete)</li><li>All user feeds revalidate (cache invalidate that article_id)</li><li>如果已 push notification: 不撤回，但 article 详情显示 "fact-check 标 disputed"</li></ul>
+<h4>Q7: "Multi-language clustering 怎么 work？"</h4>
+<p><strong>A</strong>：用 <strong>multilingual embedding</strong> (LaBSE / mBERT)：同一概念跨语言 embed 接近。Cluster 不分语言，但 user 看 feed 时按 user lang filter cluster's articles。</p>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>没有 dedup pipeline</strong> → feed 满是同样内容 5 遍</li><li><strong>All-in-one DB</strong> → 不知道哪用 ES / FAISS / Redis</li><li><strong>Crawler 不 polite</strong> → 被 source 封禁</li><li><strong>Personalization 现算</strong> → p99 慢</li><li><strong>Multi-language 当 monolith</strong> → 中文用户看到英文</li><li><strong>没说 breaking news pipeline</strong> → 重大新闻 1 小时才看到</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>SimHash + Bloom filter + embedding cluster</strong> 三层 dedup</li><li><strong>Two-tower model</strong> 给 personalization</li><li><strong>HDBSCAN online clustering</strong> for events</li><li><strong>LaBSE multilingual embedding</strong> for cross-lingual cluster</li><li><strong>3-tier cache</strong> (CDN + Redis + per-user)</li><li><strong>Source trust score</strong> 长期质量</li><li><strong>FAISS ANN</strong> for retrieval</li><li><strong>Newsworthiness ML classifier</strong> for breaking news</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲清"4 个 pipeline 串起来 + ML system + multi-language + multi-region"是 STAFF；只讲 crawler + DB 是 SENIOR。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">4 个 pipeline:
+  1. Crawl: URL frontier → Worker → HTML parser → S3 raw
+  2. Process: extraction → dedup (URL/SimHash/cluster) → embedding
+  3. Personalize: two-tower DNN → FAISS retrieve → DNN rerank
+  4. Deliver: feed cache → CDN → push for breaking
+
+Dedup 3 layers:
+  Layer 1: URL canonical + Bloom (exact)
+  Layer 2: SimHash hamming &lt; 3 (near)
+  Layer 3: Embedding cluster cosine &gt; 0.85 (semantic)
+
+Storage:
+  Raw: S3
+  Hot 24h: Redis
+  Search: Elasticsearch
+  ANN: FAISS / Milvus
+  User feed: precomputed, 1h cache
+
+ML:
+  - Two-tower user + item embed
+  - HDBSCAN clustering
+  - Newsworthiness classifier
+  - Source trust score
+  - LaBSE for multi-lang
+
+Real-time:
+  Breaking news: 5 min end-to-end
+  Crawl high-priority every 30s
+  Fan-out via Kafka
+
+数字:
+  1M articles/day → 100k unique events
+  1B users, 500M DAU
+  60k feed QPS sustained, 200k peak
+  100 languages</code></pre>
   </section>
 
   

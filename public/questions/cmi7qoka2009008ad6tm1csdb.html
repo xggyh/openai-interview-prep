@@ -35,65 +35,233 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>E-commerce Offer Subscription System</strong>：商家发优惠，用户订阅感兴趣 categories / merchants，新优惠时 notify 用户。Groupon / 京东预约 / Amazon Daily Deals。</p>
-<h3>需求</h3>
-<ul><li>100M users</li><li>1M offers/day</li><li>Real-time delivery (&lt; 1 min)</li><li>Personalized matching</li><li>Multi-channel notify (email / push / app feed)</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   Merchant
-       │ create offer
-       ▼
-  ┌──────────────┐
-  │ Offer Service│  CRUD + validation
-  └──────┬───────┘
-         │ publish
-         ▼
-  ┌──────────────┐
-  │ Offer Stream │  Kafka topic: offers.new
-  │ (Kafka)      │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Matching Service │  match offer to subscribers
-  │  (per subscript) │
-  └──────┬───────────┘
-         │
-         ▼
-  ┌──────────────────┐
-  │ Notification     │  Push / Email / In-app feed
-  │ Fan-out          │
-  └──────────────────┘</div>
-<h3>核心组件</h3>
-<h4>1. Subscription model</h4>
-<p>User 订阅维度：</p>
-<ul><li>Merchant ("我关注 Nike")</li><li>Category ("running shoes")</li><li>Price range</li><li>Location (店在 5km 内)</li><li>Keyword ("vegan")</li></ul>
-<p>存 Postgres + ES。</p>
-<h4>2. Matching algorithm</h4>
-<p>每新 offer 来到：对所有 subscription 做 match。N subscriptions × M offers/day = 巨大。</p>
-<p><strong>Inverted index 优化</strong>：</p>
-<ul><li><code>category -&gt; subscriber_ids</code></li><li><code>merchant -&gt; subscriber_ids</code></li><li>Offer 来：lookup matching subscribers 是 set union</li></ul>
-<p>不要每 offer × 每 user 全 scan。</p>
-<h4>3. Personalization</h4>
-<p>匹配后还要 rank：</p>
-<ul><li>User past behavior (click rate on similar offers)</li><li>Recency weighting</li><li>User active hour (push 时机)</li></ul>
-<h4>4. Notification channels</h4>
-<ul><li>Push (FCM / APN)：immediate</li><li>Email：digest，每 user 每天最多 1 封</li><li>In-app feed：push 到 user feed, 用户 open app 时看</li></ul>
-<p>每 user 自选 channel + frequency。</p>
-<h4>5. De-dup + rate limit</h4>
-<p>同 user 30 分钟内 max 3 push。同 merchant 24 小时内只通知 user 一次。</p>
-<h4>6. Geo</h4>
-<p>Offer 含 GPS / 地址。User 当前 location 或 home location。Geo-radius filter。</p>
-<h4>7. Real-time vs batched</h4>
-<p>Real-time offers (flash sale): 5 min 内 push Daily digest: 凌晨 aggregate yesterday's offers + 早 8 点发邮件</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Match</td><td>Inverted index</td><td>Full scan：N×M 慢</td></tr><tr><td>Channel</td><td>User config</td><td>Default all：spam</td></tr><tr><td>Rate limit</td><td>Per-user cap</td><td>无：unsubscribe</td></tr><tr><td>Personalization</td><td>ML ranking</td><td>Random：低 CTR</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1M offers/day × 1k matched subscribers avg = 1B notifications/day = 12k QPS</li><li>Push fan-out: 12k QPS → FCM / APN handle 这 scale</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ N×M scan match → 慢；用 inverted index； ❌ 不 rate limit → spam unsubscribe； ❌ Single channel → 用户 missed； ❌ 不 personalize → 低 CTR； ❌ Geo 用 lat/lng range query → 慢；用 H3 / S2 cell。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Inverted index matching</strong> 处理 1M×100M 配对；(2) <strong>多 channel + rate limit + frequency cap</strong>；(3) <strong>ML personalization ranking</strong>。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Flash sale rate limit 不 dropping 重要 user？" → user importance 加权；"实时 inventory check (offer 已售完不再 push)？" → inventory service 联动；"如何 measure success？" → CTR / conversion / unsubscribe rate；"GDPR opt-out？" → unsubscribe link + 即时生效。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Offer / Deal</strong></td><td>商家发的优惠 (e.g., "iPhone 八折")</td><td>报纸上的折扣广告</td></tr><tr><td><strong>Subscription</strong></td><td>用户订阅了某类目 / 商家</td><td>订报纸</td></tr><tr><td><strong>Pub/Sub</strong></td><td>发布订阅模式</td><td>报社发报，订户收</td></tr><tr><td><strong>Fan-out (写时)</strong></td><td>一条 offer → 立即写到每个订户的 inbox</td><td>发报员挨家挨户送</td></tr><tr><td><strong>Fan-out (读时)</strong></td><td>用户查 feed 时再去 query 所有订阅的源</td><td>订户来报亭翻所有今天的报纸</td></tr><tr><td><strong>Notification channels</strong></td><td>push (APNs/FCM), email, SMS, in-app</td><td>多种到达用户的途径</td></tr><tr><td><strong>User preference</strong></td><td>用户偏好（class, brand, price range）</td><td>客户画像</td></tr><tr><td><strong>Geofencing</strong></td><td>基于位置过滤 (附近商家优惠)</td><td>"你在购物中心附近，附近店有 deal"</td></tr><tr><td><strong>Idempotency</strong></td><td>同 offer 不能重复通知用户</td><td>同一份报纸不送两次</td></tr><tr><td><strong>Throttling</strong></td><td>限制单用户每天 notification 数量</td><td>每天最多塞 10 张广告单</td></tr><tr><td><strong>Real-time vs scheduled</strong></td><td>立即推送 vs 定时（如 daily digest）</td><td>突发新闻 vs 早报</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>E-commerce Offer Subscription</strong> = 商家发优惠 → 系统按用户订阅 + 偏好匹配 → 实时/批量通知。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Amazon Daily Deals</strong> / <strong>Wishlist alerts</strong></li><li><strong>Groupon</strong> —— deal-of-the-day mass marketplace</li><li><strong>京东预约 / 双 11 抢购</strong></li><li><strong>Slickdeals</strong> —— UGC + alerts</li><li><strong>CamelCamelCamel</strong> —— Amazon price alert</li><li><strong>Best Buy / Target deals app</strong></li></ul>
+<p><strong>为什么这是 STAFF 题</strong>：</p>
+<p>考的是<strong>pub/sub + 个性化 + multi-channel 通知</strong>：</p>
+<ol><li><strong>千万级 user × 百万级 offer</strong> 的匹配</li><li><strong>Fan-out 策略</strong>：write fan-out vs read fan-out</li><li><strong>Multi-channel delivery</strong> (push / email / SMS / in-app) + dedup</li><li><strong>User preference + geofence</strong> filter</li><li><strong>Throttling</strong>：不能 spam 用户</li></ol>
+<p>考 STAFF 关键：<strong>不是简单 pub/sub，是匹配 + 节流 + 多 channel</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td>`Subscribe(user, category</td><td>merchant</td><td>keyword</td><td>price_range)`</td><td>订阅</td></tr><tr><td><code>Unsubscribe(user, subscription_id)</code></td><td>退订</td></tr><tr><td><code>PublishOffer(merchant, offer_data)</code></td><td>商家发优惠</td></tr><tr><td><code>GetUserFeed(user, page) -&gt; offers[]</code></td><td>用户的优惠 feed</td></tr><tr><td><code>SetPreferences(user, prefs)</code></td><td>用户偏好</td></tr><tr><td><code>MuteUntil(user, time)</code></td><td>静音</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Delivery latency</strong></td><td>breaking deal &lt; 5 min 到 99% subscribers</td></tr><tr><td><strong>Scale</strong></td><td>100M users, 10M subscriptions/user (avg 50 per user) → 5B subscription rows</td></tr><tr><td><strong>Offer throughput</strong></td><td>100k new offers/day = 1.2 QPS sustained, 100 QPS peak</td></tr><tr><td><strong>Notification rate</strong></td><td>&lt; 5 push notifications / user / day (avoid spam)</td></tr><tr><td><strong>Reliability</strong></td><td>offers must reach subscribed users (at-least-once)</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li>100M users × avg 50 subscriptions = 5B subscription rows × 50 B = 250 GB</li><li>100k offers/day × avg 100 matching subscribers = 10B notification events/day = <strong>115k notification QPS sustained</strong>, 1M peak</li><li>Storage offers: 100k/day × 5 KB × 365 = 180 GB/year + S3 archive</li></ul>
+<hr />
+<h3>4. 关键 trade-off: Write vs Read Fan-out</h3>
+<h4>Option A: Write fan-out (push, like Twitter feed)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Merchant publishes offer
+  → Service finds all matching subscribers (e.g., 1M users)
+  → Insert 1M rows into "user_feed" table
+  → Send 1M push notifications</code></pre>
+<p><strong>优点</strong>：read 简单 (just SELECT from user_feed) <strong>缺点</strong>：write amplification (1 offer → 1M writes)。如果 100k offers/day × avg match 1k = 1亿 writes/day. Borderline。</p>
+<h4>Option B: Read fan-out (pull, like Gmail)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Merchant publishes offer
+  → Store in offers table by (category, merchant, ...)
+  → User opens app → service queries "what offers match my subs in last 24h?"</code></pre>
+<p><strong>优点</strong>：write 便宜 (1 row per offer) <strong>缺点</strong>：read 复杂 + slow，每用户每次 query 都要 cross-join sub × offers</p>
+<h4>Option C: Hybrid (推荐)</h4>
+<ul><li><strong>Real-time push notifications</strong>: write fan-out for matched subscribers (limited to opt-in for push)</li><li><strong>In-app feed query</strong>: read fan-out (pull on demand)</li><li><strong>Email digest</strong>: batch fan-out daily/weekly (write to email queue once a day)</li></ul>
+<p><strong>Why hybrid</strong>:</p>
+<ul><li>Push 需要立即到达 → write fan-out</li><li>In-app feed 多数用户每天打开 1-2 次 → read fan-out OK</li><li>Email 是 batched scheduled → batch write fan-out</li></ul>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌──────────────────────────────────┐
+│  Merchant Portal                  │
+│  PublishOffer(category, ...)      │
+└──────────────────────────────────┘
+              ↓
+┌──────────────────────────────────┐
+│  Offer Service                    │
+│  - Validate + dedup               │
+│  - Store offer (Spanner)          │
+│  - Emit Kafka event               │
+└──────────────────────────────────┘
+              ↓
+┌──────────────────────────────────┐
+│  Match Service                    │
+│  - For each new offer:            │
+│    1. Find matching subscriptions │
+│    2. Apply user preference       │
+│    3. Apply geofence              │
+│    4. Apply throttle (per user)   │
+│    5. Emit "notify" events        │
+└──────────────────────────────────┘
+              ↓
+┌──────────────────────────────────┐
+│  Notification Dispatch            │
+│   ├── Push (APNs/FCM)             │
+│   ├── Email (SMTP/SendGrid)       │
+│   ├── SMS (Twilio)                │
+│   └── In-app inbox write          │
+└──────────────────────────────────┘
+              ↓
+┌──────────────────────────────────┐
+│  User Devices                     │
+└──────────────────────────────────┘</code></pre>
+<h4>Step 1: Offer ingestion</h4>
+<p>Merchant 发 offer → 立即存 + 标记 <code>category, merchant_id, price, location, expires_at</code>。</p>
+<h4>Step 2: Subscription matching</h4>
+<p>Match service consume Kafka <code>offer.created</code>:</p>
+<ul><li>Query subscriptions: <code>SELECT user_id FROM subscriptions WHERE category = ? AND (price_range matches) AND ...</code></li><li>Returns list of user_ids (could be 1M)</li></ul>
+<p><strong>Indexing</strong>:</p>
+<ul><li><code>(category, active=true)</code> index</li><li><code>(merchant_id, active=true)</code> index</li><li>Compound: <code>(category, price_max, active)</code> 等</li></ul>
+<p>For very common subs (e.g., "Electronics" 10M subs)：分批 emit notify events.</p>
+<h4>Step 3: Preference + Throttle filter</h4>
+<p>For each candidate user:</p>
+<ul><li>Check user preferences (e.g., excluded brands)</li><li>Check throttle ("user X already got 5 today")</li><li>Check do-not-disturb hours</li><li>If pass → emit <code>notify</code> event to dispatch queue</li></ul>
+<h4>Step 4: Dispatch</h4>
+<p>Multiple channels in parallel:</p>
+<ul><li>Push: APNs/FCM (Kafka topic <code>push.send</code>)</li><li>In-app inbox: write to <code>user_inbox</code> table</li><li>Email: queue to email batcher (daily digest)</li><li>SMS: opt-in only, rare events</li></ul>
+<h4>Step 5: Dedup</h4>
+<p>Same offer + same user must not notify twice across channels. Use <code>offer_id × user_id</code> dedup key in Redis (TTL = offer expires).</p>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: Subscription Matching Performance</h4>
+<p><strong>Naive</strong>: SELECT * FROM subscriptions WHERE category = ? → 10M rows scan slow.</p>
+<p><strong>Index design</strong>:</p>
+<pre class="language-sql"><code class="language-sql">CREATE INDEX idx_subs_cat ON subscriptions(category, active);
+CREATE INDEX idx_subs_merchant ON subscriptions(merchant_id, active);
+CREATE INDEX idx_subs_price ON subscriptions(price_max);  -- for "below X" subs</code></pre>
+<p><strong>Offer matching query</strong> (for category=Electronics, price=500):</p>
+<pre class="language-sql"><code class="language-sql">SELECT user_id FROM subscriptions
+  WHERE active=true
+    AND (category = 'Electronics' OR merchant_id = 'AppleStore')
+    AND (price_max &gt;= 500 OR price_max IS NULL)</code></pre>
+<p><strong>Sharding</strong>: subscriptions table sharded by <code>user_id</code> (each user's subs co-located)。But the matching query scans across shards (scatter-gather).</p>
+<p><strong>Alternative</strong>: invert index → <code>category_to_users</code> table 直接 lookup user_ids by category.</p>
+<h4>Deep Dive 2: Geofence Matching</h4>
+<p>User 在购物中心附近 → 优先 push 附近店 offer.</p>
+<pre class="language-plaintext"><code class="language-plaintext">Geo index: subscriptions with `match_radius_km` and current `user_location`
+
+Query: offer in lat/lng → R*-tree query → users with active geo subscriptions within radius</code></pre>
+<p><strong>Implementation</strong>:</p>
+<ul><li>Redis GEOADD / GEOSEARCH (O(log N) for radius queries)</li><li>Or PostGIS / S2 Geometry</li></ul>
+<h4>Deep Dive 3: Multi-channel Delivery + Dedup</h4>
+<p>Same user might be subscribed via push + email. <strong>Don't notify twice</strong>.</p>
+<p><strong>Dedup strategy</strong>:</p>
+<ul><li>Single notify event per (user, offer) → dispatch decides channels</li><li>Channel priority: push &gt; in-app &gt; email</li><li>24h dedup window in Redis</li></ul>
+<pre class="language-python"><code class="language-python">def dispatch(notify_event):
+    user, offer = notify_event
+    key = f"notify_dedup:{user}:{offer}"
+    if redis.exists(key):
+        return  # skip duplicate
+    redis.set(key, 1, ex=86400)
+    
+    for channel in user.preferred_channels:
+        send(channel, user, offer)</code></pre>
+<h4>Deep Dive 4: Throttle (Anti-spam)</h4>
+<p>Goal: max N notifications / user / day.</p>
+<p><strong>Token bucket</strong>:</p>
+<pre class="language-python"><code class="language-python">def can_send(user_id):
+    bucket = redis.get(f"throttle:{user_id}")
+    if bucket &gt; 0:
+        redis.decr(f"throttle:{user_id}")
+        return True
+    return False
+
+# Refill每天 midnight: SET throttle:* to N</code></pre>
+<p><strong>Smart throttling</strong>: pick "best" offer to send (highest CTR predicted) when over budget。Otherwise queue for next day.</p>
+<h4>Deep Dive 5: Push Delivery at Scale</h4>
+<p>1M push/sec sustained：</p>
+<ul><li><strong>APNs</strong>: Apple 限制 connection 数 (use HTTP/2 multiplexing)，throughput 大约 10k/sec/connection</li><li><strong>FCM (Google)</strong>: HTTP batch API (100 tokens per call) → 较高 throughput</li><li><strong>Internal</strong>: 100 push workers maintain APNs/FCM connections, consume Kafka push.send topic</li></ul>
+<p><strong>Token refresh</strong>: device token rotation handled via app SDK; service detects invalid → mark stale.</p>
+<h4>Deep Dive 6: Daily Digest Email</h4>
+<p><strong>Different pattern from push</strong>:</p>
+<ul><li>All matched offers throughout day → buffer</li><li>8 AM local time per user → email worker pull buffered offers → format HTML → send via SendGrid</li></ul>
+<p>Per user: 100 candidate offers/day → rank top-10 by relevance + recency → email。</p>
+<h4>Deep Dive 7: Offer Expiration</h4>
+<p>Offers have <code>expires_at</code> (e.g., "ends Sunday midnight"):</p>
+<ul><li>When time approaches expiry: re-notify? (e.g., "ending in 1 hour" reminder for limited stock)</li><li>After expiry: hide from feed, retain in DB for analytics</li></ul>
+<p><strong>TTL job</strong>: Cron every 5 min check <code>expires_at &lt; now</code> → soft delete + clean up.</p>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：channels (push/email/in-app)? geofence? batch vs real-time?</td></tr><tr><td>5-10min</td><td>容量：100M users, 5B subscriptions, 100k offers/day</td></tr><tr><td>10-15min</td><td>Fan-out 决策：hybrid push 实时 + pull in-app + daily digest email</td></tr><tr><td>15-25min</td><td>高层架构：Offer → Match → Filter → Dispatch (channels)</td></tr><tr><td>25-40min</td><td>Deep dives: matching index / geofence / dedup / throttle</td></tr><tr><td>40-45min</td><td>push API scale / digest / expiry</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>Offer subscription 关键 trade-off 是 <strong>write fan-out vs read fan-out</strong>。</p>
+<p><strong>决策</strong>：<strong>hybrid</strong></p>
+<ul><li><strong>Push notifications</strong>: write fan-out (实时性强)</li><li><strong>In-app feed</strong>: read fan-out (查时再聚合)</li><li><strong>Email digest</strong>: batch fan-out (daily, write 一次给 email worker)</li></ul>
+<p><strong>架构</strong>：</p>
+<ol><li>Merchant publishes → Offer Service (validate + store) → Kafka</li><li><strong>Match Service</strong>: query subscriptions by category/merchant/price → user list</li><li><strong>Filter</strong>: user preference + geofence + throttle</li><li><strong>Dispatch</strong>: multi-channel parallel (push/email/in-app/SMS)</li><li><strong>Dedup</strong>: Redis key (user × offer) prevent duplicates</li></ol>
+<p><strong>Indexes</strong>: <code>(category, active)</code>, <code>(merchant, active)</code>, geofence via Redis GEO or PostGIS。</p>
+<p><strong>Anti-spam</strong>: token bucket (N notif/day per user), smart prioritization。</p>
+<p>Numbers: 100M users × 50 subs = 5B subscription rows, 100k offers/day, 1M push peak QPS.</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "1M user 订阅 Electronics 类，一个 offer 怎么 notify 全部？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Match service partition fan-out: 1M users → divided into 1000 batches × 1000 users</li><li>每 batch 通过 Kafka push.send 流水线 dispatch</li><li>APNs/FCM HTTP/2 multiplex 100 push workers → 1M tokens 在 ~1 min 内全推完</li></ul>
+<h4>Q2: "user 在 push + email 都订了，怎么不双发？"</h4>
+<p><strong>A</strong>：dispatch service 维护<strong>单一 notify event</strong> per (user, offer) → 根据 user.preferred_channels 选 channel。Redis dedup key <code>notify:{user}:{offer}</code> TTL 24h 防 retry 重复。</p>
+<h4>Q3: "用户每天最多 5 个 notification 怎么实现？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Token bucket per user, daily refill (cron midnight set to 5)</li><li>Match 时检查 bucket &gt; 0 否则 drop / queue</li><li><strong>Smart</strong>: 不是 first-come, 而是 prioritize by predicted CTR (ML model) → 给用户 5 个最相关的</li></ul>
+<h4>Q4: "如果 offer 5 min 失效，怎么快速 retract notification？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Push 已发送的不能撤回（APNs 不支持）</li><li>App-side：notification 内嵌 expiration timestamp，client 显示前 check</li><li>In-app feed: server filter expired</li><li>防止：发 push 前 check <code>expires_at - 5min &lt; now</code> → 不发</li></ul>
+<h4>Q5: "User 改 preferences 后，pending notifications 怎么办？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Match 是 stateless query → 下次新 offer 直接用 latest preferences</li><li>Pending notifications (already in Kafka queue): dispatch 时再 check user preferences → drop 不符合的</li><li>已 push 出去的不能撤回</li></ul>
+<h4>Q6: "怎么 A/B test notification 文案？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Dispatch service knows user's bucket</li><li>Render notification text by template (variant A vs B)</li><li>Track CTR per variant via tracking pixel / link</li><li>Conversion model retrain</li></ul>
+<h4>Q7: "Subscriptions DB 5B rows 怎么 scale？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>Sharded by user_id (each user's subs together)</li><li>Cross-shard inverted: maintain <code>category_to_users</code> secondary index in separate KV (Cassandra)</li><li>Most matching queries hit secondary inverted, no scatter-gather</li></ul>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Pure write fan-out</strong> → push works but in-app feed write amplification high</li><li><strong>Pure read fan-out</strong> → real-time push 无法实现</li><li><strong>Sub matching is full scan</strong> → 10M subs 慢</li><li><strong>没 dedup</strong> → 多 channel 双发，spam 用户</li><li><strong>没 throttle</strong> → 用户 angrily 卸载</li><li><strong>Push 用单一 connection</strong> → 1M push 要小时</li><li><strong>没考虑 offer expiration</strong> → 过期 offer 仍 push</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Hybrid fan-out</strong> based on channel</li><li><strong>Inverted index for matching</strong> (category → user list)</li><li><strong>Token bucket throttle</strong> + smart prioritization</li><li><strong>Multi-channel dedup via Redis</strong> key (user × offer)</li><li><strong>APNs HTTP/2 multiplexing</strong> for throughput</li><li><strong>Geofence via Redis GEO / PostGIS</strong></li><li><strong>Daily digest batching</strong> for email</li><li><strong>ML model</strong> for CTR-based prioritization</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：能讲清"hybrid push / pull / batch 三种 fan-out 同时存在 + dedup + throttle"是 STAFF；只说 pub/sub 是 SENIOR。</p></div>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">3 种 fan-out 共存:
+  - Push: write fan-out (即时)
+  - In-app feed: read fan-out (lazy)
+  - Email digest: batch fan-out (daily)
+
+架构层次:
+  Merchant → Offer Service → Kafka
+                              ↓
+                          Match Service (find matching users)
+                              ↓
+                          Filter (prefs/geo/throttle)
+                              ↓
+                          Dispatch (push/email/in-app/SMS)
+                              ↓
+                          Dedup (Redis key)
+                              ↓
+                          Channel-specific delivery
+
+Sub matching:
+  Indexes: (category, active), (merchant, active)
+  Inverted: category → [user_ids] (Cassandra)
+  Geofence: Redis GEO / PostGIS
+
+Anti-spam:
+  Token bucket per user, refill midnight
+  Smart prioritization (ML CTR predict)
+  Do-not-disturb hours
+
+Dedup:
+  notify:{user}:{offer} in Redis, TTL 24h
+
+数字:
+  100M users × 50 subs = 5B rows
+  100k offers/day → 10B notifications/day (raw)
+  Filtered by throttle → ~5/user/day = 500M
+  Push peak 1M/sec</code></pre>
   </section>
 
   
