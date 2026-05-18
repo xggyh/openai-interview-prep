@@ -215,3 +215,32 @@ div.comment .cmeta { font-size: 12px; color: #57606a; margin-bottom: 4px; }
   border-radius: 6px; white-space: pre;
   overflow-x: auto;
 }
+
+/* Self-intro collapsible (for HR screen prep) */
+.self-intro {
+  background: linear-gradient(135deg, #fff8e6 0%, #fff3d0 100%);
+  border: 1px solid #f0c060;
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 12px 18px;
+  margin-bottom: 18px;
+}
+.self-intro summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  color: #6b4500;
+  list-style: none;
+  user-select: none;
+}
+.self-intro summary::-webkit-details-marker { display: none; }
+.self-intro summary::before { content: "▸ "; }
+.self-intro[open] summary::before { content: "▾ "; }
+.self-intro[open] summary { margin-bottom: 10px; }
+.self-intro-body p {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #3d2900;
+}
+.self-intro-body strong { color: #1f2328; }

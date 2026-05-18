@@ -453,10 +453,21 @@ def render_index(questions, type_groups, company_groups, recency_sorted):
 </header>
 <main class="container">
   <div class="intro">
-    <h2>面试题汇总（共 {len(questions)} 题）</h2>
-    <p>题目来自 hellointerview.com 社区的真实候选人报告。每题包含原始题面、中文思路解析、System Design 思路 / Python 解法、易错点。按公司 / 类型筛选，按最近问询时间倒序。</p>
+    <h2>冲刺！</h2>
+    <p>题目来自 hellointerview.com 社区的真实候选人报告。每题包含原始题面、中文思路解析、System Design 思路 / Python 解法、易错点。按公司 / 类型筛选，按最近问询时间倒序。共 {len(questions)} 题。</p>
     <div class="stats">{counts}</div>
   </div>
+
+  <details class="self-intro">
+    <summary>📣 60-sec self intro (English, for HR screen)</summary>
+    <div class="self-intro-body">
+      <p>Hi, I'm <strong>Gao Xin</strong> — I've been an algorithm engineer for about 5 years, currently <strong>Expert Algorithm Engineer and Technical POC</strong> at TikTok / ByteDance Global Payment in Singapore.</p>
+      <p>What I do is essentially <strong>what Tomoro does</strong> — taking frontier LLM and agent technology and deploying it in production for real business use cases.</p>
+      <p>The project closest to my heart right now is a <strong>multilingual voice AI agent</strong> I lead — it handles debt collection conversations across <strong>7 markets in 6 languages</strong>, integrating ASR, TTS, and an LLM agent with tool-calling. I own it end-to-end: from data construction and post-training (SFT, DPO, RL-style alignment), through inference optimization on vLLM and SGLang, to the agent orchestration layer and the streaming voice stack.</p>
+      <p>Before that I built a <strong>BNPL chatbot</strong> — an agentic + RAG system in production with intent routing and sub-agent orchestration — and I co-design our <strong>internal Agent Platform</strong> that other teams across ByteDance use to ship their own GenAI features.</p>
+      <p>The reason I'm excited about Tomoro is the role itself — being <strong>technical POC</strong> at TikTok already feels FDE-shaped: I sit between research, engineering, product, and regional business teams, translating model capabilities into solutions that move real metrics. Tomoro takes that to the next level — actually doing it at customer sites with frontier models. I'd love to do that work full-time.</p>
+    </div>
+  </details>
 
   <div class="filter-bar">
     <span class="filter-label">公司：</span>
