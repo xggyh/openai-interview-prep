@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a block storage system · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v=2f582d51">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+<link rel="stylesheet" href="../assets/prism/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
@@ -17,6 +17,10 @@
 <main class="container detail">
   <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a block storage system</div>
   <h1>Design a block storage system</h1>
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>
   <div class="header-meta">
     <span class="tag tag-system-design">System Design</span>
     <span class="tag tag-level">Staff, Manager</span>
@@ -31,60 +35,168 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Block Storage System</strong> (AWS EBS / GCP Persistent Disk)：给 VM / container 提供持久 block device。读写 raw block，VM 之上看是 disk。</p>
-<h3>需求</h3>
-<ul><li>容量：1GB-16TB per volume</li><li>IOPS：1k-256k per volume</li><li>Latency：&lt; 1ms read/write</li><li>Durability：99.999%（11 9s）</li><li>Snapshot / clone</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   VM
-    │ block read/write
-    ▼
-  ┌──────────────┐
-  │ Volume       │  hypervisor-attached block dev
-  │ Attachment   │
-  └──────┬───────┘
-         │ iSCSI / NVMe-oF / proprietary protocol
-         ▼
-  ┌──────────────────────────┐
-  │ Distributed Block Server │  分布式 + replicated
-  │ - chunk = 4-16 MB        │
-  │ - 3 copies per chunk     │
-  │ - 跨 AZ 副本             │
-  └──────┬───────────────────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Backing      │  HDD / SSD pool
-  │ Storage      │  per-rack distributed
-  └──────────────┘</div>
-<h3>核心组件</h3>
-<h4>1. Volume → Chunk mapping</h4>
-<p>Volume 切成 4-16 MB chunks。每 chunk 有 unique ID。Volume metadata = chunk list + ordering。</p>
-<p>Lookup: <code>volume[offset] = chunk[offset // chunk_size][offset % chunk_size]</code>。</p>
-<h4>2. 3-way replication</h4>
-<p>每 chunk 3 copies on 不同 rack / AZ。Write：</p>
-<ul><li>Primary 接 client → forward to 2 replicas → wait majority ack → ack client</li></ul>
-<p>读：直接 primary 或 nearest replica。</p>
-<h4>3. Consistency</h4>
-<p>Strong consistency：write 必须 majority ack。Quorum (R+W &gt; N，2+2 &gt; 3) 保证 read 看到 latest。</p>
-<h4>4. Snapshot</h4>
-<p><strong>Copy-on-write</strong>：snapshot = chunk pointer 复制（O(1) 时间）。后续 volume 写时把 chunk copy 出来再写新版本。Snapshot 看的是原 chunk pointer。</p>
-<p>Snapshot 后 incremental backup → S3。</p>
-<h4>5. Clone</h4>
-<p>Clone = snapshot + new metadata。新 volume 共享 chunk pointer，CoW on write divergence。</p>
-<h4>6. Tiering</h4>
-<p>Hot chunks → SSD pool；cold chunks → HDD pool。</p>
-<ul><li>Track access time per chunk</li><li>周期 migration job 把冷 chunk 下沉</li></ul>
-<h4>7. Encryption</h4>
-<p>每 volume 一个 key（来自 KMS）。Chunk read 时即时 decrypt（AES-NI 硬件加速）。</p>
-<h4>8. Failure handling</h4>
-<ul><li>Replica fail：检测后自动 spawn 新 replica（复制 chunk from healthy copies）</li><li>Network partition：写不能达 majority → block 写 + return error，避免 split-brain</li></ul>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Chunk</td><td>4-16 MB</td><td>KB：metadata 爆；GB：恢复慢</td></tr><tr><td>Replication</td><td>3 sync majority</td><td>Async：丢数据</td></tr><tr><td>Snapshot</td><td>CoW pointer</td><td>Full copy：贵</td></tr><tr><td>Tiering</td><td>Hot/cold by access time</td><td>All SSD：贵；All HDD：慢</td></tr><tr><td>Protocol</td><td>iSCSI / NVMe-oF</td><td>Custom：兼容差</td></tr></tbody></table>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Async replication → power fail 丢数据； ❌ 不 majority quorum → split-brain； ❌ Snapshot 直接 copy → 贵； ❌ Single rack replicas → AZ fail 全丢； ❌ No encryption at rest → compliance fail。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Chunk + 3-way sync replication</strong> 提供 durability；(2) <strong>CoW snapshot</strong> O(1) 时间；(3) <strong>Tiering + KMS encryption</strong> 实战必备。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Multi-attach (多 VM 同 volume)？" → 需要 distributed lock / cluster filesystem；"Object storage (S3) 兼用？" → 不同 API，不同需求 (object 大，no random write)；"NVMe-oF 走 RDMA？" → &lt; 100μs latency 可能。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Block storage</strong></td><td>把存储切成固定大小的"块"（4KB-64KB），按块读写</td><td>仓库被分成一格格货架</td></tr><tr><td><strong>Volume</strong></td><td>用户看到的一个"虚拟硬盘"，由很多 block 组成</td><td>一整个货架（很多格）</td></tr><tr><td><strong>EBS / GCP PD</strong></td><td>AWS / GCP 的产品名</td><td>商用品牌</td></tr><tr><td><strong>VM</strong></td><td>虚拟机，挂载 volume 使用</td><td>顾客租用货架的人</td></tr><tr><td><strong>IOPS</strong></td><td>Input/Output Operations Per Second</td><td>一秒能搬多少次货</td></tr><tr><td><strong>Throughput</strong></td><td>单位时间数据量 (MB/s)</td><td>一秒搬多少 kg 货</td></tr><tr><td><strong>Read-after-write</strong></td><td>写完立即读保证看到最新值</td><td>放完货立刻取，必须取到刚放的</td></tr><tr><td><strong>Snapshot</strong></td><td>某一刻 volume 的快照，用来备份 / 克隆</td><td>货架的全景照片</td></tr><tr><td><strong>Extent / chunk</strong></td><td>volume 内部切分的中等单位（1GB-4GB）</td><td>货架的一层</td></tr><tr><td><strong>Replication</strong></td><td>一份数据存多份防丢</td><td>重要货物在 3 个货架各存一份</td></tr><tr><td><strong>Quorum</strong></td><td>多数同意才算成功</td><td>3 个仓管中 2 个签字才能出货</td></tr><tr><td><strong>Failure domain</strong></td><td>一起挂掉的范围</td><td>同一栋楼里的所有货架</td></tr><tr><td><strong>Metadata plane</strong></td><td>管 volume → chunk → 物理位置的映射</td><td>仓库前台的"货物登记本"</td></tr><tr><td><strong>Data plane</strong></td><td>实际读写数据的路径</td><td>仓库里的传送带</td></tr><tr><td><strong>Journal / WAL</strong></td><td>写日志先 append，再 apply 到数据</td><td>先签收单子，再上货</td></tr><tr><td><strong>Erasure coding</strong></td><td>比 replication 省空间的容灾编码</td><td>10 份原文 + 4 份校验，丢 4 份还能恢复</td></tr><tr><td><strong>Copyset placement</strong></td><td>限制副本只能在固定组合中，降低"多盘同时挂数据全丢"概率</td><td>备份只放固定几间分行</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Block storage</strong> = 给 cloud VM 提供"虚拟硬盘"的分布式存储系统。VM 把它当本地磁盘用（mount 后 <code>/dev/sdb</code>），但底层是跨多机的分布式系统。</p>
+<p><strong>典型产品</strong>：AWS EBS / GCP Persistent Disk / Azure Managed Disks / Ceph RBD / 企业 SAN (NetApp).</p>
+<p><strong>为什么这是高频 STAFF 题（2 ppl 报告，Google 内部高频）</strong>：</p>
+<p>跟 cache 完全不同 —— 这是<strong>"数据丢一份就是灾难"</strong>的系统。考的是：</p>
+<ol><li><strong>Strong consistency</strong>：写完立刻读到新值，不能 eventual</li><li><strong>Durability</strong> vs latency 的极限 trade-off：11 个 9 的耐久 + ms 级延迟</li><li><strong>Metadata plane</strong>：1B volumes × 1000 chunks = 1T 行 mapping，怎么管</li><li><strong>故障恢复</strong>：盘挂了怎么 silent rebuild 不影响前台 IO</li><li><strong>Multi-tenant 性能隔离</strong>：noisy neighbor</li></ol>
+<p>考 STAFF 关键：<strong>不是知道 EBS 怎么用，而是知道 EBS 内部怎么实现</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>CreateVolume(size, perf_class, az) -&gt; volume_id</code></td><td>申请虚拟硬盘</td></tr><tr><td><code>AttachVolume(volume_id, vm_id)</code></td><td>挂到 VM</td></tr><tr><td><code>Read(volume_id, offset, length) -&gt; data</code></td><td>读</td></tr><tr><td><code>Write(volume_id, offset, data)</code></td><td>写</td></tr><tr><td><code>Snapshot(volume_id) -&gt; snapshot_id</code></td><td>快照</td></tr><tr><td><code>RestoreFromSnapshot(snapshot_id) -&gt; new_volume_id</code></td><td>恢复</td></tr><tr><td><code>DeleteVolume(volume_id)</code></td><td>删除</td></tr></tbody></table>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>延迟</strong></td><td>p99 &lt; 1 ms (in-AZ read/write)</td></tr><tr><td><strong>IOPS</strong></td><td>16k-256k / volume</td></tr><tr><td><strong>Throughput</strong></td><td>250 MB/s - 4 GB/s / volume</td></tr><tr><td><strong>Durability</strong></td><td><strong>11 个 9</strong></td></tr><tr><td><strong>Availability</strong></td><td>99.95-99.99%</td></tr><tr><td><strong>Consistency</strong></td><td><strong>strong (linearizable)</strong></td></tr><tr><td><strong>Scale</strong></td><td>1B+ volumes, exabyte total</td></tr></tbody></table>
+<div class="callout callout-key"><strong>核心要点</strong><p>跟 cache 最大区别：<strong>durability 是必须的，所有设计要绕这个核心</strong>。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li>1B volumes × 100 GB avg = 100 EB total</li><li>每 volume 1000 IOPS → 1 万亿 IOPS aggregate</li><li>Hot (10%): 10 EB × 3 replicas = 30 EB → 30万台 100TB 机器</li><li>Cold (90%): 90 EB × 1.4 erasure = 126 EB → 126万台</li><li><strong>Total ~150万台机器</strong></li></ul>
+<p>Metadata: 1B volumes × 1000 chunks × 200 B = <strong>200 TB metadata</strong> → 必须分布式 metadata plane。</p>
+<hr />
+<h3>4. 高层架构</h3>
+<h4>Step 1: Control plane vs Data plane 分离</h4>
+<pre class="language-plaintext"><code class="language-plaintext">┌──────────────────────────────────────────┐
+│  Control Plane (慢，万级 QPS)              │
+│  - CreateVolume / Snapshot                │
+│  - Metadata DB                            │
+└──────────────────────────────────────────┘
+                  │
+                  ↓ (metadata cache on VM host)
+┌──────────────────────────────────────────┐
+│  Data Plane (快，百万级 QPS)               │
+│  - VM → Chunk Server direct               │
+│  - 不经过 control plane                    │
+└──────────────────────────────────────────┘</code></pre>
+<h4>Step 2: Volume 拆 chunks</h4>
+<p>100 GB volume → 100 个 1 GB chunk，每个 chunk 分到不同 chunk server。</p>
+<p><strong>好处</strong>：并行 IO、容易 rebalance、故障爆炸半径小。</p>
+<h4>Step 3: 每个 chunk 3 副本</h4>
+<pre class="language-plaintext"><code class="language-plaintext">chunk 0:
+  ├── primary → server A1
+  ├── replica → server A2 (不同机架)
+  └── replica → server A3 (不同 AZ)</code></pre>
+<h4>Step 4: Metadata plane</h4>
+<ul><li>分布式 KV (Spanner / 自建 Paxos)</li><li>VM host 拉取 metadata cache (lease-based)</li><li>200 TB 全局 metadata，按 volume_id sharded</li></ul>
+<h4>Step 5: VM host agent</h4>
+<p>每个 hypervisor 上跑 storage agent：拦截 VM disk IO → 查 metadata cache → 直接走 RDMA / NVMe-oF 给 chunk server。</p>
+<h4>Step 6: Snapshot — copy-on-write</h4>
+<pre class="language-plaintext"><code class="language-plaintext">T0: volume V → [c0_v1, c1_v1, c2_v1]
+T0: take snapshot S → points to same chunks (refcount += 1)
+
+T1: write to chunk 1
+  → new c1_v2 created (COW)
+  → V → [c0_v1, c1_v2, c2_v1]
+  → S unchanged
+
+→ Snapshot 几乎瞬间，几乎不占空间</code></pre>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: Strong Consistency + Low Latency</h4>
+<p><strong>痛点</strong>：3 副本同步写 → 至少 1 个 RTT + 等慢副本 → p99 拖累。</p>
+<p><strong>解法（journal-based quorum write）</strong>：</p>
+<ol><li>Client → primary</li><li>Primary write journal entry locally (50μs SSD log)</li><li>Primary sync journal to 1 replica via RDMA (50μs)</li><li><strong>2/3 journal acked → ack client (~150μs total)</strong></li><li>(async) Primary apply journal to data block + propagate to 3rd replica</li></ol>
+<p><strong>关键</strong>：journal 是小 IO，复制快；data block 大 IO 但异步。Aurora / GFS 都是这思路。</p>
+<h4>Deep Dive 2: Metadata Plane Scale</h4>
+<p><strong>1T entries</strong>：</p>
+<ul><li>按 volume_id sharded SQL (Vitess / Spanner)</li><li>Hierarchical：volume_id → routing → chunk list 在某 metadata server 的 RocksDB</li><li><strong>Lease-based caching on VM host</strong>：60s lease，过期重新拉</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>Lease 解决一致性：metadata 给 host 发 60s 独占权，过期前 host 本地缓存有效；过期必须重新拉。</p></div>
+<h4>Deep Dive 3: Failure Detection + Rebuild</h4>
+<p><strong>检测</strong>：heartbeat + client error report + 后台 scrubber (checksum)</p>
+<p><strong>Rebuild 策略</strong>：</p>
+<ul><li><strong>优先级队列</strong>：under-replicated (1/3) 最紧急</li><li><strong>限流</strong>：rebuild bandwidth ≤ 5%，不影响前台 IO</li><li><strong>跨 failure domain</strong>：新副本放到不同机架/AZ</li><li><strong>并行 source</strong>：从多个 replica 并行拉</li></ul>
+<p><strong>Math</strong>：100 TB disk fail → 1000 chunks → 5% bandwidth = 500 MB/s → 20 分钟 rebuild。</p>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>Copyset placement</strong>：3 副本不能随机放（多盘挂时丢数据概率高），限制到固定 9 个组合 → 概率降 10×。</p></div>
+<h4>Deep Dive 4: Multi-tenant Isolation</h4>
+<p><strong>Noisy neighbor</strong>：大批量 IO 的 VM 影响同 chunk server 上其他 VM。</p>
+<p><strong>解法</strong>：</p>
+<ol><li><strong>Token bucket per volume</strong>：每 volume 有 IOPS quota</li><li><strong>Weighted Fair Queueing</strong>：不同 volume 加权调度</li><li><strong>Tiered placement</strong>：高 perf class → NVMe 机器；低 perf class → HDD</li><li><strong>Burst credits</strong>：短期 over-quota 允许</li></ol>
+<h4>Deep Dive 5: Cross-AZ Trade-off</h4>
+<p>跨 AZ 延迟 1-2 ms vs 同 AZ 0.1 ms。</p>
+<p><strong>EBS 选择</strong>：</p>
+<ul><li>默认 3 副本都<strong>在同 AZ</strong>（low latency）</li><li>AZ disaster recovery 通过 <strong>snapshot 跨 AZ 异步复制</strong></li><li>io2 Block Express 支持 multi-attach 跨 AZ，性能差</li></ul>
+<h4>Deep Dive 6: Erasure Coding for Cold Data</h4>
+<p>90% volumes 是冷数据：</p>
+<ul><li><strong>(10+4) Reed-Solomon</strong>：10 原 + 4 校验</li><li>任意丢 4 个可恢复</li><li>存储成本 <strong>1.4×</strong> (vs 3× replication)，省 53%</li></ul>
+<p>Trade-off：read/write 慢（要算 RS），适合 cold。<strong>热冷分层</strong>自动迁移。</p>
+<h4>Deep Dive 7: Data Integrity</h4>
+<p>防 silent corruption (bit rot):</p>
+<ol><li><strong>End-to-end checksum</strong>：write 算 SHA256，read 校验</li><li><strong>Scrubber</strong>：周期 scan 所有 chunk，错的从 replica rebuild</li><li><strong>EC 校验位</strong>自带 detection</li></ol>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清需求 + NFR（强调 11 个 9）</td></tr><tr><td>5-10min</td><td>容量估算（150万台机器，200 TB metadata）</td></tr><tr><td>10-15min</td><td>API design</td></tr><tr><td>15-25min</td><td>高层架构：control/data plane 分离 → chunks → 3 副本 → metadata → snapshot COW</td></tr><tr><td>25-40min</td><td>Deep dives: journal-quorum / metadata / rebuild / copyset / multi-tenant</td></tr><tr><td>40-45min</td><td>erasure coding / cross-AZ / monitoring</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>这道题考"真分布式存储"，跟 cache 不同的是 <strong>durability 必须</strong>，不是 best-effort。</p>
+<p><strong>需求</strong>：CreateVolume / Read / Write / Snapshot / Restore。NFR：p99 写 1ms in-AZ，<strong>durability 11 个 9</strong>，scale 1B volumes / 100 EB。</p>
+<p><strong>关键 trade-off</strong>：durability vs latency。同步 3 副本太慢，异步不够 durable。<strong>用 journal-based quorum write</strong>：journal 同步复制（小 IO），data block 后台 propagate。</p>
+<p><strong>架构</strong>：</p>
+<ol><li><strong>Control / data plane 分离</strong>：metadata 万级 QPS，IO 百万级</li><li>Volume → 1GB <strong>chunks</strong>，每 chunk 3 副本，spread cross failure domain</li><li><strong>Metadata</strong>: 1T entries，sharded by volume_id，VM host lease cache</li><li><strong>Snapshot</strong> = copy-on-write，瞬间完成</li></ol>
+<p><strong>Deep dives</strong>：</p>
+<ol><li>Journal write + quorum (2/3) + RDMA → p99 &lt; 1ms</li><li><strong>Copyset placement</strong> 减少多盘 fail 概率</li><li>Token bucket + WFQ 多租户隔离</li><li>(10+4) erasure coding for cold data，省 53%</li></ol></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "为什么不默认 multi-AZ replication？"</h4>
+<p><strong>A</strong>：跨 AZ 1-2ms vs 同 AZ 0.1ms，<strong>block storage 当本地盘用，latency 是核心体验</strong>。AZ disaster 通过 snapshot 异步复制兜底（RPO ~5min）。EBS gp3/io2 单 AZ 设计。</p>
+<h4>Q2: "3 同时挂了存了同一 chunk 怎么办？"</h4>
+<p><strong>A</strong>：<strong>copyset problem</strong>。随机放 → 多盘挂概率高。Copyset placement 限制到固定 9 组合，概率降 10×。Defense in depth：跨 failure domain、scrubber 早发现、scrubber + SMART data 预测盘 fail。</p>
+<h4>Q3: "Snapshot COW，删 snapshot 怎么 GC？"</h4>
+<p><strong>A</strong>：每 chunk 有 <strong>reference count</strong>。delete snapshot → ref--. 后台 GC scan ref=0 的 chunk 物理删。<strong>Lazy GC</strong> 避免删 spike。</p>
+<h4>Q4: "p99 写 0.5ms 怎么做到？"</h4>
+<p><strong>A</strong>：<strong>Journal-only sync</strong>：</p>
+<ol><li>Primary 本地 journal append (50μs)</li><li>RDMA sync journal to 1 replica (50μs)</li><li>2/3 journal ack → ack client (~150μs)</li><li>Data block 异步 propagate</li></ol>
+<p>不等数据全部复制。journal 是 source of truth。</p>
+<h4>Q5: "Volume 怎么动态扩容？"</h4>
+<p><strong>A</strong>：<strong>Thin provisioning</strong>：metadata 直接改大小，新空间是 zero-filled chunks，<strong>lazy-allocate</strong>（实际写时才分配）。VM 看到 1TB 可用，actual usage 100GB。EBS / GCP PD 默认是 thin provisioning。</p>
+<h4>Q6: "怎么测试？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Correctness</strong>: chunk checksum</li><li><strong>Performance</strong>: <code>fio</code> 4k random RW</li><li><strong>Durability</strong>: kill -9 多 chunk server</li><li><strong>Jepsen</strong>: 注入网络分区验证 linearizability</li><li><strong>Long soak</strong>: 30 天跑 fio，看 latency drift</li></ol>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>跟 S3 / object storage 搞混</strong>：S3 是整对象 PUT/GET，block storage 是 4KB 块</li><li><strong>没分 control/data plane</strong>：所有 IO 经 metadata server → 瓶颈</li><li><strong>副本随机放</strong>：没考虑 failure domain，多盘 fail 高概率</li><li><strong>同步 3 副本全 fan-out</strong>：写延迟 = 最慢副本</li><li><strong>忘记 snapshot COW</strong>：以为 snapshot 是 dump 全部数据</li><li><strong>Multi-AZ 当默认</strong>：忽略 latency</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Journal-based quorum write</strong> + RDMA</li><li><strong>Copyset placement</strong></li><li><strong>(10+4) erasure coding</strong> for cold</li><li><strong>Lease-based metadata caching</strong></li><li><strong>Token bucket + WFQ</strong> 隔离</li><li><strong>Reference count + lazy GC</strong> for snapshot</li><li><strong>Scrubber + SMART</strong> 早期 fail detect</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：<strong>journal + quorum + chain replication</strong> 三种 trade-off 具体场景。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">架构:
+  control / data plane 分离
+  volume → 1GB chunks
+  3 replicas, cross failure domain
+  copyset placement
+
+写路径:
+  journal write + quorum (2/3) + RDMA
+  p99 &lt; 1ms via journal-only sync
+  data block lazy propagate
+
+Metadata:
+  1T entries, sharded by volume_id
+  lease-based caching on VM host
+  Spanner / etcd
+
+Snapshot:
+  copy-on-write, immutable refs
+  reference count + lazy GC
+
+热冷分层:
+  hot: 3x replication
+  cold: (10+4) erasure coding, 1.4x cost
+
+Failure:
+  scrubber + heartbeat + SMART
+  rate-limited rebuild (5% BW)
+  cross failure domain
+
+数字:
+  11 个 9 durability
+  1 ms p99 write
+  16k-256k IOPS / volume
+  1B volumes, 100 EB, 150万台</code></pre>
   </section>
 
   
@@ -117,7 +229,8 @@
     <a href="cmi3quwzg02mg07ad9blftp07.html">Design a fast food restaurant chain management system →</a>
   </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="../assets/prism/prism-core.min.js"></script>
+<script src="../assets/prism/prism-autoloader.min.js"></script>
+<script>if(window.Prism)Prism.plugins.autoloader.languages_path='../assets/prism/components/';</script>
 </body>
 </html>

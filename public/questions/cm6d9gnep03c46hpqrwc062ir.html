@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a Distributed Cache System · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v=2f582d51">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+<link rel="stylesheet" href="../assets/prism/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
@@ -17,6 +17,10 @@
 <main class="container detail">
   <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a Distributed Cache System</div>
   <h1>Design a Distributed Cache System</h1>
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>
   <div class="header-meta">
     <span class="tag tag-system-design">System Design</span>
     <span class="tag tag-level">Mid-level, Staff, Manager-Senior Manager</span>
@@ -31,78 +35,238 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Distributed Cache System</strong>（类 Redis Cluster / Memcached）：分布式 KV cache，支持 GET/PUT/DELETE，10M+ QPS，sub-millisecond 延迟，多 region。</p>
-<p>Google 报告 12 次。考点：<strong>consistent hashing + replication + eviction + multi-region propagation</strong>。</p>
-<h3>需求拆解</h3>
-<ul><li>KV API：get(k) / set(k, v, ttl) / del(k)</li><li>1B+ keys，5 TB 数据，500B avg value</li><li>10M+ QPS，P99 &lt; 1ms</li><li>99.99% availability</li><li>Multi-region read/write</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">                   Client SDK
-                       │ consistent hash routing
-                       ▼
-                ┌──────────────┐
-                │ Coord svc    │  cluster topology (Zookeeper/etcd)
-                │ (rebalance)  │
-                └──────┬───────┘
-                       │ (topology pull)
-                       ▼
-       ┌──────────┬──────────┬──────────┐
-       │  Node 1  │  Node 2  │  Node N  │  per node: in-memory hash table
-       │ (shard 0)│ (shard 1)│ (shard k)│  + replicas
-       └──────────┘──────────┴──────────┘
-                       │
-                       │ async replication / CDC
-                       ▼
-                  multi-region async sync</div>
-<h3>核心组件</h3>
-<h4>1. Consistent Hashing + Virtual Nodes</h4>
-<p>每物理节点对应 100-500 个 virtual node 散在 hash ring，避免 hot spot 当节点加入/离开时 minimize 数据 movement。</p>
-<pre class="language-python"><code class="language-python">def route(key: str) -&gt; Node:
-    h = hash(key)
-    return ring.successor(h)  # binary search in sorted vnode list</code></pre>
-<h4>2. Replication (N=3)</h4>
-<p>每 shard 3 副本：1 primary + 2 followers。Primary 接 write，async replicate to followers。</p>
-<p>Quorum 选项：</p>
-<ul><li><strong>eventual</strong>: write 到 primary 即 ack（最快）</li><li><strong>read-your-write</strong>: 用 R+W &gt; N</li><li><strong>strong</strong>: write 等多数副本确认（牺牲延迟）</li></ul>
-<p>Cache 通常用 <strong>eventual</strong> —— 短暂 stale 可接受。</p>
-<h4>3. In-memory data structure</h4>
-<p>每 node：</p>
-<ul><li>Hash table：key → (value, expire_at, last_access)</li><li>LRU list（doubly-linked list）for eviction</li><li>Per-shard mutex 或 sharded lock 减锁竞争</li></ul>
-<h4>4. Eviction</h4>
-<ul><li>LRU：access 时 move to head, evict from tail when memory &gt; 80%</li><li>TTL：lazy expire on read + background sweep（每秒扫一小 batch）</li><li>LFU: 可选 for 频率敏感 cache（参考 LFU Cache 题）</li></ul>
-<h4>5. Failover</h4>
-<ul><li>心跳：每 node 每秒向 coord 报 health</li><li>30 秒无心跳 → mark dead，promote 一个 follower 为 primary</li><li>Coordinator 推送新 topology to clients</li><li>旧 primary 恢复 → 重 join 作 follower</li></ul>
-<h4>6. Rebalance</h4>
-<p>加 / 删 node 时，consistent hash ring 重排。只<strong>少量 key</strong> 迁移（virtual node 设计的好处）。</p>
-<ul><li>Migration 后台 stream，不阻塞 read</li><li>Client SDK 在 migrate window 内 retry on miss</li></ul>
-<h4>7. Multi-region</h4>
-<pre class="language-plaintext"><code class="language-plaintext">Region A primary → CDC → Region B follower
-读：always local region
-写：可选 region-primary（单主）或 multi-master（CRDT for cache）</code></pre>
-<p>对 cache，<strong>single-master per key</strong> + per-region read replica 最简。</p>
-<h4>8. Client SDK</h4>
-<pre class="language-python"><code class="language-python">class Client:
-    def __init__(self, coord_url):
-        self.topology = fetch_topology(coord_url)
-        self.refresh_periodic()
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Cache</strong></td><td>数据的"快速复印件"，放在内存里</td><td>桌上随手放的便签 vs 抽屉里的档案</td></tr><tr><td><strong>Distributed Cache</strong></td><td>不是单机内存，是一堆机器组成的内存池</td><td>整间办公室共用的便签墙</td></tr><tr><td><strong>Redis / Memcached</strong></td><td>业界两大开源 distributed cache 实现</td><td>便签墙的品牌</td></tr><tr><td><strong>Cache hit / miss</strong></td><td>查到了 / 没查到</td><td>在便签墙找到答案 / 还得翻档案</td></tr><tr><td><strong>TTL (time-to-live)</strong></td><td>缓存有效期，过期自动失效</td><td>便签上写"明天 5pm 后撕掉"</td></tr><tr><td><strong>Eviction</strong></td><td>内存满了，按规则赶走旧数据</td><td>便签墙贴满了，撕掉最旧的</td></tr><tr><td><strong>LRU / LFU</strong></td><td>两种 eviction 策略：最久没用 / 最少用</td><td>撕"上次贴是上周的" / 撕"全月就看过两次的"</td></tr><tr><td><strong>Sharding (分片)</strong></td><td>把数据按某个 key 切到不同机器</td><td>按姓氏首字母分发到不同前台</td></tr><tr><td><strong>Consistent Hashing</strong></td><td>一种特别的分片方式，加 / 减机器时只需挪一小部分数据</td><td>圆桌轮转，多个人来不用全员换座</td></tr><tr><td><strong>Replication (复制)</strong></td><td>同一份数据存到多台机器防丢</td><td>重要便签贴墙 + 抽屉各一份</td></tr><tr><td><strong>Cache-aside</strong></td><td>应用先查缓存，没有就查 DB 然后塞缓存</td><td>先翻便签，没有就翻档案再贴一张</td></tr><tr><td><strong>Write-through</strong></td><td>写入同时写缓存 + DB</td><td>改了就同时贴便签和改档案</td></tr><tr><td><strong>Write-back / write-behind</strong></td><td>先只写缓存，异步刷 DB</td><td>先贴便签，下班前再统一去改档案</td></tr><tr><td><strong>Hot key</strong></td><td>某个 key 被大量请求（比如明星 ID）</td><td>一张便签被全办公室狂看</td></tr><tr><td><strong>Thundering herd</strong></td><td>缓存失效瞬间，所有请求挤向 DB</td><td>突然撕了关键便签，所有人挤过来找档案</td></tr><tr><td><strong>Cache stampede</strong></td><td>thundering herd 的另一个叫法</td><td>同上</td></tr><tr><td><strong>Multi-region</strong></td><td>数据中心分布全球，每个地区有本地缓存</td><td>公司在北京 / 纽约 / 伦敦各开分部</td></tr><tr><td><strong>Strong consistency</strong></td><td>写完立即可见，所有副本一致</td><td>改完文件，全办公室同步看到</td></tr><tr><td><strong>Eventual consistency</strong></td><td>最终一致，中间可能有 lag</td><td>改完文件，过几秒/分钟才传到分部</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质 — 这是什么问题</h3>
+<p><strong>Distributed Cache System</strong> = 设计一个<strong>分布式的内存键值数据库</strong>，作为数据库前面的高速缓存层，让用户读写延迟从 ms 级降到 μs 级。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Redis Cluster</strong> —— 业界最常用，Twitter / Snap / Discord 用它做 session store + feed cache</li><li><strong>Memcached</strong> —— Facebook 早期靠它扛 10× 流量</li><li><strong>Amazon ElastiCache</strong> —— 云上的 managed Redis/Memcached</li><li><strong>DynamoDB DAX</strong> —— Amazon 给 DynamoDB 加速的缓存层</li><li>任何"用户量很大、读多写少、容忍轻微不一致"的系统都用它</li></ul>
+<p><strong>为什么这是高频题（8 ppl 报告，Google STAFF 高频中的高频）</strong>：</p>
+<p>这道题把<strong>所有分布式系统核心技能塞在一道</strong>：</p>
+<ol><li><strong>Sharding</strong> —— 数据怎么切到不同机器</li><li><strong>Replication</strong> —— 怎么避免单点</li><li><strong>Consistency vs availability</strong> —— CAP 怎么选</li><li><strong>Eviction</strong> —— 内存满了怎么办</li><li><strong>Hot key + Thundering herd</strong> —— 流量倾斜怎么处理</li><li><strong>Multi-region</strong> —— 全球部署的一致性 trade-off</li><li><strong>Cache invalidation</strong> —— "计算机科学最难的两件事之一"</li></ol>
+<p>考的就是你<strong>对分布式核心 trade-off 的理解</strong>，不是 Redis API 怎么调。</p>
+<hr />
+<h3>2. 题目重述 — 需求拆解</h3>
+<h4>2.1 Functional requirements</h4>
+<p>5 个核心 API，<strong>别多别少</strong>：</p>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th><th>注意</th></tr></thead><tbody><tr><td><code>GET(key) -&gt; value</code></td><td>拿一个值</td><td>主要操作，占 80%+</td></tr><tr><td><code>SET(key, value, ttl?)</code></td><td>写一个值，可选过期</td><td>TTL 必须支持</td></tr><tr><td><code>DELETE(key)</code></td><td>删除一个值</td><td>不删就靠 eviction</td></tr><tr><td><code>EXPIRE(key, ttl)</code></td><td>改某个 key 的 TTL</td><td>optional</td></tr><tr><td><code>INVALIDATE(pattern)</code></td><td>批量失效（按前缀 / tag）</td><td>跟 DB 写操作配合</td></tr></tbody></table>
+<p><strong>面试时主动澄清的点</strong>：</p>
+<ul><li>是 key-value 还是 sorted set / list / hash？（默认 key-value 就够，扩展再加）</li><li>value 大小？(几 KB 还是几 MB？决定网络模型)</li><li>是否要 transaction / MULTI？(一般不需要，引入太复杂)</li><li>是否要 pub/sub？(一般另设计)</li></ul>
+<h4>2.2 Non-functional requirements</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th><th>为什么</th></tr></thead><tbody><tr><td><strong>延迟</strong></td><td>p99 &lt; 5 ms (single region), p99 &lt; 50 ms (cross region)</td><td>这是缓存存在的全部意义</td></tr><tr><td><strong>吞吐</strong></td><td>100k QPS / node, 1M+ QPS / cluster</td><td>Redis 单核能跑 ~100k QPS</td></tr><tr><td><strong>可用性</strong></td><td>99.99%</td><td>缓存挂了 → 后端 DB 瞬间被压垮</td></tr><tr><td><strong>一致性</strong></td><td>eventual consistency 可接受</td><td>缓存是 best-effort，不是真理</td></tr><tr><td><strong>持久性</strong></td><td>通常 <strong>不</strong> 需要</td><td>缓存丢了能从 DB 重建</td></tr><tr><td><strong>scale</strong></td><td>100B records, 10 TB 内存</td><td>Google / Meta 级别</td></tr></tbody></table>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>持久性是 trick 题</strong>。STAFF 面试官常追问"Redis 也可以 persist 啊"。<strong>回答</strong>：可以但通常不开（fsync 影响延迟）。缓存的 source of truth 永远是 DB，缓存的角色是"加速"不是"存储"。</p></div>
+<hr />
+<h3>3. 容量估算 — back-of-envelope</h3>
+<p>假设：</p>
+<ul><li><strong>DAU</strong> = 1B</li><li>平均每用户每天 100 次缓存 read → 100 B reads/day</li><li>平均每用户每天 10 次缓存 write → 10 B writes/day</li><li>数据集 = 100 B distinct keys，每个 value 平均 1 KB</li></ul>
+<h4>Read / Write QPS</h4>
+<pre class="language-plaintext"><code class="language-plaintext">reads:  100B / 86400s ≈ 1.16 M QPS
+writes: 10B / 86400s ≈ 116 k QPS
+peak (3×): reads ≈ 3.5 M QPS, writes ≈ 350 k QPS</code></pre>
+<h4>内存</h4>
+<pre class="language-plaintext"><code class="language-plaintext">100 B keys × (50 B key + 1 KB value + 100 B overhead)
+≈ 100 B × 1.15 KB ≈ 115 TB total memory</code></pre>
+<p>实际中<strong>不可能全部 cache</strong> —— 通常 cache 命中率 ~80% 意味着只缓存"热数据"。</p>
+<pre class="language-plaintext"><code class="language-plaintext">热数据 = top 20% keys → 23 TB 内存
+单机内存 ≈ 256 GB DDR5 → 需要 90 台机器（带 replication 后 270 台）</code></pre>
+<h4>网络</h4>
+<pre class="language-plaintext"><code class="language-plaintext">peak read 3.5M QPS × 1 KB = 3.5 GB/s aggregate ingress
+→ 单机 100 Gbps NIC 能扛 12 GB/s，所以网络不瓶颈，瓶颈在 CPU + 内存带宽</code></pre>
+<h4>一句话总结</h4>
+<blockquote><p>"为了 1B DAU，需要约 <strong>270 台 256GB-RAM 机器（含 3x replication）</strong>，扛 <strong>3.5M reads/sec + 350k writes/sec</strong>，<strong>p99 &lt; 5 ms</strong>。"</p></blockquote>
+<hr />
+<h3>4. API 设计</h3>
+<h4>4.1 Client API</h4>
+<pre class="language-plaintext"><code class="language-plaintext">GET /cache/{key}
+  Response: { value, ttl_remaining, source: "primary"|"replica" }
 
-    def get(self, key):
-        node = self.topology.route(key)
-        for attempt in range(3):
-            try:
-                return self._call(node, "GET", key)
-            except (Timeout, NodeDown):
-                self.topology.refresh()
-                node = self.topology.route(key)</code></pre>
-<p>Retry + topology refresh 处理 node failure 透明。</p>
-<h3>关键技术决策</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Sharding</td><td>Consistent hash + vnodes</td><td>Hash mod N：rebalance 全部移动</td></tr><tr><td>Replication</td><td>Async, eventual</td><td>Sync, quorum：延迟高</td></tr><tr><td>Eviction</td><td>LRU + TTL</td><td>LFU：复杂；FIFO：HIT rate 低</td></tr><tr><td>Topology</td><td>中心 coord + client pull</td><td>Gossip：复杂</td></tr><tr><td>Multi-region</td><td>单主 + async replica</td><td>Multi-master：write conflict</td></tr></tbody></table>
-<h3>容量估算</h3>
-<ul><li>1B keys × 500B = 500 GB → 50 nodes × 10 GB RAM each</li><li>10M QPS / 50 nodes = 200k QPS per node → 单 node 64 GB RAM，64 core，能撑</li><li>Network：10M × 500B = 5 GB/s ingress（分散到 50 node 每个 100 MB/s）</li></ul>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Hash mod N 分片 —— 加节点全部 rehash； ❌ 同步 replication —— P99 延迟爆； ❌ Cache 强一致 —— 牺牲延迟无必要； ❌ 不做 client-side topology refresh —— node 挂掉客户端不知； ❌ Eviction 用 random —— hit rate 低于 LRU 30%。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Consistent hash + virtual nodes</strong> 解决 sharding + rebalance；(2) <strong>Async replication + eventual</strong> 保证延迟；(3) <strong>Client SDK 处理 topology + retry</strong> 让 node failure 透明。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"如何 cache stampede？" → request coalescing 或 probabilistic early expiration；"Hot key 怎么办？" → client-side caching + read replica + key splitting；"Cache invalidation？" → publish-subscribe propagate invalidation events；"Persistence？" → optional AOF / RDB snapshots（Redis 风格）。</p></div>
+SET /cache/{key}
+  Body: { value, ttl?: int }
+  Response: { ok: true, version: int }
+
+DELETE /cache/{key}
+  Response: { ok: true, deleted: bool }
+
+INVALIDATE /cache/by-tag/{tag}
+  Response: { ok: true, count: int }</code></pre>
+<h4>4.2 Internal protocol</h4>
+<p><strong>主流选择</strong>：Redis RESP（plain text，简单）vs gRPC（结构化，多语言）。</p>
+<p><strong>STAFF 答</strong>：RESP for compatibility（无数客户端库），加 gRPC for internal admin。Server 同时监听两个端口。</p>
+<hr />
+<h3>5. 高层架构（step-by-step 推演）</h3>
+<h4>Step 1：单机 Redis（baseline）</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Client → Redis (single node, 256 GB RAM)</code></pre>
+<p><strong>问题</strong>：</p>
+<ol><li>单点故障：机器挂了缓存全没</li><li>内存上限：单机 256GB 装不下 23TB</li><li>CPU 上限：单机 ~100k QPS，扛不住 3.5M</li></ol>
+<p><strong>Next</strong>: 必须水平扩展。</p>
+<h4>Step 2：加 Sharding（解决容量 + 吞吐）</h4>
+<p>把 keys 按某种规则切到 N 台机器上。</p>
+<p><strong>Naive sharding</strong>：<code>shard_id = hash(key) % N</code></p>
+<pre class="language-plaintext"><code class="language-plaintext">                   ┌────────┐
+Client ──hash──→   │ Router │  ───→ Shard 1, Shard 2, ..., Shard N
+                   └────────┘</code></pre>
+<p><strong>问题</strong>：加 / 减一台机器，<code>hash(key) % N</code> 全变 → 几乎所有数据要重新分配（rebalance 灾难）。</p>
+<p><strong>Next</strong>: 用 consistent hashing。</p>
+<h4>Step 3：Consistent Hashing</h4>
+<p>把所有 shards 映射到一个<strong>虚拟的环</strong>（0 ~ 2^32）上，每个 key 顺时针找最近的 shard。</p>
+<pre class="language-plaintext"><code class="language-plaintext">            shard A (hash=10)
+           /
+   key1 →
+           \
+            shard B (hash=80)
+           /
+   key2 →
+           \
+            shard C (hash=200)</code></pre>
+<p><strong>好处</strong>：加一台 shard D（hash=150），只有 hash 落在 (80, 150] 的 key 受影响，其他 ~3/4 数据不变。</p>
+<p><strong>进阶</strong>：<strong>virtual nodes</strong>（每个物理 shard 在环上有 200 个虚拟点），让数据分布更均匀。</p>
+<h4>Step 4：加 Replication（解决单点故障）</h4>
+<p>每个 shard 配 <strong>1 primary + 2 replicas</strong>。</p>
+<pre class="language-plaintext"><code class="language-plaintext">              Shard A
+         ┌────────┬─────────┬─────────┐
+         │primary │replica 1│replica 2│
+         └────────┴─────────┴─────────┘</code></pre>
+<p><strong>写</strong>：只写 primary，primary 异步复制到 replicas。 <strong>读</strong>：可以 primary 或 replica（看一致性要求）。</p>
+<p><strong>Failover</strong>：primary 挂了，replica 通过 Raft / Sentinel 提升为新 primary。</p>
+<h4>Step 5：Cache-aside pattern（与 DB 协作）</h4>
+<pre class="language-plaintext"><code class="language-plaintext">   1. GET key from cache
+   2a. HIT → return
+   2b. MISS →
+        3. GET key from DB
+        4. SET key in cache (with TTL)
+        5. return</code></pre>
+<p><strong>Write</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">   1. UPDATE row in DB
+   2. INVALIDATE key in cache (不更新，等下次 read miss 重建)</code></pre>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>为什么写时 invalidate 而不是 update</strong>？避免 <strong>race condition</strong>：两个并发 write，update 顺序可能跟 DB 顺序不一致，导致缓存里是旧值。Invalidate 让缓存"暂时空着"，下次 read 重建最新值。</p></div>
+<h4>Step 6：加 multi-region</h4>
+<p>每个 region 一个 cache cluster，cross-region 通过<strong>异步复制</strong>串起来。</p>
+<pre class="language-plaintext"><code class="language-plaintext">   us-east cluster   ←──async──→   eu-west cluster
+                     ←──async──→   ap-south cluster</code></pre>
+<p><strong>问题</strong>：写哪个 region？</p>
+<ul><li><strong>Single-writer per shard</strong>: 每个 key 有一个主 region，其他 region 是 follower</li><li><strong>Multi-writer (last-write-wins)</strong>: 任何 region 都能写，按 timestamp 解冲突</li><li><strong>Multi-writer (CRDT)</strong>: 用 CRDT 数据结构自动 merge</li></ul>
+<p>STAFF 推荐：<strong>single-writer</strong>，简单可控，配合 DNS routing 把同一 key 的写流量都路由到主 region。</p>
+<hr />
+<h3>6. 组件深挖 — 真正考验你深度</h3>
+<h4>Deep Dive 1: Hot Key（最高频追问）</h4>
+<p><strong>问题</strong>：1 个 key（如明星 ID）瞬间 100k QPS，单 shard 单 primary 挤爆。</p>
+<p><strong>4 种解法（从简单到深）</strong>：</p>
+<ol><li><strong>本地客户端缓存</strong>：客户端进程内存里再 cache 一层，TTL 设短（如 500ms）。简单，但脏数据风险。</li><li><strong>Hot key replication</strong>：对识别出的 hot keys，自动复制到所有 replica。读流量随机打到任一 replica。</li><li><strong>Sharding by request, not by key</strong>：把 hot key 拆成 <code>key_v1</code>, <code>key_v2</code>, ..., <code>key_v10</code>，每个 shard 一个，客户端随机选。写时全更新。<strong>最 STAFF</strong>。</li><li><strong>拒绝服务（rate limit）</strong>：超过阈值的请求直接限流或排队（保护后端）。</li></ol>
+<p><strong>怎么 detect hot key</strong>：</p>
+<ul><li>监控端按 key 的 QPS 排序，top-K 即 hot key</li><li>用 Count-Min Sketch 在网关层近似计数（省内存）</li><li>拐点检测：某个 key 1 分钟内 QPS 突涨 10×</li></ul>
+<h4>Deep Dive 2: Thundering Herd（缓存击穿）</h4>
+<p><strong>场景</strong>：热门 key 的 TTL 同时过期，瞬间 100k requests 都 miss，全打到 DB。</p>
+<p><strong>解法（多管齐下）</strong>：</p>
+<table class="md-table"><thead><tr><th>方案</th><th>怎么做</th><th>trade-off</th></tr></thead><tbody><tr><td><strong>Probabilistic refresh</strong></td><td>TTL 还剩 10% 时，<strong>有概率</strong>主动刷新（不等到 0）</td><td>削峰，少量额外 DB 读</td></tr><tr><td><strong>Singleflight / mutex</strong></td><td>同一 key 的 N 个并发 miss，只让<strong>第一个</strong>去查 DB，其他等结果</td><td>Go 标准库 <code>singleflight</code> 直接用</td></tr><tr><td><strong>Stale-while-revalidate</strong></td><td>TTL 过期后<strong>仍返回旧值</strong>几秒，后台异步刷新</td><td>容忍轻微脏数据</td></tr><tr><td><strong>Jitter TTL</strong></td><td>TTL 设 <code>60s ± 10%</code>，避免大批 key 同时过期</td><td>简单，强制实践</td></tr></tbody></table>
+<p><strong>STAFF 推荐组合</strong>：jitter TTL + singleflight + probabilistic refresh，三层保护。</p>
+<h4>Deep Dive 3: Eviction Policy</h4>
+<p>内存满了删谁？</p>
+<table class="md-table"><thead><tr><th>策略</th><th>含义</th><th>何时用</th></tr></thead><tbody><tr><td><strong>LRU</strong></td><td>最久没访问的删</td><td>通用默认。访问局部性高时好</td></tr><tr><td><strong>LFU</strong></td><td>最少访问次数的删</td><td>长尾访问场景（防 LRU 被一次性扫描污染）</td></tr><tr><td><strong>TTL-only</strong></td><td>只删过期的，不主动删（如果空间用完拒写）</td><td>不可控，少用</td></tr><tr><td><strong>TinyLFU</strong></td><td>LFU 改进版，带"门票"机制防新数据污染</td><td>Caffeine（Java）默认</td></tr><tr><td><strong>Random</strong></td><td>随机删一个</td><td>Memcached 的简化版，O(1)</td></tr><tr><td><strong>W-TinyLFU</strong></td><td>TinyLFU + window LRU，业界最强</td><td>高端场景</td></tr></tbody></table>
+<p><strong>实现 LRU</strong>：双向链表 + HashMap。访问时移到头部，淘汰从尾部。O(1)。</p>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>STAFF 加分</strong>：知道 Redis 的 <strong>approximate LRU</strong>（采样 5 个 key，淘汰最旧的）—— 内存节省，准确性略降。</p></div>
+<h4>Deep Dive 4: Consistency — Cache 与 DB 同步</h4>
+<p><strong>问题</strong>：写完 DB 后，缓存什么时候更新？</p>
+<p><strong>4 种 pattern</strong>：</p>
+<ol><li><strong>Cache-aside (默认推荐)</strong>：先写 DB，再 invalidate cache。下次 read 自然重建。✅ 简单</li><li><strong>Write-through</strong>：同时写 DB + cache。强一致，但写延迟 = max(DB, cache) ❌ 慢</li><li><strong>Write-back / write-behind</strong>：先只写 cache，异步刷 DB。⚠️ 数据丢失风险</li><li><strong>Read-through</strong>：cache miss 时 cache 自己去查 DB。客户端代码简化。需要 cache 知道 DB schema。</li></ol>
+<p><strong>实战 race condition</strong>：</p>
+<ul><li>T1: app 读 cache miss → 查 DB 得旧值 v1</li><li>T2: app 写 DB v2 → invalidate cache</li><li>T1: 把 v1 塞进 cache  ← <strong>脏数据！</strong></li></ul>
+<p><strong>解法</strong>：写 DB 时附带 version，read-rebuild 用 CAS（compare-and-swap）：</p>
+<pre class="language-python"><code class="language-python">def rebuild_cache(key):
+    val, ver = db.read(key)
+    cache.set_if_version(key, val, ver)  # 只在 ver 是最新时才 set</code></pre>
+<h4>Deep Dive 5: Multi-region Consistency</h4>
+<p><strong>单 region</strong>：一致性好控制。 <strong>多 region</strong>：必然有 lag，要选 trade-off。</p>
+<p><strong>3 种 multi-region 模型</strong>：</p>
+<ol><li><strong>Active-passive (single writer)</strong>：所有 writes 都路由到主 region，其他 region 是 read-only follower。简单，读延迟低，写延迟高（跨洋）。</li><li><strong>Active-active (multi-writer LWW)</strong>：任何 region 都能写，按 wall-clock timestamp 解冲突（last-write-wins）。⚠️ 时钟漂移会丢数据。</li><li><strong>Active-active (multi-writer CRDT)</strong>：用 G-Counter / OR-Set 等数据结构，<strong>任何写入顺序都能 merge 到一致结果</strong>。复杂但严格正确。</li></ol>
+<p><strong>Google Spanner 风格</strong>：TrueTime API 给跨 region 时钟边界，配合 Paxos 做强一致。<strong>少见</strong>。</p>
+<p><strong>STAFF 答</strong>：active-passive 是 default；遇到全球读写均衡时考虑 active-active LWW；强一致需求才上 CRDT / Spanner。</p>
+<h4>Deep Dive 6: Memory Layout</h4>
+<p><strong>TLB-friendly 设计</strong>：</p>
+<ul><li><strong>小 object 用 jemalloc pool</strong>：减少碎片</li><li><strong>大 value（&gt;4KB）外存</strong>：放 SSD，cache 只存 pointer</li><li><strong>Hash table 设计</strong>：Robin Hood hashing 减少探测次数</li></ul>
+<p><strong>LRU 链表的优化</strong>：用 <strong>segmented LRU</strong>（hot / cold 两段），减少 mutex 争抢。</p>
+<h4>Deep Dive 7: Failover</h4>
+<p>Primary 挂了怎么自动切？</p>
+<p><strong>Redis Sentinel 模式</strong>：</p>
+<ul><li>3+ Sentinel 进程监控所有 primary</li><li>Sentinel 互相 gossip 检测心跳</li><li>多数 Sentinel 认为 primary 挂 → 选出一个 replica 提升为 primary</li><li>更新所有 client 的 routing 表</li></ul>
+<p><strong>问题</strong>：split-brain（脑裂）—— 网络分区时两边都选自己当 primary，写入冲突。</p>
+<p><strong>解法</strong>：要求至少 <strong>majority (N/2+1)</strong> 同意才能 promote。Raft 的标准。</p>
+<hr />
+<h3>7. 45 分钟面试节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th><th>你要做</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清 + 需求</td><td>5 个 API，5 个 NFR 全列出</td></tr><tr><td>5-10min</td><td>容量估算</td><td>QPS / 内存 / 网络 全算</td></tr><tr><td>10-15min</td><td>API 设计</td><td>5 个 endpoint，注意 idempotent</td></tr><tr><td>15-25min</td><td>高层架构</td><td>step 1→6 一步步演</td></tr><tr><td>25-40min</td><td>Deep Dives</td><td>hot key + thundering herd + eviction + consistency 至少 3 个</td></tr><tr><td>40-45min</td><td>Follow-up</td><td>failover / multi-region / monitoring</td></tr></tbody></table>
+<p><strong>节奏 tips</strong>：</p>
+<ul><li>容量估算别超 5 分钟，别在数字上纠结，<strong>说出"100 台、3x replication、p99 5ms"就够</strong></li><li>高层架构要 incremental：先 single node → 暴露问题 → sharding → 暴露问题 → consistent hashing → ...</li><li>不要一上来就画 Redis Cluster 全图，<strong>给面试官追问的空间</strong></li></ul>
+<hr />
+<h3>8. 样板讲解稿（可背 60%）</h3>
+<blockquote><p>这是一道经典的分布式系统题。我会按"先确认需求 → 估容量 → 单机原型 → 逐步扩展 → deep dive trade-offs"的顺序来讲。</p>
+<p><strong>需求</strong>：核心 5 个 API：<code>GET/SET/DELETE/EXPIRE/INVALIDATE</code>。非功能上，<strong>low latency</strong> 是缓存存在的全部意义，所以 p99 我会按 5 ms (single region) / 50 ms (cross region) 来设计。我们的 source of truth 是 DB，所以<strong>持久性放最低</strong>，能容忍 cache 数据丢失。</p>
+<p><strong>容量</strong>：假设 1B DAU、每用户每天 100 read + 10 write，peak 3.5M reads/s 和 350k writes/s。100B distinct keys × 1KB value，热数据 (top 20%) 约 23 TB → 90 台 256 GB 机器 × 3 replication = 270 台。</p>
+<p><strong>演进</strong>：从单机 Redis 开始 → 内存不够要 sharding → 用 <code>hash % N</code> 会 rebalance 灾难 → 上 <strong>consistent hashing</strong> with virtual nodes → 单点故障 → 每 shard 加 2 replicas + Sentinel failover → 缓存怎么跟 DB 配合 → <strong>cache-aside pattern</strong>：写时 invalidate（不是 update），读时 miss 重建。</p>
+<p><strong>Deep dive 1 - Hot key</strong>：识别用 Count-Min Sketch + 阈值。解法用 sharded hot key（拆成 <code>key_v1..key_v10</code>）+ replica 全 copy。</p>
+<p><strong>Deep dive 2 - Thundering herd</strong>：jitter TTL + singleflight + probabilistic refresh，三层。</p>
+<p><strong>Deep dive 3 - Eviction</strong>：默认 approximate LRU（Redis 采样 5 个），高端场景上 W-TinyLFU。</p>
+<p><strong>Multi-region</strong>：默认 active-passive（写主 region），如果需要全球写均衡再上 active-active LWW。</p>
+<p>不知道时间到了没，我准备好回答任何 deep dive。</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A 预演</h3>
+<h4>Q1: "如果 Redis 进程崩了，缓存数据全丢，会发生什么？"</h4>
+<p><strong>A</strong>：典型的 <strong>cache cold start</strong>。所有请求 miss → 全打到 DB → DB 瞬间过载（thundering herd 的极端形态）。</p>
+<p><strong>保护方案</strong>：</p>
+<ol><li><strong>Cache warming</strong>：从 backup 或 replica 提前预热</li><li><strong>Connection pool 限流</strong>：app 端限制单机到 DB 的并发，超过的 fail-fast</li><li><strong>Circuit breaker</strong>：DB 压力大时直接 fail，让上游 fallback 到静态数据</li><li><strong>Replicas 永远不要全挂</strong>：跨 AZ / region 部署</li></ol>
+<h4>Q2: "怎么知道你的 cache hit rate 是多少？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li>每个 cache node 自带 metric：<code>hits / (hits + misses)</code></li><li>上报到 Prometheus → Grafana 画图</li><li>alert 阈值：cache hit rate &lt; 80% 报警（每个业务不同）</li><li>长期分析：哪些 key prefix hit rate 低？要不要 pre-warm / 改 TTL？</li></ul>
+<h4>Q3: "你说 invalidate 而不是 update，那如果 invalidate 失败了呢？"</h4>
+<p><strong>A</strong>：经典的"双写问题"。</p>
+<p><strong>两段式提交也不能完全避免</strong>。实战中：</p>
+<ol><li><strong>Cache 写失败</strong>：直接返回 5xx，让客户端 retry（最简单）</li><li><strong>DB 写成功 + cache invalidate 失败</strong>：靠 TTL 兜底（设短一点，e.g. 5 分钟）</li><li><strong>强一致需求</strong>：上 <strong>Change Data Capture (CDC)</strong>，监听 DB binlog，由专门 worker invalidate cache。Debezium / Maxwell。</li></ol>
+<h4>Q4: "Memcached vs Redis，怎么选？"</h4>
+<p><strong>A</strong>：</p>
+<ul><li><strong>Memcached</strong>：极简，纯 key-value，多线程（单进程多核），无持久化，无 replication（要靠 client 端 sharding）。<strong>适合：纯加速 layer，对 feature 没要求</strong></li><li><strong>Redis</strong>：丰富数据结构（list / set / sorted set / hash / stream），单线程（v6+ 部分多线程），有持久化、replication、Cluster。<strong>适合：要 sorted set 排行榜 / pub-sub / 复杂结构</strong></li></ul>
+<p>实战：90% 选 Redis，因为运维生态成熟、官方支持 Cluster。<strong>Memcached 现在主要是历史包袱</strong>。</p>
+<h4>Q5: "Consistent hashing 加机器只挪 1/N 数据，但具体怎么挪？运行期间业务怎么办？"</h4>
+<p><strong>A</strong>：分 3 步：</p>
+<ol><li><strong>新机器接入环</strong>，但<strong>不接受流量</strong></li><li><strong>后台 migration</strong>：扫描旧机器上属于新机器的 key，复制过去</li><li><strong>migration 完成后</strong>：原子切换 routing，老机器删数据</li></ol>
+<p><strong>关键</strong>：双写期间，写要<strong>同时写到新 + 旧</strong>，避免 migration 期间数据丢。Redis Cluster 的 <code>MIGRATE</code> 命令做这个。</p>
+<h4>Q6: "如果一个 key 的 value 是 100 MB，会有什么问题？"</h4>
+<p><strong>A</strong>：<strong>Big value problem</strong>。</p>
+<ul><li><strong>网络阻塞</strong>：100 MB / 1 Gbps NIC = 800 ms 传输，期间 socket 阻塞</li><li><strong>内存压力</strong>：单条占用过大，挤压其他 key</li><li><strong>eviction 异常</strong>：删一个就空出巨大空洞</li></ul>
+<p><strong>解法</strong>：</p>
+<ul><li><strong>chunking</strong>：客户端分块，每个 chunk &lt; 1MB</li><li><strong>external blob storage</strong>：value 存 S3，cache 只存 URL</li><li><strong>限制 value 大小</strong>：server 端拒绝 &gt; 1MB 的写入</li></ul>
+<h4>Q7: "怎么测试你的 cache 系统？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Unit</strong>：每个组件（LRU / consistent hash）单测</li><li><strong>Chaos</strong>：用 Chaos Monkey 随机杀 primary，看 failover 时间 + 数据正确性</li><li><strong>Load test</strong>：用 <code>redis-benchmark</code> 或 <code>memtier_benchmark</code> 跑 1M QPS，看 p99 是否达标</li><li><strong>Soak test</strong>：连跑 24h，看内存 leak / latency drift</li><li><strong>Jepsen</strong>：分布式一致性测试黄金标准，注入网络分区检查不变量</li></ol>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>一上来就画 Redis Cluster 全图</strong> —— 没有演进过程，面试官觉得你只会 copy 现成方案</li><li><strong>忽略 hot key</strong> —— 这是 STAFF 必追问的，没准备直接挂</li><li><strong>Cache update 而不是 invalidate</strong> —— 暴露你不懂 race condition</li><li><strong>持久性说成必要</strong> —— 缓存的定义就是"可丢"，搞混 cache 和 DB</li><li><strong>忘记 multi-region</strong> —— Google 是全球公司，必问</li><li><strong>Memcached vs Redis 答不出区别</strong> —— 暴露你只用过其中一个</li><li><strong>Eviction 只会说 LRU</strong> —— 没说 LFU / W-TinyLFU 显得肤浅</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>量化所有 trade-off</strong>：说"sharding 加机器要挪 1/N 数据"比"会挪一些"高 10 倍</li><li><strong>主动提 Count-Min Sketch detect hot key</strong>：展示你懂近似算法</li><li><strong>CDC + cache invalidation</strong>：展示你跨过简单 cache-aside 看 industry pattern</li><li><strong>TrueTime / Spanner 提一嘴</strong>：Google 内部技术，加分</li><li><strong>W-TinyLFU</strong>：现代 cache 算法，比 LRU 强很多</li><li><strong>CRDT for multi-region</strong>：展示你懂分布式数学</li><li><strong>画图时主动标 latency</strong>：每个箭头标 1ms / 5ms / 50ms，体现你<strong>思考过性能</strong></li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p><strong>STAFF 跟 SENIOR 的差别</strong>： SENIOR 答"how" —— 我会用 consistent hashing + replication。 STAFF 答"why + when + alternatives" —— consistent hashing 解决 rebalance 问题，付出 virtual nodes 的额外内存代价；如果数据量小（&lt; 1TB），直接用 hash mod N + 定期 manual rebalance 更简单。</p></div>
+<hr />
+<h3>11. 最后 5 分钟 cheat sheet</h3>
+<p>如果只剩 5 分钟看一遍，记住这些：</p>
+<pre class="language-plaintext"><code class="language-plaintext">核心 trade-off:
+  - sharding: consistent hashing + virtual nodes
+  - replication: 3 replicas, single primary, Sentinel failover
+  - cache pattern: cache-aside + invalidate (not update)
+  - eviction: approximate LRU (Redis) / W-TinyLFU (Caffeine)
+  - hot key: sharded key + replica replication
+  - thundering herd: jitter TTL + singleflight
+  - multi-region: active-passive default
+  - consistency: eventual, source of truth = DB
+
+数字:
+  - p99 latency: 5 ms (single), 50 ms (cross)
+  - QPS / node: 100k (Redis单核)
+  - 1B DAU → 23TB hot data → 270 台 256GB
+
+关键概念:
+  - cache-aside pattern
+  - consistent hashing
+  - Count-Min Sketch (detect hot)
+  - W-TinyLFU
+  - CDC for invalidation</code></pre>
   </section>
 
   
@@ -259,7 +423,8 @@
     <a href="cm4szwvht003pnqlrkhad2xjd.html">Design a Ticket Booking System →</a>
   </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="../assets/prism/prism-core.min.js"></script>
+<script src="../assets/prism/prism-autoloader.min.js"></script>
+<script>if(window.Prism)Prism.plugins.autoloader.languages_path='../assets/prism/components/';</script>
 </body>
 </html>

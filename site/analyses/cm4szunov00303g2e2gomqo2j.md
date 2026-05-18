@@ -1,172 +1,469 @@
-## 题目本质
+## 0. 在开始之前 — 你需要知道的概念
 
-经典 **Chat/Messaging system**（WhatsApp / Messenger 级）：1:1 + group conversation、message delivery status、user presence、conversation history、扩展到百万级用户。
-
-OpenAI 报告这题在 Mid-level-Senior Staff 级别都问，是 SD 面试经典题。考点：**fan-out 写策略、消息顺序、多设备同步、presence 系统**。
-
-## 需求拆解
-
-**功能性：**
-- 1:1 和群聊（最多 100 人/群）
-- 消息送达回执（sent / delivered / read）
-- 用户在线状态（online / typing / last-seen）
-- 历史消息持久化 + 滑动分页
-- 多设备同步（手机 + 电脑 + Web）
-
-**非功能性：**
-- 1 亿 DAU，峰值 1M 并发连接
-- 端到端消息延迟 P99 < 500 ms
-- 消息至少送达一次（at-least-once），客户端做去重
-
-**容量估算：**
-- 1 亿 DAU × 平均每人 30 条/天 = 3B 条/天 ≈ 35k 写 QPS
-- 峰值 5x → 175k 写 QPS
-
-## 整体架构
-
-```ascii
-   Client (mobile / web)
-        │  WebSocket (persistent)
-        ▼
-   ┌──────────────┐
-   │  Edge GW     │  sticky by user_id
-   │  (Envoy/L7)  │
-   └──────┬───────┘
-          │
-          ▼
-   ┌──────────────────┐
-   │  Chat Server     │  Hot connection state, presence
-   │  (stateful, 1M   │  Notification fan-out
-   │   conn each)     │
-   └──┬───────────┬───┘
-      │           │
-      ▼           ▼
- ┌──────────┐  ┌──────────────────┐
- │ Presence │  │  Message Service │
- │ Service  │  │  (write path)    │
- │ (Redis)  │  └────────┬─────────┘
- └──────────┘           │
-                        ▼
-                 ┌──────────────┐
-                 │ Message DB   │  Cassandra / DynamoDB
-                 │ (by conv_id) │
-                 └──────┬───────┘
-                        │
-                        ▼ (CDC)
-                 ┌──────────────┐
-                 │  Push Worker │  → APN / FCM / Web Push
-                 │  (offline    │
-                 │   users)     │
-                 └──────────────┘
-```
-
-## 核心组件设计
-
-### 1. WebSocket 长连接（Edge ↔ Client）
-
-- 1M 并发 → 至少 100 台 chat server，每台 ~10k 连接
-- **Sticky routing**：edge L7 按 `user_id` consistent hash → 用户重连仍到同一台 server（state 沿用）
-- 心跳：客户端每 30s ping，server 60s 没收到判断离线
-- TLS 终结在 edge
-
-### 2. 消息发送路径
-
-```
-A → ws send → Chat Server A → Message Service
-                                  │
-                          1. 写入 Message DB (conv_id, msg_id, sender, body, ts)
-                          2. 发布到 Kafka topic: conv.{conv_id}
-                                  │
-                  ┌───────────────┴─────────────────────┐
-                  ▼                                     ▼
-        Chat Server B (where B is online)      Push Worker (B offline)
-                  │                                     │
-                  ▼                                     ▼
-              ws push to B's clients           APN/FCM notification
-```
-
-### 3. 消息顺序 + ID 生成
-
-**Snowflake 64-bit ID**: `timestamp_ms(41) | server_id(10) | seq(12)`，单服务器单毫秒可生成 4096 个。同一 conv 内 ID 自然递增，客户端可按 ID 排序。
-
-**对一 conv 的写入路由到同一 partition**：保证同对话内消息顺序。
-
-### 4. 多设备同步
-
-每个用户有多个 `device_id`（手机、电脑、Web）。消息表存 `(conv_id, msg_id, body, sender, ts)`，**只存一份**，不是 per-device 复制。
-
-每设备维护一个 `last_synced_msg_id`：上线时 `SELECT msg_id, body FROM messages WHERE conv_id=? AND msg_id > last_synced` 拉新消息。
-
-### 5. 消息存储（DB schema）
-
-**Cassandra**：partition key = `conv_id`，clustering key = `msg_id DESC`。这样同一对话的消息物理上聚集，按时间倒序查询是单 partition scan，飞快。
-
-```sql
-CREATE TABLE messages (
-  conv_id      UUID,
-  msg_id       BIGINT,        -- Snowflake
-  sender_id    UUID,
-  body         TEXT,
-  msg_type     TEXT,
-  reply_to     BIGINT,
-  ts           TIMESTAMP,
-  PRIMARY KEY (conv_id, msg_id)
-) WITH CLUSTERING ORDER BY (msg_id DESC);
-```
-
-**Conversation membership**：单独表 `(conv_id, user_id, joined_at, role)`，群聊查成员用。
-
-### 6. 送达回执
-
-- `sent`：客户端 → server，server 写完 DB 即 ack
-- `delivered`：接收方设备收到 ws push 时，发回 `ack delivered`，server 写 status
-- `read`：用户打开会话，客户端发 `ack read up_to msg_id`，server 写 status
-
-回执也是消息（特殊 type），通过同样的 ws + DB 路径走。
-
-### 7. Presence System
-
-- 用户在线状态存 Redis：`SET presence:{user_id} {device_id} EX 60`，每 30s 客户端续期
-- "好友列表"订阅好友的 presence —— pub/sub on Redis channel
-- 频繁更新会爆 Redis QPS，做 **batching + 节流**（每用户 1 次/30s 更新足够）
-
-### 8. Typing indicator
-
-不写 DB，纯走 ws 转发。客户端每 3s 发 `typing` ping，server 转发给 conv 内其他在线用户。
-
-## 取舍
-
-| 决策 | 选择 | 替代 |
+| 名词 | 一句话解释 | 类比 |
 |---|---|---|
-| Pull vs Push | Push（ws）on-line + Pull（API）on-reconnect | 纯 pull：延迟高 |
-| Fan-out 时机 | 写时 fan-out（写后立即 push 到所有 conv 成员） | 读时聚合：群多了爆炸 |
-| 消息 DB | Cassandra（写优化，按 conv 分区） | Postgres：写吞吐撑不住 |
-| ID | Snowflake | UUID：无序，clustering 坏 |
-| 多设备 | 共享单条消息 + per-device cursor | per-device 复制：膨胀 |
+| **WebSocket** | 浏览器 / app 跟 server 的全双工长连接 | 不挂的电话 |
+| **Long polling** | client 发请求，server hold 住到有消息再返回 | 顾客在前台等服务员叫号 |
+| **Presence** | 在线 / 离线 / 输入中状态 | "对方正在输入..." |
+| **Fan-out (写时 / 读时)** | 一条消息扩散给多个收件人 | 发邮件 cc N 个人 |
+| **Push notification** | 设备离线时通过 APNs / FCM 推送 | 邮局派件 |
+| **Message queue** | 缓冲消息的队列 | 邮件 inbox |
+| **Idempotency key** | 客户端给每个 message 的 unique ID，防重发 | 快递单号 |
+| **Read receipt** | 已读回执 | 已读未回 |
+| **End-to-end encryption (E2EE)** | 只有发收双方能解密，server 看不到内容 | 信封封口，邮局没法拆 |
+| **Signal Protocol** | E2EE 标准 (Double Ratchet)，WhatsApp/Signal/Messenger 都用 | 加密协议标准 |
+| **Vector clock / HLC** | 给分布式事件加 timestamp 用 | 多时区会议怎么排序 |
+| **Group chat fan-out** | 群消息发给所有成员 | 公司全员邮件 |
+| **Sharding by user_id** | 按用户分库 | 按姓氏首字母分到不同前台 |
+| **Conversation ID** | 一个对话的唯一 ID | 一个房间号 |
+| **Sticky session** | 同一用户的请求路由到同一 server | 老顾客认服务员 |
 
-## 一致性 / 可靠性
+---
 
-- **at-least-once 送达**：消息可能被推 2 次，客户端用 `msg_id` 去重
-- **离线消息**：用户离线时消息仍写 DB，下次上线拉 missed
-- **消息 ordering**：同 conv partition 内强保证；跨 conv 无保证（也不需要）
-- **GDPR / 删除**：消息删除标记 + 异步实际删除
+## 1. 题目本质
 
-## OpenAI 报告里的真实变种
+**Chat / Messaging System** = 实时消息平台，1:1 / 群聊 / 多设备 / 离线消息 / 已读回执 / 状态同步。
 
-抓到的 timeline 里有几个值得注意的：
-- "WhatsApp without group chat and media upload" → 简化版（也常被问）
-- "Regular chat question but with images instead of text" → GDrive+Chat 解法：图片上传到 S3 presigned URL，消息只存图片 URL
-- "Anthropic Mid-level (2021)" / "Anthropic Staff (May 2026)" —— Anthropic 也问，说明这是行业标准 SD 题
+**典型产品**：
+- **WhatsApp** —— 2B users, Signal protocol E2EE
+- **Messenger** —— Meta 主打
+- **WeChat** —— 1.3B MAU，群最多 500 人
+- **Telegram** —— cloud-based，E2EE 可选
+- **Slack** —— work chat，workspace 概念
+- **Discord** —— gaming/community
 
-> [!key]
-> 三大要素：(1) WebSocket sticky + Chat Server 长连接；(2) Cassandra by conv_id 写优化；(3) Push 实时 + Pull on reconnect 兜底。
+**为什么这是 STAFF 高频题（OpenAI/Google/Meta 都问）**：
 
-> [!pitfall]
-> ❌ 用 HTTP polling 替代 ws —— 延迟 + 服务端连接数爆；
-> ❌ 同 conv 用多个 partition —— 消息乱序；
-> ❌ Read receipt 单独存 per-message-per-user 表 —— 数据膨胀 N²；
-> ❌ Typing indicator 写 DB —— 完全没必要；
-> ❌ 不做 dedup —— 客户端会显示重复消息。
+考的是 4 个核心难点：
 
-> [!followup]
-> "E2E 加密怎么做？" → Signal Protocol，client-side double ratchet。服务端只是密文转发，不知道明文。"如何支持百万人群？" → 不再做 push fan-out，改读时聚合 + 抽样压缩。"语音/视频通话？" → 走 WebRTC，server 只做 signaling + STUN/TURN。
+1. **WebSocket fan-out** at scale：1B 在线用户，毫秒级递送
+2. **Message ordering** + dedup + at-least-once
+3. **Multi-device sync**：手机 / 桌面 / 网页消息同步
+4. **Storage**：万亿条消息，GDPR / 删除合规
+
+考 STAFF 关键：**不只是"发消息"**，而是**presence + delivery status + multi-device + offline + E2EE** 这堆复杂 trade-off。
+
+---
+
+## 2. 需求拆解
+
+### Functional
+
+| API | 含义 |
+|---|---|
+| `SendMessage(from, to, text) -> msg_id` | 1:1 发消息 |
+| `SendGroupMessage(from, group_id, text) -> msg_id` | 群发 |
+| `GetMessages(conv_id, before_id?, limit) -> msg[]` | 历史 |
+| `MarkRead(msg_id)` | 已读 |
+| `SetPresence(status)` | 设状态 |
+| `Subscribe(user)` | 监听 |
+| `CreateGroup(name, members) -> group_id` | 建群 |
+| `AddToGroup / RemoveFromGroup` | 群成员管理 |
+
+**澄清要点**：
+- E2EE 需不需要？(影响 server 是否可见消息)
+- 群最大成员数？(WhatsApp 1024, WeChat 500)
+- 多设备：登录数量限制？session 模型？
+- 是否支持 voice / video call？(可声明 out of scope)
+- Search？(影响 server-side index, 与 E2EE 冲突)
+
+### Non-functional
+
+| 维度 | 目标 |
+|---|---|
+| **延迟** | p99 < 200 ms (in-region), < 500 ms (cross-region) |
+| **Scale** | 1B DAU, 100M concurrent 在线 |
+| **Throughput** | 100M MAU send 50 msg/day = 5B msg/day = 60k QPS sustained, 200k peak |
+| **Availability** | 99.99% |
+| **Durability** | 消息**不能丢** |
+| **Consistency** | eventual; 顺序保证：同 conversation 内 strong |
+| **Storage** | 100T messages × 200 B = 20 PB |
+
+---
+
+## 3. 容量估算
+
+- **DAU**: 1B
+- **Concurrent online**: 10% = 100M
+- **Send rate**: avg 50 msg/user/day → 5 × 10^10 msg/day → **600k QPS sustained, 1.8M peak**
+- **WebSocket connections**: 100M concurrent → 100k connections/server (Linux ulimit limit) → **1000 WebSocket servers**
+
+**Storage**:
+- Hot (last 30 days): 1.5 × 10^12 msg × 200 B = 300 TB
+- Cold (older): 几年 history → 10 PB scale → cold tier (S3/GCS)
+
+**Network**:
+- Send 1.8M msg/sec × avg 1KB = 1.8 GB/s upstream
+- Fan-out (assume avg 2 recipients per msg) = 3.6 GB/s downstream
+
+---
+
+## 4. 高层架构
+
+### Step 1: 1:1 chat baseline
+
+```
+Client A ─WebSocket─→ Chat Server ─WebSocket─→ Client B
+                            │
+                            ↓
+                       Message DB
+```
+
+### Step 2: 多 server + routing
+
+100M concurrent users / 100k per server = 1000 servers，**怎么把 message 路由到正确的接收 server**？
+
+**Pub/Sub**:
+```
+Sender ─→ Server X ─→ Kafka topic (user_b)
+                              ↓
+                      Server Y (consumes if user_b connected here)
+                              ↓
+                      WebSocket → Client B
+```
+
+**或 Discovery service**:
+```
+Server X queries Discovery: "user_b is on server Y"
+Server X → Server Y (RPC) → WebSocket → B
+```
+
+**STAFF 推荐 Kafka pub/sub**：解耦、高可靠、retry 简单。每用户 topic 太多（10亿 topic不可），用 **shard topic** (`user-shard-0` ~ `user-shard-999`)，consumer group 订阅。
+
+### Step 3: Persistent storage
+
+Message DB 设计：
+
+```
+table: messages
+  conversation_id (sharded by)
+  message_id (timestamp + ULID for ordering)
+  sender_id
+  body (encrypted if E2EE)
+  created_at
+  status (sent/delivered/read by recipient)
+
+table: conversations
+  conversation_id
+  participants
+  last_message_id  (for sorting conv list)
+  unread_count
+```
+
+**Sharded by conversation_id** (1:1 chat 创建一个 conv_id，群一个 conv_id)。
+
+### Step 4: Group chat fan-out
+
+**Write fan-out (Pull)**:
+- Sender writes once
+- 每个 receiver pull on demand
+- 写便宜，读复杂 (要 query 所有 join 的 group)
+- WhatsApp 这种用 push（fan-out write）更简单
+
+**Read fan-out (Push)**:
+- Sender writes once
+- Server fan-out N copies to N receivers' inbox
+- 读便宜，写贵 (1 msg → N writes)
+- **N 太大时不行**（百万人群）
+
+**Hybrid (Facebook / WhatsApp)**:
+- 普通群 (< 500): push fan-out
+- 超大群: pull fan-out
+- "celebrity user" 1M followers: pull fan-out (Twitter feed 同理)
+
+### Step 5: Presence
+
+**Naive**：每秒上报 heartbeat → 不 scale (100M users × 1 Hz = 100M QPS)
+
+**Better**:
+- 用户上线时 sets `presence_key = user_id` in Redis with TTL = 60s
+- 每 30s refresh TTL
+- 朋友想看 presence → Redis GET (O(1))
+- 上线/下线时 publish to **friends' channels** (subscribe 模型)
+
+**Privacy**: presence 默认对朋友可见，可关闭。WhatsApp "last seen" 是这个。
+
+### Step 6: Multi-device sync
+
+User 有 phone + desktop + web。每个登录一个 device。
+
+**Each device = independent WebSocket connection**:
+- Server 给每个 device 一个 `device_id`
+- Sending: 任一 device 发消息，all devices get echo (saved to history)
+- Receiving: 所有 device 都收消息
+- Read marker: device A marked read → broadcast to device B/C
+- E2EE: each device has its own key pair → encrypt N times (one per recipient device)
+
+**Signal protocol**: pairwise sessions, group chat uses sender key (一次加密，群内成员有 sender key 解密)。
+
+### Step 7: Offline + Push
+
+User offline (no WebSocket connection):
+- Message saved to DB
+- APNs/FCM push triggers wake → app fetches via REST API + opens WebSocket
+- WhatsApp 的 "X 条新消息"
+
+---
+
+## 5. 组件深挖
+
+### Deep Dive 1: WebSocket Server at 100M Connections
+
+**单机 100k WebSocket connections** 极限：
+- File descriptor limit (`ulimit -n` 改到 1M+)
+- TCP socket memory (4KB / connection)
+- Epoll efficiency (一个 thread 跑 100k connection events)
+
+**实现**：
+- Go (goroutine 10k → 100k 很轻)
+- Erlang / Elixir (BEAM VM 原生支持百万连接)
+- Java + Netty
+- Node.js + uWebSockets
+
+**Scaling out**:
+- Stateless WebSocket server: 1000 nodes, sticky session via consistent hashing on `user_id`
+- Discovery: Redis or Zookeeper maps `user_id → server`
+- Load balancer: HAProxy / Envoy supports WebSocket upgrade
+
+### Deep Dive 2: Message Ordering
+
+**Same conversation 必须严格按发送顺序**。
+
+**Naive**：用 server-side timestamp → 多 server / 多 region 时钟漂移破坏顺序。
+
+**正确**:
+- **Conversation-level sequence number**: each msg in conv gets monotonic `seq_no` (server assign)
+- Client 显示按 `seq_no` 排序
+- **HLC (Hybrid Logical Clock)** for cross-region: physical timestamp + counter
+
+**Idempotency**:
+- Client 生成 `client_msg_id` (UUID) 发到 server
+- Server 检查重复 (within last 24h) → dedup
+- 防 retry 造成重复消息
+
+### Deep Dive 3: Delivery Receipts (sent/delivered/read)
+
+**Sent**: server 收到 (HTTP 200 / WebSocket ack)
+**Delivered**: 收件人 device 拿到 message (设备 ack 给 server)
+**Read**: 用户在 app 看到 (user action ack 给 server)
+
+**Update path**:
+```
+Message m1 from A → B
+  status_A: sent (after server ack)
+  status_A: delivered (after B device ack)
+  status_A: read (after B reads in app)
+```
+
+每个状态变化 → server 推回给 sender。
+
+**Storage**: 每条 msg 维护 status 字段，每个 group msg 维护 `delivered_to: [user_id], read_by: [user_id]` 列表。
+
+### Deep Dive 4: Storage Strategy
+
+**Hot vs Cold**:
+- Last 90 days: Cassandra / DynamoDB (fast random read by conversation_id)
+- Older: S3 archived (cold tier, 10× cheaper)
+
+**Schema design**:
+```
+PK: (conversation_id, message_id)  // ordered by msg_id
+SK: message_id (ULID, lex sorts by time)
+```
+
+**Pagination**: `GetMessages(conv, before=msg_id, limit=20)` → range scan backward。
+
+**Compaction**: deleted messages (legal/GDPR) → tombstone + scheduled physical delete after 30 days.
+
+### Deep Dive 5: End-to-End Encryption (Signal Protocol)
+
+**Why E2EE**: server can't read messages → strong privacy。
+
+**Double Ratchet**:
+1. **X3DH (Initial key agreement)**: pre-key bundle exchange when first contacting
+2. **Symmetric ratchet**: each message gets new key (forward secrecy)
+3. **DH ratchet**: every reply triggers new DH key exchange (break-in recovery)
+
+**Multi-device**:
+- Each device has its own identity key
+- Encrypting to user X = encrypt N times (N = X's devices)
+
+**Group chat (Sender key)**:
+- Encrypt msg with sender key (symmetric)
+- Distribute sender key to N members via pairwise E2EE
+- Rotate sender key when member added/removed (forward secrecy)
+
+**Trade-off**:
+- ✅ Privacy
+- ❌ Server can't index for search / backup encrypted backup
+- ❌ Multi-device sync is harder (each device needs own key)
+
+### Deep Dive 6: Group Chat at Scale
+
+**Small group (< 500)**: push fan-out
+- Sender writes once
+- Server fan-out N copies to each member's inbox table
+- Simple, but write amplification N
+
+**Large group (> 10k)**: pull fan-out
+- Sender writes to group msg log
+- Members poll/subscribe to the log
+- Like Slack channels / Discord
+
+**WhatsApp 1024 max member**: push fan-out works fine.
+
+### Deep Dive 7: Search
+
+**E2EE makes search hard**: server can't see content.
+
+**Options**:
+1. **Client-side search**: device downloads all history, full-text search locally (WhatsApp 这么做)
+2. **Server-side search (no E2EE)**: ElasticSearch index of msg body (Slack)
+3. **Searchable encryption**: 学术方向，未广泛使用
+
+---
+
+## 6. 45 分钟节奏
+
+| 时间 | 阶段 |
+|---|---|
+| 0-5min | 澄清：E2EE? group size? multi-device? search? |
+| 5-10min | 容量：100M concurrent, 1.8M peak msg/s, 20 PB storage |
+| 10-20min | 高层架构：WebSocket → pub/sub → DB → fan-out (push vs pull) |
+| 20-35min | Deep dives: WebSocket scale / ordering / receipts / E2EE / group |
+| 35-45min | presence / multi-device / search / GDPR |
+
+---
+
+## 7. 样板讲解稿
+
+> Chat 是 SD 经典中的经典，难点有 4 个：(1) WebSocket fan-out at scale, (2) message ordering + dedup, (3) multi-device sync, (4) storage 万亿级。
+>
+> **架构**：
+> 1. **WebSocket server pool** (1000 servers × 100k connection each)，sticky session via consistent hashing on user_id
+> 2. **Pub/sub via Kafka** (shard topic 1000 个) 跨 server 路由
+> 3. **Sharded DB** (by conversation_id)：hot 90 天在 Cassandra，cold 在 S3
+> 4. **Group fan-out**: push for < 500, pull for > 10k
+> 5. **Presence** via Redis TTL key + subscribe model
+>
+> **Deep dives**：
+> - WebSocket at scale: Go/Erlang, sticky session, discovery service
+> - Ordering: server-assigned seq_no per conversation, HLC for cross-region
+> - Receipts: status field per msg + push to sender on change
+> - E2EE: Signal protocol (Double Ratchet), sender key for group
+> - Multi-device: each device = independent connection + key, sync via fan-out
+>
+> Numbers: 1B DAU, 100M concurrent, 60k QPS sustained / 200k peak, 20 PB storage.
+
+---
+
+## 8. Follow-up Q&A
+
+### Q1: "如果我有 5 台设备，发一条消息怎么 sync 到全部？"
+
+**A**：sender 发 → server 持久化 → fan-out 给 user 的 N devices (echo to sender's own devices + push to recipient's). 每 device 独立 WebSocket connection。Read receipt 也 broadcast to 所有 device。
+
+### Q2: "WhatsApp 的 "last seen" 怎么实现？"
+
+**A**：Presence via Redis：用户 active 时 SET `last_seen:user_id = now()` with TTL 5min. 朋友查询 GET this key。privacy 可关闭（key 不更新或 read 鉴权）。
+
+### Q3: "Message 怎么保证不丢？"
+
+**A**：3 层保险：
+1. **Client retry with idempotency key**：网络失败 client 重发，server dedup
+2. **Server WAL**：写消息先 append-only log，再 ack client
+3. **Replication**：DB 3 副本，cross-AZ
+
+如果 server 收到没 ack client，client 重发 → dedup by `client_msg_id`。
+
+### Q4: "1000 人 group，一个人发消息怎么实现？"
+
+**A**：push fan-out。Sender writes 1 row to `messages` (group_id, ...) → server fan-out 1000 inserts to each member's inbox table。Sequence number 由 group-level counter assign 保证顺序。如果 group > 10k 改 pull (member subscribe group log)。
+
+### Q5: "User 在飞机模式 5 小时，回来后怎么拿到这期间的消息？"
+
+**A**：app 上线 → 拉取 inbox `WHERE seq_no > last_synced_seq_no`。Server keep 至少 30 天历史。push notification 在飞机模式无效，但 app 上线后 fetch 历史。
+
+### Q6: "Group key rotation 怎么实现 (E2EE)?"
+
+**A**：成员变更时：
+- 老 sender key 失效（不再 distribute）
+- 新 sender key 生成，通过 pairwise E2EE distribute 给新成员列表
+- 旧消息用旧 key 仍可解（已分发给老成员）
+- 新消息用新 key 加密
+- 这就是 **forward secrecy** for group。
+
+### Q7: "怎么扛 DDoS？"
+
+**A**：
+- Rate limit per user (e.g., 100 msg/sec)
+- Rate limit per IP at LB level
+- CAPTCHA on registration
+- Anti-spam ML model 在 message path 上 detect bot
+
+---
+
+## 9. 易错点 & 加分项
+
+### ❌ 易错点
+
+1. **All connections to 1 server** → 单机连接数爆 → 必须 shard
+2. **没说 fan-out 策略** → group chat 失败
+3. **Message order 靠 client timestamp** → 时钟漂移破坏顺序
+4. **没考虑 multi-device** → echo 不同步
+5. **E2EE 当作 server 透明** → 不知道 search/backup 是问题
+6. **Presence 全 heartbeat** → 不 scale
+7. **没有 idempotency** → 重试导致重复消息
+
+### ✅ 加分项
+
+1. **Signal Protocol / Double Ratchet** 提一嘴
+2. **HLC for cross-region ordering**
+3. **Sender key for group E2EE**
+4. **Hybrid push/pull fan-out** (size threshold)
+5. **Hot/Cold storage tier**
+6. **Sticky session via consistent hashing**
+7. **Erlang / Go 提一嘴**（百万 WebSocket 的经典选择）
+8. **GDPR compliance**：tombstone + scheduled delete
+
+> [!key] STAFF vs SENIOR：SENIOR 答"WebSocket + DB"；STAFF 答"WebSocket pool 1000 nodes + pub/sub + shard by user_id + push/pull hybrid fan-out + Signal protocol for E2EE + HLC for ordering + hot/cold storage tier"。
+
+---
+
+## 10. Cheat Sheet
+
+```
+架构层次:
+  Client (WebSocket × N devices)
+   → WebSocket Server Pool (1000 nodes, sticky session)
+   → Kafka pub/sub (1000 shard topics)
+   → Message DB (sharded by conv_id, Cassandra)
+   → Cold tier (S3)
+   → APNs/FCM for offline push
+
+核心问题:
+  - WebSocket at scale: Go/Erlang, 100k/node
+  - Ordering: conv-level seq_no + HLC
+  - Idempotency: client_msg_id dedup
+  - Fan-out: push (< 500), pull (> 10k), hybrid
+  - Multi-device: N WebSocket, fan-out to all
+  - E2EE: Signal Protocol (Double Ratchet)
+    - Pairwise for 1:1
+    - Sender key for group
+  - Presence: Redis TTL key + subscribe
+
+Status flow:
+  sent → delivered → read
+  (每变化 → push to sender)
+
+Storage:
+  Hot 90 天: Cassandra/DynamoDB
+  Cold: S3 archive
+  GDPR: tombstone + scheduled physical delete
+
+数字:
+  1B DAU, 100M concurrent
+  60k QPS sustained, 200k peak send
+  20 PB total storage
+  p99 < 200ms in-region, 500ms cross
+```

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a MapReduce Shuffler · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v=2f582d51">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+<link rel="stylesheet" href="../assets/prism/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
@@ -17,6 +17,10 @@
 <main class="container detail">
   <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a MapReduce Shuffler</div>
   <h1>Design a MapReduce Shuffler</h1>
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>
   <div class="header-meta">
     <span class="tag tag-system-design">System Design</span>
     <span class="tag tag-level">Staff</span>
@@ -31,59 +35,204 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>MapReduce Shuffler</strong>：MapReduce 框架中 map output → reducer input 的 shuffle 阶段。把 N mappers 的 keyed output 按 key partition + sort + transport 给 M reducers。</p>
-<p>经典 distributed systems 题。</p>
-<h3>整体流程</h3>
-<pre class="language-plaintext"><code class="language-plaintext">Map output: list of (key, value)
-   │
-   │ partition by hash(key) % R
-   ▼
-Per-mapper R buckets (one per reducer)
-   │
-   │ sort each bucket by key
-   ▼
-Local disk spill (intermediate file)
-   │
-   │ reducer pulls relevant bucket from each mapper
-   ▼
-Reducer input: merged sorted (key, value list)
-   │
-   │ reduce function
-   ▼
-Final output</code></pre>
-<h3>核心组件</h3>
-<h4>1. Partitioner</h4>
-<p><code>partition(key) = hash(key) % R</code>。同 key 永远去同 reducer。</p>
-<p>可自定义（如 by date range）实现 locality。</p>
-<h4>2. Per-mapper local sort + spill</h4>
-<p>Map output 累积到内存 buffer。达 spill threshold → sort + write disk。Sorting 用 in-place quicksort（per partition）。</p>
-<p>最后 mapper 完成时多个 spill file 需要 merge。</p>
-<h4>3. Sort vs hash shuffle</h4>
-<p><strong>Sort shuffle (Hadoop)</strong>：mapper output 排序 + reducer 接 merge sorted streams。优势：sorted input 让 reducer 同 key 自然 group。劣势：sort 开销大。</p>
-<p><strong>Hash shuffle</strong>：不 sort，按 partition 切分写文件。Reducer 自己 group by key。简单但 reducer 端工作多。</p>
-<p>Spark 早期用 hash，后改 sort（更可扩展）。</p>
-<h4>4. Shuffle service / pull</h4>
-<p>Reducer 主动 pull from mappers。问题：mapper finish 后 reducer 没拉就挂会丢数据。</p>
-<p>解决：</p>
-<ul><li>Mapper output 写本地 disk + commit 到 external shuffle service（Spark 用此）</li><li>Mapper 进程退出后数据还在</li><li>Reducer 任意时刻 pull</li></ul>
-<p>External shuffle service = 中心 daemon per worker box，专门处理 shuffle data 请求。</p>
-<h4>5. Bandwidth optimization</h4>
-<ul><li><strong>Compression</strong>：spill file 用 Snappy / LZ4 压缩 ~2-3x</li><li><strong>Combiner</strong>：在 mapper 本地先做 partial reduce（如 word count 在 map 端就 sum 同 word），减少 shuffle data</li><li><strong>Map-side aggregation</strong>：tree reduce</li></ul>
-<h4>6. Failure handling</h4>
-<ul><li>Mapper task 重试：原 output 失效，重新 spill</li><li>Reducer fetch fail：retry from same mapper or fallback to another replica</li><li>Reducer crash：重启 + re-fetch all mapper output（expensive，所以 mapper 数据要 persist long）</li></ul>
-<h4>7. Skew handling</h4>
-<p>Some key 极不均衡（如 90% data 在 key="" 上）→ 一个 reducer overload。</p>
-<p>Mitigation:</p>
-<ul><li><strong>Salting key</strong>：append random suffix → split to N reducers → final aggregate</li><li><strong>Sampling</strong>：先 sample 找 heavy keys → 给它们专 reducer</li></ul>
-<h4>8. Memory management</h4>
-<p>Reducer pulling 多 mapper data 不能全装内存。<strong>External sort + merge</strong>：buffer 一定量 → spill → merge K-way 流式。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Shuffle type</td><td>Sort shuffle</td><td>Hash：可扩展性差</td></tr><tr><td>Storage</td><td>Local disk + external service</td><td>Memory：OOM</td></tr><tr><td>Compression</td><td>Snappy/LZ4</td><td>None：网络爆</td></tr><tr><td>Combiner</td><td>Yes when associative</td><td>No：浪费</td></tr><tr><td>Skew</td><td>Salting + sampling</td><td>None：straggler</td></tr></tbody></table>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ 不 partition by hash → reducer 收到非聚合 key； ❌ 不 sort → reducer 同 key 不连续； ❌ Mapper 进程退出 data 没 persist → reducer fetch 失败； ❌ 不处理 skew → 1 个 reducer 跑几小时； ❌ Reducer 全装内存 → OOM。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Partition (hash) + sort</strong> by key；(2) <strong>External shuffle service</strong> decoupling mapper / reducer lifecycle；(3) <strong>Skew + memory management</strong> 工程难点。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Spark vs Hadoop shuffle 区别？" → Spark 早期 hash → sort (Tungsten)；in-memory vs disk priority；"如何 streaming shuffle？" → 类似 Flink 的 pipelined exchange，无 spill；"GPU shuffle？" → RAPIDS / GPU MR，shuffle 仍是 disk bottleneck。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>MapReduce</strong></td><td>Google 提的"map → shuffle → reduce"分布式计算模型</td><td>分发问题给工人，最后汇总</td></tr><tr><td><strong>Mapper</strong></td><td>第一阶段的 worker，把 input 切成 (key, value) 对</td><td>流水线第一步：拆零件</td></tr><tr><td><strong>Reducer</strong></td><td>第二阶段的 worker，对同 key 的所有 value 做汇总</td><td>流水线第二步：合并同类</td></tr><tr><td><strong>Shuffle</strong></td><td>Map → Reduce 之间的"数据重新分组"过程</td><td>工厂里把零件按类别送到对应工人</td></tr><tr><td><strong>Partition</strong></td><td>一个 reducer 对应一个 partition；按 hash(key) 决定</td><td>"姓 A 的零件给 1 号工人"</td></tr><tr><td><strong>Combiner</strong></td><td>Mapper 端的 mini-reducer，减少传输量</td><td>工人 1 自己先把同类零件合一遍再发</td></tr><tr><td><strong>Spill</strong></td><td>mapper 内存满了把数据 dump 到本地磁盘</td><td>工人桌子塞满了暂时放到地上</td></tr><tr><td><strong>Skew</strong></td><td>某个 key 特别多 → 某个 reducer 过载</td><td>80% 的零件都是型号 A</td></tr><tr><td><strong>Push shuffle</strong></td><td>mapper 主动推数据到 reducer</td><td>工厂工人主动送货</td></tr><tr><td><strong>Pull shuffle</strong></td><td>reducer 来拉</td><td>下游工人去取</td></tr><tr><td><strong>Hadoop / Spark / Tez</strong></td><td>主流实现框架</td><td>不同工厂的运营方式</td></tr><tr><td><strong>HDFS</strong></td><td>分布式文件系统，input 数据在这</td><td>仓库</td></tr><tr><td><strong>YARN / Mesos</strong></td><td>资源调度器，分配机器给 mapper / reducer</td><td>工厂调度员</td></tr><tr><td><strong>External sort</strong></td><td>内存装不下，借助磁盘排序</td><td>桌面排不下纸张，借助抽屉分组</td></tr><tr><td><strong>Backpressure</strong></td><td>下游处理不过来，让上游降速</td><td>流水线下游堵了，前段停一停</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>MapReduce Shuffler</strong> = 把 N 个 mapper 产生的 (key, value) 对，<strong>按 key 重新分组 + 排序</strong>，分发给 M 个 reducer。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Hadoop MapReduce</strong> —— 原始实现，pull-based shuffle</li><li><strong>Spark Shuffle</strong> —— 后继者，shuffle 优化是 Spark 核心论文之一</li><li><strong>Tez</strong> —— DAG 优化的 MR</li><li><strong>Google Borg / Flume Java</strong> —— Google 内部 MR</li><li><strong>Presto / Trino</strong> —— SQL 引擎也用 shuffle</li></ul>
+<p><strong>为什么这是 STAFF 高频题</strong>：</p>
+<p>Shuffle 是 MR job 的<strong>性能瓶颈</strong>（典型占 50%+ 时间）。考的是：</p>
+<ol><li><strong>Network IO</strong>：N×M 全连接传输，PB 级数据怎么传</li><li><strong>Sort</strong>：reducer 拿到的数据要按 key 排序</li><li><strong>Memory management</strong>：mapper 内存有限，要 spill 到磁盘</li><li><strong>Skew handling</strong>：90% 数据集中在 10% key</li><li><strong>Fault tolerance</strong>：worker 挂了怎么 retry</li><li><strong>Push vs Pull</strong>：根本架构决策</li></ol>
+<p>考 STAFF 关键：<strong>你知道 shuffle 是 MR 的关键瓶颈，而不只是"map → reduce 中间那一步"</strong>。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<ul><li>N 个 mapper 产生 (k, v) 对</li><li>按 <code>partition = hash(k) % M</code> 分发到 M 个 reducer</li><li>每个 reducer 收到的数据按 k 排序</li><li>支持 combiner（mapper 端预聚合）</li><li>支持 secondary sort（按 (k, v) 排序）</li></ul>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th></tr></thead><tbody><tr><td><strong>Throughput</strong></td><td>TB/s aggregate shuffle bandwidth</td></tr><tr><td><strong>Latency</strong></td><td>shuffle 完成时间 &lt; total job 的 30%</td></tr><tr><td><strong>Fault tolerance</strong></td><td>任一 mapper/reducer 挂可 retry</td></tr><tr><td><strong>Scale</strong></td><td>10k mappers × 10k reducers (Google 级)</td></tr><tr><td><strong>Memory</strong></td><td>单 mapper 内存 ≤ 4GB</td></tr><tr><td><strong>Skew</strong></td><td>单 partition 大小不超过 average 10×</td></tr></tbody></table>
+<hr />
+<h3>3. 容量估算</h3>
+<p>假设：</p>
+<ul><li>Input: 100 TB</li><li>10k mappers (each processes 10 GB)</li><li>10k reducers</li><li>Shuffle output 同 input = 100 TB</li></ul>
+<p><strong>Per-mapper output</strong>: 10 GB → 跨 10k reducers = 1 MB / reducer / mapper</p>
+<p><strong>Aggregate shuffle traffic</strong>: 100 TB through N×M connections</p>
+<ul><li>N×M = 10k × 10k = 100M connections (impossible in pull-based)</li><li><strong>必须按 partition 聚合传输</strong></li></ul>
+<p><strong>Network</strong>: 100 TB / 1 hour = 30 GB/s aggregate → 300 nodes × 100 Gbps = 可行</p>
+<p><strong>Disk IO</strong>: mapper 写 spill 文件，reducer 读 = 2× shuffle data = 200 TB local disk</p>
+<hr />
+<h3>4. 高层架构</h3>
+<h4>Step 1: Naive baseline — In-memory shuffle</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Mapper M1 → keeps full output in memory → 直接 push to reducers</code></pre>
+<p><strong>问题</strong>：100 TB / 10k mappers = 10 GB / mapper，<strong>内存装不下</strong> → 必须 spill。</p>
+<h4>Step 2: Disk-based shuffle (Hadoop MR 经典)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Mapper produces output → 写本地 disk (按 partition 分文件)
+Reducer pulls each mapper's partition file</code></pre>
+<p><strong>Mapper side</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">output_buf = [] (in memory, 内存 ≤ 100 MB)
+on (k, v):
+    output_buf.append((partition(k), k, v))
+    if buf full:
+        sort by (partition, k)
+        write to spill file (one file per spill)
+        clear buf
+
+at mapper end:
+    merge all spill files into one final file
+    contains 10k partitions, each sorted by k</code></pre>
+<p><strong>Reducer side</strong>:</p>
+<pre class="language-plaintext"><code class="language-plaintext">for each mapper m:
+    HTTP GET m's partition_R file
+    append to local buffer
+merge-sort all chunks by k
+call reduce(k, [v1, v2, ...]) for each k</code></pre>
+<h4>Step 3: Combiner 减少 shuffle traffic</h4>
+<p><strong>Idea</strong>：mapper 端做"局部 reduce"，减少传输。</p>
+<pre class="language-python"><code class="language-python"># Mapper output before combiner
+("the", 1), ("the", 1), ("the", 1), ("cat", 1)
+
+# After combiner
+("the", 3), ("cat", 1)</code></pre>
+<p><strong>减少 traffic 5-100×</strong>（看 reduce function 的可结合性）。</p>
+<p><strong>条件</strong>：reduce 操作必须 commutative + associative（sum、max、count OK；avg、median 不 OK 直接 combine）。</p>
+<h4>Step 4: Push-based shuffle (Spark / Magnet)</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Hadoop pull: reducer 主动 fetch from N mappers (慢)
+Magnet push: mapper 主动 push to push-merger → reducer 一次拉一个 merged file</code></pre>
+<p><strong>push-merger 角色</strong>：聚合多 mapper 的同 partition 数据，写一个 merged file → reducer 只 fetch 一次。</p>
+<p><strong>优点</strong>：</p>
+<ul><li>N×M HTTP fetch → N + M</li><li>random IO → sequential IO</li><li>减少 reducer 等待时间</li></ul>
+<p><strong>缺点</strong>：</p>
+<ul><li>引入额外 service</li><li>merger 自己会成瓶颈</li></ul>
+<h4>Step 5: Skew Handling</h4>
+<p><strong>问题</strong>：某个 key 占 80% 数据 → 1 个 reducer 过载，其他闲。</p>
+<p><strong>解法</strong>：</p>
+<ol><li><strong>Salting</strong>: 把 hot key 拆 <code>key_v1, key_v2, ..., key_v10</code>，分散到 10 个 reducer。reduce 完再 final merge。</li><li><strong>Sampling + custom partition</strong>: 跑前先采样 detect skew，hot key 单独 partition</li><li><strong>Adaptive splitting</strong> (Tez): 运行期 detect skew，动态拆 partition</li></ol>
+<h4>Step 6: Fault Tolerance</h4>
+<p><strong>Mapper 挂了</strong>: 重跑那个 mapper。Input 是 HDFS immutable file，re-read OK。</p>
+<p><strong>Reducer 挂了</strong>: 重跑 reducer。重新从 N mappers fetch 自己的 partition。<strong>前提</strong>: mapper 的 output 还在 local disk。</p>
+<p><strong>Mapper local disk 挂了</strong>: 那个 mapper 的所有 output 丢，<strong>所有依赖它的 reducer 必须重 trigger 那个 mapper</strong>（Spark 的 lineage 机制）。</p>
+<hr />
+<h3>5. 组件深挖</h3>
+<h4>Deep Dive 1: Sort — External Merge Sort</h4>
+<p>Mapper 内存 100 MB，要 sort 10 GB 数据 → external sort。</p>
+<p><strong>算法</strong>：</p>
+<ol><li>读 100 MB → in-memory quicksort → write spill file (sorted)</li><li>重复，得 100 个 spill files</li><li>K-way merge：100 个 file 各开一个 reader，min-heap 选最小 → 写 final file</li><li>K-way merge 是 O(N log K)，N=数据量，K=spill 数</li></ol>
+<p><strong>优化</strong>：merge 阶段先合并到 √N 个中间文件，再合并到 1 个（two-pass），减少 random IO。</p>
+<h4>Deep Dive 2: Mapper Output Format</h4>
+<p>每个 mapper 产生一个 final file + index：</p>
+<pre class="language-plaintext"><code class="language-plaintext">file: [partition_0_data] [partition_1_data] ... [partition_M-1_data]
+index: [partition_0_offset, partition_0_size]
+       [partition_1_offset, partition_1_size]
+       ...</code></pre>
+<p>Reducer fetch partition_R → 用 index 找 offset → range read 该范围。</p>
+<p><strong>好处</strong>：N mappers × M reducers = N×M fetches, but each is a sequential read → 比 N×M files (Hadoop MR1) 好 100×。</p>
+<h4>Deep Dive 3: Network Optimization</h4>
+<p><strong>问题</strong>：10k mappers × 10k reducers = 100M HTTP connections in worst case。</p>
+<p><strong>优化层次</strong>：</p>
+<ol><li><strong>Connection pooling</strong>：每对 (mapper-host, reducer-host) 维护一个 keep-alive HTTP/2 connection，复用</li><li><strong>Batched fetch</strong>：reducer 一次从一个 host 拉所有 partition (合并多个 mapper)</li><li><strong>Push-based with merger</strong> (Magnet)：跳过这个 N×M 问题</li><li><strong>Compression</strong>：snappy / lz4 mapper output (4-10× 压缩)</li></ol>
+<h4>Deep Dive 4: Memory Management</h4>
+<p>Mapper 内存分配：</p>
+<pre class="language-plaintext"><code class="language-plaintext">| input read buffer (10%) | output buffer (60%) | sort space (20%) | overhead (10%) |
+                                                ↑ JVM heap or off-heap</code></pre>
+<p><strong>Off-heap 优化</strong>：output buffer 用 <code>ByteBuffer.allocateDirect()</code> (Java) 或 <code>mmap</code>，避免 GC pause。</p>
+<p><strong>Spill threshold</strong>：output buffer 占用 80% 时 spill，避免 trigger full GC。</p>
+<h4>Deep Dive 5: Skew Detection + Mitigation</h4>
+<p><strong>Detect</strong>:</p>
+<ul><li>Sample input keys (e.g., reservoir sampling 1% of records)</li><li>Build histogram of partition sizes</li><li>任何 partition &gt; avg × 10 → skew</li></ul>
+<p><strong>Mitigate</strong>:</p>
+<pre class="language-python"><code class="language-python">def handle_skew(key, hot_keys):
+    if key in hot_keys:
+        salt = random.randint(0, 9)
+        emit_key = f"{key}__{salt}"
+    else:
+        emit_key = key
+    return partition(emit_key)</code></pre>
+<p>Reducer 处理 <code>key__0</code> ... <code>key__9</code> → 输出 10 个 partial results → second reduce stage 合 final。</p>
+<p><strong>Spark adaptive</strong>: runtime detect skew → split single partition into N → schedule multiple reducer tasks。</p>
+<h4>Deep Dive 6: Push vs Pull</h4>
+<table class="md-table"><thead><tr><th>Aspect</th><th>Pull (Hadoop)</th><th>Push (Magnet)</th></tr></thead><tbody><tr><td>Connections</td><td>N×M</td><td>N + M</td></tr><tr><td>Random IO</td><td>many small reads</td><td>sequential reads</td></tr><tr><td>Reducer latency</td><td>wait for slowest mapper</td><td>mostly already merged</td></tr><tr><td>Implementation</td><td>simpler</td><td>needs push-merger service</td></tr><tr><td>Failure</td><td>re-fetch from mapper</td><td>merger has data, simpler</td></tr></tbody></table>
+<p><strong>STAFF 答</strong>：选 push-based。push-merger 跑在每个 cluster node，merge 同 partition data。Reducer 只 fetch merged。Spark 3.1+ 默认是 push shuffle。</p>
+<h4>Deep Dive 7: Combiner Trade-off</h4>
+<p><strong>Combiner 提速 5-100×</strong>，但有坑：</p>
+<ul><li><strong>非 commutative</strong>：count、sum OK；median 不行</li><li><strong>CPU 开销</strong>：mapper 自己 reduce 占 CPU，如果 reduce 廉价（如 count），net 加速</li><li><strong>Memory</strong>：combine 需要额外 hash map 存中间结果</li></ul>
+<p><strong>实战</strong>：写 word count 必加 combiner；写复杂 aggregation 想清楚再加。</p>
+<hr />
+<h3>6. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清 + NFR（强调 shuffle 是 bottleneck）</td></tr><tr><td>5-10min</td><td>容量估算（10k×10k mappers/reducers, 100 TB data）</td></tr><tr><td>10-20min</td><td>高层架构 step 1→6（spill / combiner / push）</td></tr><tr><td>20-35min</td><td>Deep dives: sort / network / memory / skew</td></tr><tr><td>35-45min</td><td>fault tolerance / push vs pull</td></tr></tbody></table>
+<hr />
+<h3>7. 样板讲解稿</h3>
+<blockquote><p>MapReduce Shuffler 是 MR job 50%+ 时间花费的地方。我会讲 Hadoop pull-based shuffle，演进到 Spark/Magnet push-based。</p>
+<p><strong>演进</strong>：</p>
+<ol><li>单 mapper 内存写不下 10GB → <strong>disk-based shuffle</strong>：mapper 写 sorted spill file per partition</li><li>N×M 个 small file fetch 太慢 → mapper 写 <strong>single file + index</strong>：N×M connections each is sequential read</li><li>数据量大 → <strong>combiner</strong> 减少 traffic 5-100×（前提：commutative + associative）</li><li>N×M 还是太多 connections → <strong>push-based shuffle</strong>（Magnet）：mapper push to push-merger，merger 合并同 partition，reducer 一次拉一个</li><li>Skew 单 reducer 过载 → <strong>salt key</strong>（拆 hot key into key_v1..v10）+ runtime adaptive split</li></ol>
+<p><strong>Deep dives</strong>：</p>
+<ul><li>External sort: in-memory quicksort + k-way merge</li><li>Network: connection pooling + HTTP/2 + compression + push-merger</li><li>Memory: off-heap + spill threshold</li><li>Skew: sampling + salt + adaptive split</li><li>Fault: mapper retry (input immutable) + lineage for cascade re-trigger</li></ul>
+<p>Scale: 10k mappers × 10k reducers, 100 TB shuffle data, 30 GB/s aggregate network.</p></blockquote>
+<hr />
+<h3>8. Follow-up Q&amp;A</h3>
+<h4>Q1: "如果一个 mapper 慢（straggler），怎么办？"</h4>
+<p><strong>A</strong>：<strong>Speculative execution</strong>。MR framework detect 慢 mapper (比 median 慢 1.5×) → 重跑同 task 在另一台机器，谁先完用谁。Hadoop / Spark 都有。</p>
+<h4>Q2: "Reducer 等所有 mapper 都完成才能开始吗？"</h4>
+<p><strong>A</strong>：<strong>不一定</strong>。Hadoop 默认 reducer 在 5% mappers 完成时就开始 fetch（partial shuffle），但 reduce phase 必须等所有 mapper done（因为按 key sort 需要完整数据）。Push-based: reducer 等 merger 完成 indicator。</p>
+<h4>Q3: "Combine 一定能加速吗？"</h4>
+<p><strong>A</strong>：不一定。如果数据 distribution 平均（每 key 只有 1 个 value），combine 是 no-op + 浪费 CPU。<strong>只在 reduce 是 sum/count/max 这种 aggregation 时显著加速</strong>。</p>
+<h4>Q4: "Mapper local disk 挂了，10 个 reducer 都依赖它的数据，怎么办？"</h4>
+<p><strong>A</strong>：触发 <strong>cascade re-trigger</strong>：重跑那个 mapper（Spark 的 lineage 机制），然后 10 个 reducer 重新 fetch。代价高，所以 mapper output 通常用 <strong>replication</strong> (Spark <code>spark.shuffle.replication=2</code>) 或 <strong>shuffle service</strong>（独立 storage layer, e.g., Apache Uniffle）。</p>
+<h4>Q5: "10k reducers 都打到一个 mapper host fetch，host 网络爆了。"</h4>
+<p><strong>A</strong>：<strong>Throttling</strong>：mapper host 限制并发 outgoing fetch (e.g., 64)。Reducer 实现 retry with backoff。Push-based: merger 提前打散 traffic（merger 跑在多 host）。</p>
+<h4>Q6: "怎么测试 shuffle 性能？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>Sort benchmark</strong>：跑 TeraSort，衡量 1TB 排序时间</li><li><strong>Skew test</strong>：人工注入 hot key，看是否 detect + mitigate</li><li><strong>Failure injection</strong>：kill mapper / reducer mid-job</li><li><strong>Network bisection bandwidth</strong>：iperf3 全连接打满</li></ol>
+<h4>Q7: "Spark 比 Hadoop MR 快 10×，shuffle 上有什么改进？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li><strong>In-memory shuffle</strong>：尽量在内存而非 disk</li><li><strong>Push-based shuffle (Magnet)</strong>：减少 N×M connections</li><li><strong>DAG optimization</strong>：避免不必要的 shuffle</li><li><strong>Predicate pushdown</strong>：filter 提前到 mapper 减少 shuffle 量</li><li><strong>Adaptive query execution (AQE)</strong>：runtime adjust partitions</li></ol>
+<hr />
+<h3>9. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>忽略 skew</strong> → 答案不完整，STAFF 必扣分</li><li><strong>以为 mapper output 全在内存</strong> → 暴露你没真做过大数据</li><li><strong>N×M HTTP requests 当默认</strong> → 没意识到 connection 爆炸</li><li><strong>Combiner 当作必选</strong> → 没说前提条件</li><li><strong>不分 push vs pull</strong> → 不知道 industry 演进</li><li><strong>Fault tolerance 只说 retry</strong> → 没说 mapper output 丢的 cascade</li><li><strong>没考虑 sort 用 external merge</strong> → 暴露算法基础</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Push-based shuffle (Magnet)</strong>：体现你跟得上 industry</li><li><strong>Salt key for skew</strong> 代码级写出来</li><li><strong>External k-way merge sort</strong> 讲细节</li><li><strong>Off-heap memory</strong> 避 GC pause</li><li><strong>Speculative execution</strong> for stragglers</li><li><strong>Compression</strong> (snappy/lz4) 量化压缩比</li><li><strong>Shuffle service</strong> (Apache Uniffle / Magnet) 知道前沿</li></ol>
+<div class="callout callout-key"><strong>核心要点</strong><p>STAFF vs SENIOR：SENIOR 说"shuffle 把 mapper output 传给 reducer"；STAFF 说"Hadoop pull 是 N×M，Spark Magnet push-based 减到 N+M，对吞吐 5-10× 提升"。</p></div>
+<hr />
+<h3>10. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">架构 (Hadoop MR1 → Magnet):
+  1. Mapper output 写本地 sorted file per partition
+  2. Mapper 内存满了 spill → external k-way merge
+  3. Combiner 减少 traffic 5-100×
+  4. Push-based shuffle 减少 N×M connection 爆炸
+  5. Salt key + adaptive split 应对 skew
+  6. Speculative execution 处理 straggler
+
+Sort:
+  - In-memory quicksort + k-way merge
+  - Two-pass: 100 spill → √N intermediate → 1 final
+
+Network:
+  - HTTP/2 keep-alive
+  - Connection pool
+  - snappy/lz4 compression (4-10×)
+  - Push-merger 跑在每个 host
+
+Memory:
+  - 100MB output buffer
+  - Off-heap ByteBuffer
+  - 80% threshold for spill
+
+Skew:
+  - Sample 1% records → histogram
+  - Salt hot key: key__0..9
+  - Adaptive partition split
+
+Fault Tolerance:
+  - Mapper retry (input immutable)
+  - Cascade re-trigger if local disk lost
+  - Shuffle service (Uniffle / Magnet) for durability
+
+数字:
+  - 10k mappers × 10k reducers
+  - 100 TB shuffle data
+  - 30 GB/s aggregate network
+  - 1 TB sort target time (TeraSort)</code></pre>
   </section>
 
   
@@ -108,7 +257,8 @@ Final output</code></pre>
     <a href="cmhi1hhbh05wt08ad2knqdyh2.html">Design CoderPad →</a>
   </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="../assets/prism/prism-core.min.js"></script>
+<script src="../assets/prism/prism-autoloader.min.js"></script>
+<script>if(window.Prism)Prism.plugins.autoloader.languages_path='../assets/prism/components/';</script>
 </body>
 </html>

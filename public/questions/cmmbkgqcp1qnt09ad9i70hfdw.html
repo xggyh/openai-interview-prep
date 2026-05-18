@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Design a smart alarm system · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v=2f582d51">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+<link rel="stylesheet" href="../assets/prism/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
@@ -17,6 +17,10 @@
 <main class="container detail">
   <div class="breadcrumb"><a href="../index.html">所有题目</a> / System Design / Design a smart alarm system</div>
   <h1>Design a smart alarm system</h1>
+  <div class="deep-banner">
+    <span class="deep-badge-large">📚 教学版深度讲解</span>
+    <span class="deep-banner-text">这道题已重写为新手友好的完整教学版：含概念铺垫、需求拆解、容量估算、架构 step-by-step 推演、组件深挖、45 分钟面试节奏、样板讲解稿、Follow-up Q&amp;A、易错点 + 加分项。约 600 行。</span>
+  </div>
   <div class="header-meta">
     <span class="tag tag-system-design">System Design</span>
     <span class="tag tag-level">Staff</span>
@@ -31,71 +35,208 @@
 
   <section class="section">
     <h2>我的思路与解法</h2>
-    <h3>题目本质</h3>
-<p>设计 <strong>Smart Alarm System</strong>：用户 set alarm（time + 设备 + repeat），到点触发：声音 / 通知 / 设备动作（智能家居）。支持 voice ("Alexa set alarm for 7AM")。</p>
-<h3>需求</h3>
-<ul><li>100M users，每用户多个 alarm</li><li>准确性：&lt; 5 秒精度</li><li>跨时区 / DST</li><li>多设备 sync（同 alarm 跨手机 + 智能音箱）</li></ul>
-<h3>整体架构</h3>
-<div class="ascii-diagram">   User device
-       │ create / update alarm
-       ▼
-  ┌──────────────┐
-  │ Alarm API    │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Alarm DB     │  Postgres / Spanner
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Scheduler    │  computes next fire times
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │ Time Wheel   │  min-heap of (fire_at, alarm_id)
-  └──────┬───────┘
-         │ when due
-         ▼
-  ┌──────────────────┐
-  │ Trigger Worker   │  → device push (FCM / APN)
-  └──────┬───────────┘  → smart home (IFTTT / Matter)
-         │
-         ▼
-   Devices ring</div>
-<h3>核心组件</h3>
-<h4>1. Time wheel / 调度</h4>
-<p>100M alarms，每秒可能千个 fire。<strong>Min-heap of (next_fire_ts, alarm_id)</strong> 由 worker poll。</p>
-<p>或更高效：<strong>hash wheel</strong> —— 把时间分成 buckets (e.g. per-second slot)，alarm 放到 slot。Worker tick 当前 second 取出该 bucket。O(1) per alarm。</p>
-<h4>2. Timezone + DST</h4>
-<p>Alarm 存 <code>(time_of_day_local, timezone, recurrence_rule)</code>。Scheduler 每天 0:00 (UTC) 重算每 user 当天的 alarm UTC fire times，写入 time wheel。</p>
-<p>DST transition：scheduler 处理（"7AM local" 在 DST 前后 UTC 差 1 小时）。</p>
-<h4>3. Recurrence</h4>
-<p>Recurrence rule（RFC 5545 iCalendar 标准）：</p>
-<ul><li>"Daily 7AM"</li><li>"Weekdays 8AM"</li><li>"Every Mon/Wed/Fri 9AM"</li></ul>
-<p>Library：python-dateutil rrule。</p>
-<h4>4. Multi-device sync</h4>
-<p>Alarm 属于 user，不属于 device。User 所有 device 都 subscribe alarm events via push notification。</p>
-<p>第一个响应的 device 标记 "dismissed"，其他 device 收到 dismiss event 停 ring。</p>
-<h4>5. Snooze</h4>
-<p><code>dismiss</code> vs <code>snooze</code>：snooze 创建临时 alarm 5 / 10 分钟后。临时 alarm 不写主 DB（in-memory 状态足够）。</p>
-<h4>6. Voice integration</h4>
-<p>"Alexa set alarm 7AM" → NLU 提取 (time, recurrence, label) → POST /alarms。同样 API path。</p>
-<h4>7. Edge case：离线 device</h4>
-<p>Device 离线时 push 失败。三种策略：</p>
-<ul><li>Device 端本地 cached alarms：online 时 sync，offline 时本地触发</li><li>Re-push when device online</li><li>Multiple device fallback：手机离线但音箱在线 → 音箱响</li></ul>
-<h4>8. 智能家居动作</h4>
-<p>Alarm 触发不只是 ring。可配联动：</p>
-<ul><li>"Wake up alarm": ring + lights on (智能灯泡 API) + curtain open</li><li>Matter / Home Assistant 协议</li></ul>
-<p>每 alarm 关联 action list。</p>
-<h3>取舍</h3>
-<table class="md-table"><thead><tr><th>决策</th><th>选择</th><th>替代</th></tr></thead><tbody><tr><td>Scheduler</td><td>Hash time wheel</td><td>Pure heap：log N</td></tr><tr><td>Recurrence</td><td>RRule (RFC 5545)</td><td>Ad-hoc：怪规则难处理</td></tr><tr><td>TZ</td><td>Re-compute daily</td><td>Live compute：fire 时算复杂</td></tr><tr><td>Sync</td><td>Server-driven event</td><td>Device-only：sync 难</td></tr><tr><td>Offline</td><td>Device cache + sync</td><td>服务器 only：离线失败</td></tr></tbody></table>
-<h3>易错点</h3>
-<div class="callout callout-pitfall"><strong>易错点 / Red Flag</strong><p>❌ Alarm time 存 UTC 不考虑 TZ → DST 引起 1h 偏； ❌ Snooze 写主 DB → 每分钟很多写； ❌ Device 离线没本地 cache → alarm 不响； ❌ Recurrence 自己实现 → 复杂 case 出 bug，用 rrule； ❌ Multi-device 不同步 dismiss → 一个 dismiss 其他还响。</p></div>
-<div class="callout callout-key"><strong>核心要点</strong><p>三大要点：(1) <strong>Hash time wheel</strong> 处理百万 alarm；(2) <strong>Local TZ + recurrence 拆解到 UTC</strong> 处理 DST；(3) <strong>Device 本地 cache + server sync</strong> 处理离线。</p></div>
-<div class="callout callout-followup"><strong>延伸 / Follow-up</strong><p>"Alarm 触发 voice 助手 reply？" → 加 voice prompt 元数据；"如何处理 dst non-existent time (2:30 AM not occurring)？" → fall back to next valid time；"如何防止系统 outage 时漏 fire？" → ack-based delivery + retry；"实时 share alarm 给家人？" → group alarm + multi-user notifications。</p></div>
+    <h3>0. 在开始之前 — 你需要知道的概念</h3>
+<table class="md-table"><thead><tr><th>名词</th><th>一句话解释</th><th>类比</th></tr></thead><tbody><tr><td><strong>Smart alarm</strong></td><td>跨设备的闹钟 —— 在手机/手表/智能音箱任一设备设置都生效</td><td>老板让全公司任一秘书都能改你的日程</td></tr><tr><td><strong>Effective device</strong></td><td>实际响铃的那台设备（不是全部都响）</td><td>多个秘书，但只有"主秘书"打电话叫醒你</td></tr><tr><td><strong>Push notification</strong></td><td>服务器主动推到设备的消息（不用 client poll）</td><td>邮局上门派件</td></tr><tr><td><strong>APNs / FCM</strong></td><td>Apple / Google 的官方 push 通道</td><td>邮局</td></tr><tr><td><strong>Wake lock / wakeup alarm</strong></td><td>OS 级"到时间叫醒"机制，省电关键</td><td>闹钟物理按键</td></tr><tr><td><strong>Offline-first</strong></td><td>设备没网也能用，网络恢复后同步</td><td>离线模式做笔记</td></tr><tr><td><strong>CRDT</strong></td><td>一种数据结构，多端各自改、自动 merge 到一致</td><td>多人协同编辑文档无冲突</td></tr><tr><td><strong>Eventual consistency</strong></td><td>最终一致，中间可能 lag 几秒</td><td>改完文件几秒后所有人看到</td></tr><tr><td><strong>Idempotent operation</strong></td><td>操作可重复执行，结果不变</td><td>按 N 次电梯按钮 = 按 1 次</td></tr><tr><td><strong>Time zone</strong></td><td>时区，user 7AM 本地 ≠ server UTC 7AM</td><td>北京 8AM = 纽约前一天 8PM</td></tr><tr><td><strong>DST (Daylight Saving Time)</strong></td><td>夏令时切换，时钟跳 1 小时</td><td>时钟突然往前/后跳</td></tr><tr><td><strong>Heartbeat</strong></td><td>设备定期上报"我活着"，server 用来判断 device 在线</td><td>哨兵每 30 秒报平安</td></tr><tr><td><strong>Geofencing</strong></td><td>基于位置触发（在某区域内/外 → 动作）</td><td>"进入公司大门就静音"</td></tr></tbody></table>
+<hr />
+<h3>1. 题目本质</h3>
+<p><strong>Smart Alarm System</strong> = 跨设备闹钟服务，<strong>任一设备 set/edit/delete，按规则只在指定设备响铃</strong>。</p>
+<p><strong>典型产品</strong>：</p>
+<ul><li><strong>Apple Clock</strong> —— iPhone / Watch / HomePod / Mac 同步</li><li><strong>Google Clock</strong> —— Android / Nest / Pixel Watch</li><li><strong>Alexa alarms</strong> —— Echo / phone app 同步</li><li><strong>Sleep cycle apps</strong> —— 配合智能手环 / 手表</li></ul>
+<p><strong>为什么这是 STAFF 题</strong>：</p>
+<p>不是"做闹钟"那么简单。考的是：</p>
+<ol><li><strong>Multi-device sync</strong>：1 个 user 5 个 device，全部要看到一致的 alarm 列表</li><li><strong>Selective trigger</strong>：5 个 device 都收到 alarm，但只一个响（如何决定？）</li><li><strong>Offline-first</strong>：手表没网时设了 alarm，还能响吗？</li><li><strong>时间精确性</strong>：alarm 7:00 必须 ±1 秒内响，不能 5 分钟才响</li><li><strong>跨时区 + DST</strong>：用户出差怎么办？</li></ol>
+<p>考 STAFF 关键：<strong>multi-device consistency + push timing</strong> 的组合 trade-off。</p>
+<hr />
+<h3>2. 需求拆解</h3>
+<h4>Functional</h4>
+<table class="md-table"><thead><tr><th>API</th><th>含义</th></tr></thead><tbody><tr><td><code>CreateAlarm(user, time, label, repeat?, effective_device?) -&gt; alarm_id</code></td><td>创建 alarm</td></tr><tr><td><code>UpdateAlarm(alarm_id, ...)</code></td><td>改 alarm</td></tr><tr><td><code>DeleteAlarm(alarm_id)</code></td><td>删 alarm</td></tr><tr><td><code>ListAlarms(user) -&gt; alarm[]</code></td><td>列所有</td></tr><tr><td><code>Snooze(alarm_id, duration)</code></td><td>推迟</td></tr><tr><td><code>Dismiss(alarm_id)</code></td><td>关掉响铃</td></tr><tr><td><code>RegisterDevice(user, device_id, type, capabilities)</code></td><td>设备注册</td></tr></tbody></table>
+<p><strong>澄清要点</strong>：</p>
+<ul><li>一次性 vs 重复（每周一 7AM）？支持哪些 repeat pattern？</li><li>是 server-side 触发还是 client-side 触发？(关键决策)</li><li>Effective device 怎么选？自动还是手动？</li><li>是否要 voice control / geofence triggers？</li></ul>
+<h4>Non-functional</h4>
+<table class="md-table"><thead><tr><th>维度</th><th>目标</th><th>为什么</th></tr></thead><tbody><tr><td><strong>触发精度</strong></td><td>±1 秒</td><td>7:00 响在 7:00:05 用户能接受，7:05 不行</td></tr><tr><td><strong>Sync 延迟</strong></td><td>&lt; 5s 跨设备</td><td>用户改了应该马上同步</td></tr><tr><td><strong>Offline 工作</strong></td><td>必须支持</td><td>飞机模式也要响</td></tr><tr><td><strong>Scale</strong></td><td>100M users × 5 devices × 5 alarms = 2.5B alarms</td><td>量不大但 trigger 频繁</td></tr><tr><td><strong>Availability</strong></td><td>99.95%</td><td>闹钟不响是严重问题</td></tr><tr><td><strong>Consistency</strong></td><td>eventual</td><td>没必要 strong</td></tr></tbody></table>
+<div class="callout callout-key"><strong>核心要点</strong><p>这道题没有海量数据，但<strong>precise timing + multi-device sync</strong> 是真核心。别被量级误导。</p></div>
+<hr />
+<h3>3. 容量估算</h3>
+<ul><li><strong>Users</strong>: 100M active</li><li><strong>Devices/user</strong>: 平均 3 (phone + watch + speaker)</li><li><strong>Alarms/user</strong>: 平均 5</li><li><strong>Total alarms</strong>: 500M active alarms</li><li><strong>Trigger rate</strong>: 早 7-8 AM peak，假设 30% users 同时段 → 30M alarms in 1 hour → <strong>10k triggers/sec peak</strong></li><li><strong>Edit rate</strong>: 100M edits/day → ~1200 QPS sustained</li></ul>
+<p><strong>存储</strong>：500M alarms × 200 B = 100 GB → 单机能装，主要瓶颈是 trigger fan-out。</p>
+<hr />
+<h3>4. 关键设计决策：Server-side vs Client-side trigger</h3>
+<p>这道题的核心 trade-off。</p>
+<h4>Option A: Server-side trigger</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Server 维护 alarm 的"下次触发时间"队列
+   → 到点 server 发 push notification 到 effective device
+   → device 收到 push → 响</code></pre>
+<p><strong>优点</strong>：</p>
+<ul><li>容易做 multi-device 选 effective device 逻辑（server 决策）</li><li>alarm 改了立即生效（server 重算）</li></ul>
+<p><strong>缺点</strong>：</p>
+<ul><li><strong>离线设备收不到 push</strong> → alarm 不响（飞机模式致命）</li><li>Server 必须 100% 可用</li><li>Push 延迟波动（APNs/FCM 99% &lt; 5s, p99 偶尔 30s）</li></ul>
+<h4>Option B: Client-side trigger</h4>
+<pre class="language-plaintext"><code class="language-plaintext">Device 本地存 alarm，OS 级 wakeup alarm 到点响
+Server 只做"sync alarm 数据"的角色</code></pre>
+<p><strong>优点</strong>：</p>
+<ul><li><strong>离线也响</strong>（OS 闹钟物理 alarm）</li><li>触发精确（OS 级 ±10ms）</li><li>Server 挂了不影响触发</li></ul>
+<p><strong>缺点</strong>：</p>
+<ul><li>5 个 device 都本地存 alarm → <strong>谁响</strong>是难题</li><li>Sync delay 期间设备数据不一致</li></ul>
+<h4>Option C: Hybrid（推荐）</h4>
+<p><strong>Client-side 是 source of truth for triggering，server-side 是 sync engine + tie-breaker。</strong></p>
+<ul><li>Alarm 数据<strong>全部本地存 + 设 OS wakeup alarm</strong></li><li>Server 仅负责<strong>sync 状态 across devices</strong> + <strong>决定 effective device</strong></li><li>离线设备照样响（OS 级）</li><li>Effective device 选举走 server，离线时 fallback 到"hierarchy"（手表 &gt; 手机 &gt; 音箱）</li></ul>
+<div class="callout callout-key"><strong>核心要点</strong><p>这是 Apple Clock 的真实设计：alarm 全 sync 到所有 device，每个 device 本地 schedule OS alarm，effective device 通过 iCloud 协调。</p></div>
+<hr />
+<h3>5. 高层架构</h3>
+<pre class="language-plaintext"><code class="language-plaintext">┌───────────────────────────────────────────────────┐
+│  Device (phone/watch/speaker)                      │
+│   - Local alarm DB                                 │
+│   - OS-level wakeup alarm scheduler                │
+│   - WebSocket connection (sync)                    │
+└───────────────────────────────────────────────────┘
+                │ sync ops
+                ↓
+┌───────────────────────────────────────────────────┐
+│  Sync Service (server)                             │
+│   - WebSocket fan-out                              │
+│   - Conflict resolution (LWW or CRDT)              │
+└───────────────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────┐
+│  Alarm DB (Spanner / DynamoDB)                     │
+│  Schema: alarm_id, user_id, time, label, repeat,   │
+│          effective_device, version, updated_at     │
+└───────────────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────┐
+│  Trigger Service (backup, server-side fallback)    │
+│   - Timer queue (Redis ZSET by trigger_time)       │
+│   - Send push at trigger time                      │
+│   - Only fires if device hasn't ack'd local fire   │
+└───────────────────────────────────────────────────┘</code></pre>
+<h4>Step 1: Device sync</h4>
+<ul><li>Device 启动 / alarm 改时 → WebSocket 推到 sync service</li><li>Sync service 写 DB → fan-out 到 user 的其他 devices</li><li>Devices 收到后本地写 + reschedule OS alarm</li></ul>
+<h4>Step 2: Trigger</h4>
+<ul><li><strong>Primary path</strong>: 设备本地 OS alarm 到时间响</li><li><strong>Backup path</strong>: server timer 也到点，发 push（防止 device 本地 schedule 失败）</li><li>Device 响后 ack server，server 取消 backup push</li></ul>
+<h4>Step 3: Effective device selection</h4>
+<ul><li>User 配置规则（"卧室 HomePod 优先，其次手表，其次手机"）</li><li>Server-side：基于 device 在线状态 + 用户偏好 + recent activity</li><li>选中 device 拿到 <code>effective=true</code> flag，其他设为 <code>effective=false</code>（不响）</li><li><strong>Offline fallback</strong>：sync 中断时 device 按本地配置 fallback hierarchy</li></ul>
+<hr />
+<h3>6. 组件深挖</h3>
+<h4>Deep Dive 1: 触发精度</h4>
+<p><strong>Server-side 用 timer queue</strong>：</p>
+<ul><li>Redis ZSET: <code>score = unix_timestamp_ms, member = alarm_id</code></li><li>后台 worker 每 100ms 扫一次 <code>ZRANGEBYSCORE</code> 过期的 → 发 push</li><li>触发后 <code>ZREM</code></li></ul>
+<p><strong>Client-side</strong>：</p>
+<ul><li>iOS <code>UNUserNotificationCenter.scheduleNotification(at: time)</code></li><li>Android <code>AlarmManager.setExactAndAllowWhileIdle(...)</code> (Doze mode 也响)</li><li>Watch app 用 Watch OS API 设本地 alarm</li></ul>
+<p><strong>精度</strong>：</p>
+<ul><li>Client OS-level ±10 ms (excellent)</li><li>Server push 端到端 p99 &lt; 5s (不够，所以必须 client-side primary)</li></ul>
+<h4>Deep Dive 2: Multi-device Sync — CRDT vs LWW</h4>
+<p><strong>问题</strong>：手机 set alarm 7:00, watch set alarm 7:30，<strong>同时</strong>操作同一 alarm → 用谁的？</p>
+<p><strong>Option A: Last-Write-Wins (LWW)</strong></p>
+<ul><li>每次写带 timestamp，按 timestamp 选大的</li><li>简单，但<strong>时钟漂移</strong>会丢数据</li></ul>
+<p><strong>Option B: CRDT (LWW-Register or OR-Map)</strong></p>
+<ul><li>LWW-Register: 同 LWW 但 timestamp 是 vector clock</li><li>OR-Map: alarm 字段级 merge</li></ul>
+<p><strong>Option C: User-driven conflict resolution</strong></p>
+<ul><li>检测冲突 → 弹窗让用户选</li></ul>
+<p><strong>STAFF 答</strong>：LWW with hybrid logical clock（Spanner-style，HLC = wall clock + counter），简单 + 防时钟回退。冲突极少（同一用户同 alarm 双端同时编辑），用户可接受。</p>
+<h4>Deep Dive 3: Time Zone + DST</h4>
+<p><strong>问题</strong>：alarm 设 7:00 (Beijing)，user 飞到 NYC：响 NYC 7:00 还是 Beijing 7:00？</p>
+<p><strong>两种存储模型</strong>：</p>
+<table class="md-table"><thead><tr><th>模型</th><th>含义</th><th>何时用</th></tr></thead><tbody><tr><td><strong>Absolute time</strong></td><td>存 UTC unix timestamp</td><td>"明天 早上的会议 6AM ET" → 用户飞了也是 ET 6AM</td></tr><tr><td><strong>Wall-clock time</strong></td><td>存 "7:00 + TZ name"</td><td>"每天起床闹钟" → 用户飞了也是当地 7AM</td></tr></tbody></table>
+<p><strong>Apple Clock 默认</strong>：Wall-clock + device 当前 TZ → user 飞 NYC 自动 NYC 7AM 响。</p>
+<p><strong>DST</strong>：用 IANA TZ database（"America/New_York"），自动处理 DST 跳变。<strong>不要用 offset (UTC-5)</strong>，DST 时会错。</p>
+<h4>Deep Dive 4: Offline Mode</h4>
+<p><strong>飞机模式下 set alarm</strong>：</p>
+<ul><li>Device 本地写 → 本地 schedule OS alarm</li><li>标记 "pending sync"</li><li>网络恢复 → push 到 server</li></ul>
+<p><strong>Server 挂了 device 也能响</strong>：因为 OS-level alarm 本地驱动。</p>
+<p><strong>反向</strong>：飞机模式下其他 device 改了 alarm，本机收不到 → 醒来 sync 后看到。<strong>eventual consistency 可接受</strong>。</p>
+<h4>Deep Dive 5: Effective Device Selection</h4>
+<p><strong>规则引擎</strong>：</p>
+<pre class="language-python"><code class="language-python">def select_effective_device(user, alarm):
+    devices = get_online_devices(user)
+    if alarm.preferred_device in devices:
+        return alarm.preferred_device
+    # Fallback hierarchy from user prefs
+    for kind in user.hierarchy:  # ["watch", "phone", "speaker"]
+        match = next((d for d in devices if d.kind == kind), None)
+        if match: return match
+    return devices[0]  # any</code></pre>
+<p><strong>Offline scenario</strong>：alarm 时所有 device 离线 → 不响（or 后续 device 上线 → late notification？取决于产品决策，闹钟通常不补发）。</p>
+<h4>Deep Dive 6: Snooze / Dismiss Multi-device</h4>
+<p><strong>问题</strong>：手机响了，user 在手机按 dismiss，<strong>手表也在响</strong>怎么办？</p>
+<p><strong>解法</strong>：dismiss/snooze 操作通过 WebSocket <strong>立即广播</strong>到所有 device → 其他 device 也停。</p>
+<p><strong>Race condition</strong>：手机 dismiss 同时手表 dismiss → 都 OK，操作 idempotent。</p>
+<p><strong>Network 中断</strong>：手机 dismiss 但 sync 失败 → 手表继续响 → user 在手表也 dismiss → 后续 sync 重发 dismiss → idempotent，安全。</p>
+<h4>Deep Dive 7: Battery Optimization</h4>
+<p><strong>问题</strong>：手表 / 手机一直 maintain WebSocket → 耗电。</p>
+<p><strong>解法</strong>：</p>
+<ul><li><strong>APNs/FCM push</strong> 唤醒：常规情况下连接 sleep，server 通过 push 唤醒</li><li><strong>Heartbeat 间隔自适应</strong>：插电时 30s，电池低时 5min</li><li><strong>Wakeup alarm</strong> 是 OS 级，不需要 app 后台运行（关键省电）</li></ul>
+<hr />
+<h3>7. 45 分钟节奏</h3>
+<table class="md-table"><thead><tr><th>时间</th><th>阶段</th></tr></thead><tbody><tr><td>0-5min</td><td>澄清：server vs client trigger，how many devices, what alarm features</td></tr><tr><td>5-10min</td><td>容量估算（500M alarms, 10k trigger QPS peak）</td></tr><tr><td>10-15min</td><td>API + schema</td></tr><tr><td>15-25min</td><td>高层架构：hybrid trigger (client primary + server backup) + sync service</td></tr><tr><td>25-40min</td><td>Deep dives: timing precision / CRDT or LWW / time zones / offline / effective device</td></tr><tr><td>40-45min</td><td>battery / DST edge cases</td></tr></tbody></table>
+<hr />
+<h3>8. 样板讲解稿</h3>
+<blockquote><p>Smart alarm 看似简单但有 4 个真正难点：multi-device sync, <strong>selective trigger</strong>, offline 友好, time zone/DST.</p>
+<p>我的核心架构决策：<strong>client-side primary + server-side backup</strong>：</p>
+<ul><li>alarm 全 sync 到所有 device，每个 device 本地 schedule OS-level wakeup alarm（精度 ±10ms，OS 级，省电）</li><li>server 同时也存 alarm，timer queue 到点发 push 作为兜底</li><li>这样离线设备照样响（OS 闹钟物理 alarm 驱动），server 挂了不影响</li></ul>
+<p><strong>Multi-device sync</strong>：WebSocket fan-out，LWW with HLC (hybrid logical clock) 解冲突。冲突极少（同一 user 双端同时编辑同 alarm），LWW 够用。</p>
+<p><strong>Effective device</strong>：用户偏好 hierarchy + 在线状态。Server-side 计算后下发 effective flag 给指定 device。</p>
+<p><strong>Time zone</strong>：默认 wall-clock + IANA TZ name（不是 UTC offset），自动处理 DST 跳变和跨时区。</p>
+<p><strong>Offline</strong>：所有写本地优先 + 标 pending sync，网络恢复后 push。Server-side fallback 处理"5 device 都离线了 alarm 不响"的极端情况通过 OS-level reschedule。</p>
+<p>Scale：500M alarms 100GB 单机能装；trigger 高峰 10k QPS 普通 timer queue 能扛。</p></blockquote>
+<hr />
+<h3>9. Follow-up Q&amp;A</h3>
+<h4>Q1: "如果 server 挂了 30 分钟，会不会有 alarm 不响？"</h4>
+<p><strong>A</strong>：<strong>不会</strong>。Client-side OS alarm 是 source of truth for triggering，server 只是 sync 通道。Server 挂了用户只是没法在 30 分钟内同步新 alarm，已设的本地照响。</p>
+<h4>Q2: "用户在两台手机同时改同 alarm 不同 time，怎么解决？"</h4>
+<p><strong>A</strong>：LWW with HLC timestamp。后写的赢。极少 case，用户可见两端最终一致后改最新值。如果业务要严格冲突检测，加 version field + conflict UI。</p>
+<h4>Q3: "用户飞到 NYC，闹钟应该响北京 7AM 还是 NYC 7AM？"</h4>
+<p><strong>A</strong>：取决于 alarm 类型：</p>
+<ul><li>"Daily wake-up" → wall-clock + device current TZ → NYC 7AM</li><li>"Meeting reminder, this Friday 9AM ET" → absolute UTC → 仍是 ET 9AM 不变</li></ul>
+<p><strong>默认 wall-clock</strong>（最常见 use case）。</p>
+<h4>Q4: "Watch 没网时设 alarm，会响吗？"</h4>
+<p><strong>A</strong>：会。watchOS 本地有 AlarmKit，能本地 schedule OS alarm，不依赖 server。下次上网时 sync 到其他 device。</p>
+<h4>Q5: "10M users 同时 7AM 响铃，server 端 push 怎么扛？"</h4>
+<p><strong>A</strong>：</p>
+<ol><li>主要 trigger 是 device 本地 OS alarm，<strong>不需要 server push 来响</strong></li><li>Backup push 用 APNs/FCM batched API（一次推 100 个 token）</li><li>Push 通道本身是 hyperscale 设计的（APNs 每秒能扛 100k+ tokens）</li></ol>
+<h4>Q6: "DST 切换那个晚上 (2AM → 3AM)，set 在 2:30AM 的 alarm 怎么办？"</h4>
+<p><strong>A</strong>：经典坑。两种行为：</p>
+<ol><li>该 alarm <strong>不响</strong>（2:30 不存在）</li><li>该 alarm <strong>响在 3:30 等效位置</strong></li></ol>
+<p>iOS 选 #1。<strong>面试时主动澄清这个 edge case</strong> 体现深度。</p>
+<h4>Q7: "怎么处理用户的 snooze（推迟 9 分钟）？"</h4>
+<p><strong>A</strong>：响铃时 dismiss/snooze 按钮。Snooze → 服务端记录 snooze 操作 → 9 分钟后再触发同 alarm。Multi-device 用 WebSocket 立刻广播 snooze 状态，其他 device 同步推迟。</p>
+<hr />
+<h3>10. 易错点 &amp; 加分项</h3>
+<h4>❌ 易错点</h4>
+<ol><li><strong>Server-side trigger 当唯一方案</strong> → 离线设备完全 break</li><li><strong>用 UTC offset 存时区</strong> → DST 不对</li><li><strong>忽略 effective device 选择逻辑</strong> → 5 个 device 全响吵醒邻居</li><li><strong>WebSocket 是唯一 sync 通道</strong> → 离线设备永远不同步</li><li><strong>没考虑 DST gap (2-3AM)</strong> → 闹钟在切换日不响</li><li><strong>dismiss 不广播</strong> → 多设备 alarm 不同步关</li></ol>
+<h4>✅ 加分项</h4>
+<ol><li><strong>Hybrid client-primary + server-backup</strong> trigger</li><li><strong>HLC</strong> for LWW 解决时钟漂移</li><li><strong>IANA TZ name</strong> 而非 UTC offset</li><li><strong>Idempotent operations</strong> for offline retry</li><li><strong>OS-level wakeup alarm</strong> 省电的本质</li><li><strong>CRDT 提一嘴</strong> 即便不用，体现你懂</li><li><strong>DST gap edge case</strong> 主动澄清</li></ol>
+<hr />
+<h3>11. Cheat Sheet</h3>
+<pre class="language-plaintext"><code class="language-plaintext">核心决策:
+  - Hybrid: client-side OS alarm primary, server backup
+  - Client 是 source of truth for triggering
+  - Server 是 sync engine + tie-breaker
+
+Sync:
+  - WebSocket + Push 唤醒
+  - LWW with HLC (or CRDT)
+  - Offline-first, pending sync queue
+
+Effective device:
+  - User hierarchy + online status
+  - Server-side compute, push flag to chosen device
+
+Time zone:
+  - Wall-clock + IANA TZ name
+  - Auto-handle DST
+  - Absolute time for meetings (UTC)
+
+Trigger:
+  - Client: OS AlarmManager / UNUserNotificationCenter (±10ms)
+  - Server backup: Redis ZSET timer queue + APNs/FCM
+
+数字:
+  - 100M users × 3 devices × 5 alarms = 500M alarms
+  - Peak trigger: 10k/sec
+  - Sync latency: &lt; 5s
+  - Storage: 100 GB</code></pre>
   </section>
 
   
@@ -116,7 +257,8 @@
     <a href="cmgjodbag04hl08ad8h12hlh1.html">Design a data migration service for GCP →</a>
   </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="../assets/prism/prism-core.min.js"></script>
+<script src="../assets/prism/prism-autoloader.min.js"></script>
+<script>if(window.Prism)Prism.plugins.autoloader.languages_path='../assets/prism/components/';</script>
 </body>
 </html>

@@ -44,6 +44,22 @@ DEEP_DIVE_SLUGS = {
     "cmgs26zx800vx08ad6f8ncnxh",  # Global VM Monitoring
     "cmdj4mw0801blad0810r3tfos",  # Slowest Query System
     "cmi3quwzg02mg07ad9blftp07",  # Fast Food Restaurant Chain
+    # Google Staff System Design (15 questions, rewritten 2026-05-18)
+    "cm6d9gnep03c46hpqrwc062ir",  # Distributed Cache System
+    "cmg9ff4bs00c708adp5725dyw",  # Block Storage System
+    "cmmbkgqcp1qnt09ad9i70hfdw",  # Smart Alarm System
+    "cmm2b6v6001lw0eadzd6fim9u",  # MapReduce Shuffler
+    "cm4szunov00303g2e2gomqo2j",  # Chat/Messaging System
+    "cm4t0qbr9004988ilmum8jm06",  # Online Game Leaderboard
+    "cm96lh25n0039ad08067audlg",  # News Aggregator System
+    "cmikmkva406q908adb5780xku",  # Photo Search Application
+    "cm4t0twp0004pvszmvb2qeg0u",  # Top-K System
+    "cmi7qoka2009008ad6tm1csdb",  # E-commerce Offer Subscription System
+    "cm4szywgj003ivszmblm3pmoa",  # Online Chess
+    "cme1oqha801r3ad07uce0z4s1",  # Event Aggregation Display
+    "cmgsd52f200gi07ad5f7knnsk",  # IAM for AI Agents
+    "cmfzmh6lw027907ad6cztadic",  # Write-Once Media File System
+    "cmac800xr00dpad07wwtw617j",  # Proximity Alert for Apple Tags
     # Long-form guides
     "g-openai-fde-takehome-convfinqa",  # OpenAI FDE Take-home Walkthrough
 }
@@ -652,7 +668,7 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(title)} · 面试题准备</title>
 <link rel="stylesheet" href="../assets/style.css?v={CSS_HASH}">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.css">
+<link rel="stylesheet" href="../assets/prism/prism-tomorrow.css">
 </head>
 <body>
 <header class="site-header">
@@ -690,8 +706,9 @@ def render_detail(q, raw, analysis_md, prev_q, next_q):
     {nav_next}
   </div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="../assets/prism/prism-core.min.js"></script>
+<script src="../assets/prism/prism-autoloader.min.js"></script>
+<script>if(window.Prism)Prism.plugins.autoloader.languages_path='../assets/prism/components/';</script>
 </body>
 </html>"""
     return html_doc

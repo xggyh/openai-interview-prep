@@ -1,0 +1,152 @@
+[
+  {
+    "title": "Design a Distributed Cache System",
+    "slug": "/community/questions/distributed-cache-system/cm6d9gnep03c46hpqrwc062ir",
+    "url": "https://www.hellointerview.com/community/questions/distributed-cache-system/cm6d9gnep03c46hpqrwc062ir",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 8,
+    "lastAsked": "Early April, 2026",
+    "description": "Design a distributed caching system that can serve data with low latency across multiple geographic locations, handling cache misses, replication, and scaling to support billions of records."
+  },
+  {
+    "title": "Design a block storage system",
+    "slug": "/community/questions/block-storage-system/cmg9ff4bs00c708adp5725dyw",
+    "url": "https://www.hellointerview.com/community/questions/block-storage-system/cmg9ff4bs00c708adp5725dyw",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 2,
+    "lastAsked": "Late January, 2026",
+    "description": "Design a distributed block storage system that can serve thousands of virtual machines, providing reliable and scalable storage with features like data replication, fault tolerance, and high availability."
+  },
+  {
+    "title": "Design a smart alarm system",
+    "slug": "/community/questions/smart-alarm-system/cmmbkgqcp1qnt09ad9i70hfdw",
+    "url": "https://www.hellointerview.com/community/questions/smart-alarm-system/cmmbkgqcp1qnt09ad9i70hfdw",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Early March, 2026",
+    "description": "Design a smart alarm system that can be installed across home devices, mobile phones, and smart watches, where alarms can be set or deleted from any device but will only ring on the designated effective device."
+  },
+  {
+    "title": "Design a MapReduce Shuffler",
+    "slug": "/community/questions/mapreduce-shuffle-service/cmm2b6v6001lw0eadzd6fim9u",
+    "url": "https://www.hellointerview.com/community/questions/mapreduce-shuffle-service/cmm2b6v6001lw0eadzd6fim9u",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late February, 2026",
+    "description": "Design a shuffler component for MapReduce that enables efficient communication and data transfer between Mapper and Reducer nodes. The system should handle data partitioning, sorting, and distribution across the cluster."
+  },
+  {
+    "title": "Design a Chat/Messaging System",
+    "slug": "/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "url": "https://www.hellointerview.com/community/questions/messenger-chat-system/cm4szunov00303g2e2gomqo2j",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid February, 2026",
+    "description": "Design a real-time messaging system like WhatsApp or Facebook Messenger that supports 1:1 and group conversations, message delivery status tracking, user presence features, conversation history, and can scale to handle millions of users."
+  },
+  {
+    "title": "Design an Online Game Leaderboard",
+    "slug": "/community/questions/realtime-game-leaderboard/cm4t0qbr9004988ilmum8jm06",
+    "url": "https://www.hellointerview.com/community/questions/realtime-game-leaderboard/cm4t0qbr9004988ilmum8jm06",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Early December, 2025",
+    "description": "Design a real-time gaming leaderboard system that displays global top rankings, user's current rank with surrounding players, and rankings within their friends list, handling millions of score updates daily."
+  },
+  {
+    "title": "Design a News Aggregator System",
+    "slug": "/community/questions/news-aggregator-feed/cm96lh25n0039ad08067audlg",
+    "url": "https://www.hellointerview.com/community/questions/news-aggregator-feed/cm96lh25n0039ad08067audlg",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late November, 2025",
+    "description": "Design a news aggregation system like Google News that allows users to subscribe to different news sources, categories, and topics, then view a personalized real-time news feed based on their interests."
+  },
+  {
+    "title": "Design a photo search application",
+    "slug": "/community/questions/photo-search-backend/cmikmkva406q908adb5780xku",
+    "url": "https://www.hellointerview.com/community/questions/photo-search-backend/cmikmkva406q908adb5780xku",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late November, 2025",
+    "description": "Design a mobile photo application that allows users to search for photos using keywords and retrieve all images containing those elements (e.g., searching for 'mountains' returns all photos with mountains). Focus on designing the backend system to support this functionality."
+  },
+  {
+    "title": "Design a Top-K System",
+    "slug": "/community/questions/top-k-counts/cm4t0twp0004pvszmvb2qeg0u",
+    "url": "https://www.hellointerview.com/community/questions/top-k-counts/cm4t0twp0004pvszmvb2qeg0u",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late November, 2025",
+    "description": "Design a system that efficiently retrieves top-k items (songs, videos, hashtags, etc.) based on user activity or engagement metrics within specified time windows. The system should handle real-time data aggregation and support queries like \"top 10 songs in the last 7 days\" or \"trending hashtags in the past 24 hours.\""
+  },
+  {
+    "title": "Design an e-commerce offer subscription system",
+    "slug": "/community/questions/offer-subscription-system/cmi7qoka2009008ad6tm1csdb",
+    "url": "https://www.hellointerview.com/community/questions/offer-subscription-system/cmi7qoka2009008ad6tm1csdb",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late November, 2025",
+    "description": "Design a system that allows users to subscribe to upcoming offers on an e-commerce platform and receive real-time notifications (email, SMS, push, or in-app) when offers go live. The system should handle 1M to 5M users."
+  },
+  {
+    "title": "Design Online Chess",
+    "slug": "/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "url": "https://www.hellointerview.com/community/questions/online-chess-platform/cm4szywgj003ivszmblm3pmoa",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid November, 2025",
+    "description": "Design a real-time chess platform similar to Chess.com that supports gameplay across multiple devices, move validation, matchmaking, leaderboards, and key features like move undo functionality."
+  },
+  {
+    "title": "Design a system to display aggregation of events where multiple robots are continuously generating events in realtime",
+    "slug": "/community/questions/robot-event-aggregation/cme1oqha801r3ad07uce0z4s1",
+    "url": "https://www.hellointerview.com/community/questions/robot-event-aggregation/cme1oqha801r3ad07uce0z4s1",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Early November, 2025",
+    "description": "Design a real-time event aggregation system that ingests continuous data streams from multiple robots and provides a dashboard for monitoring and querying with 1-minute granularity."
+  },
+  {
+    "title": "Design an Identity and Access Management system for AI agents",
+    "slug": "/community/questions/ai-agent-iam/cmgsd52f200gi07ad5f7knnsk",
+    "url": "https://www.hellointerview.com/community/questions/ai-agent-iam/cmgsd52f200gi07ad5f7knnsk",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Mid October, 2025",
+    "description": "Design an IAM system for a cloud provider that allows customers and enterprises to create and manage multiple AI agents with proper access controls and permissions."
+  },
+  {
+    "title": "Design a file system for write-once media",
+    "slug": "/community/questions/write-once-filesystem/cmfzmh6lw027907ad6cztadic",
+    "url": "https://www.hellointerview.com/community/questions/write-once-filesystem/cmfzmh6lw027907ad6cztadic",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Late September, 2025",
+    "description": "Design a file system that can efficiently store and manage files on write-once media, where data can only be written once and cannot be modified after creation."
+  },
+  {
+    "title": "Design a Proximity Alert System for Apple Tags",
+    "slug": "/community/questions/tag-proximity-alert/cmac800xr00dpad07wwtw617j",
+    "url": "https://www.hellointerview.com/community/questions/tag-proximity-alert/cmac800xr00dpad07wwtw617j",
+    "type": "System Design",
+    "level": "Staff",
+    "reportedUsers": 1,
+    "lastAsked": "Early May, 2025",
+    "description": "Design a proximity alert system that monitors Apple Tags and notifies users when a tag moves outside a predefined range from the user's location."
+  }
+]
